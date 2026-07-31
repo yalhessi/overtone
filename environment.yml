@@ -1,0 +1,19 @@
+name: overtone
+channels:
+  - conda-forge
+dependencies:
+  # 3.12 is what the current experiments run on; stitch_core ships wheels for it.
+  - python=3.12
+  - pip
+  - numpy
+  - pandas
+  - pyyaml
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  - pip:
+      - stitch_core==0.1.25
+      - python-dotenv
+      - psutil
+      # gradient-boosted models for the rule-usefulness and hint-weight tasks
+      - lightgbm

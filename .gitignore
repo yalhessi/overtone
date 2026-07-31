@@ -1,0 +1,22 @@
+# Environment
+.env
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Corpora: fetched by scripts/fetch_external.py, not tracked
+data/TPTP-v*/
+data/external/
+data/*.tgz
+
+# twee output; grows to GBs
+logs/
+
+# Experiment outputs (summaries are promoted to results/ deliberately)
+experiments/**/out/
+scratch/
+
+.DS_Store
+.vscode/
+.idea/
