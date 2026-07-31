@@ -5,6 +5,11 @@ dependencies:
   # 3.12 is what the current experiments run on; stitch_core ships wheels for it.
   - python=3.12
   - pip
+  # GHC links Integer against GMP. Shared clusters often ship libgmp.so.10 (the
+  # runtime) without the libgmp.so symlink from gmp-devel, so every cabal build
+  # dies at link time with "cannot find -lgmp". Providing it here means the
+  # toolchain works without root; bootstrap.sh points cabal at $CONDA_PREFIX/lib.
+  - gmp
   - numpy
   - pandas
   - pyyaml

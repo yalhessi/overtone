@@ -12,6 +12,18 @@ two of them invalidate experiments that look reasonable.
 compile `executable/SequentialMain.hs`. Use
 `cabal install twee --constraint='jukebox < 0.5.12'`.
 
+**Every cabal build needs libgmp.so, not just libgmp.so.10.** GHC links Integer
+against GMP. Shared clusters routinely ship the runtime without the development
+symlink from `gmp-devel`, and then *every* package fails at link time with
+`/usr/bin/ld: cannot find -lgmp` -- starting with `alex`, so the error appears
+long before twee and looks like a twee problem. Without root:
+`conda install -c conda-forge gmp`, then pass
+`--extra-lib-dirs=$CONDA_PREFIX/lib` to cabal.
+
+**Pin GHC to 9.6.7.** It is the version these results were built on. Newer GHC
+(9.10.x) pulls a newer `base` that twee's older transitive dependencies
+(`symbol`, `uglymemo`) were never updated for.
+
 **Released twee 2.6.1 supports hints.** No fork needed. The flags are hidden
 behind `--expert-help`: `--hint-skel-factor`, `--hint-skel-cost`, `--resonance`.
 

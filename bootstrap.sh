@@ -18,6 +18,9 @@ LOG_DIR="${LOG_DIR:-$ROOT/logs}"
 # too-new jukebox and fails to compile executable/SequentialMain.hs.
 JUKEBOX_CONSTRAINT='jukebox < 0.5.12'
 TWEE_VERSION="${TWEE_VERSION:-2.6.1}"
+# Known-good compiler. Newer GHC pulls a newer base that twee's older transitive
+# deps (symbol, uglymemo) have not been updated for.
+GHC_VERSION="${GHC_VERSION:-9.6.7}"
 
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[33m    ! %s\033[0m\n' "$*"; }
@@ -26,33 +29,7 @@ die()  { printf '\033[31m    FAILED: %s\033[0m\n' "$*" >&2; exit 1; }
 
 if [[ "${1:-}" != "--smoke-only" ]]; then
 
-say "1/6  Haskell toolchain"
-if ! command -v cabal >/dev/null 2>&1; then
-  warn "cabal not found; installing ghcup (non-interactive)"
-  curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org \
-    | BOOTSTRAP_HASKELL_NONINTERACTIVE=1 sh
-  # shellcheck disable=SC1090
-  source "$HOME/.ghcup/env"
-fi
-export PATH="$HOME/.ghcup/bin:$HOME/.cabal/bin:$PATH"
-command -v cabal >/dev/null || die "cabal still not on PATH; source ~/.ghcup/env"
-ok "cabal $(cabal --version | head -1 | awk '{print $NF}'), ghc $(ghc --version | awk '{print $NF}')"
-
-say "2/6  twee $TWEE_VERSION"
-if command -v twee >/dev/null 2>&1 && twee --version 2>/dev/null | grep -q "$TWEE_VERSION"; then
-  ok "twee $TWEE_VERSION already installed"
-else
-  cabal update
-  cabal install "twee-$TWEE_VERSION" --constraint="$JUKEBOX_CONSTRAINT" --overwrite-policy=always
-fi
-TWEE_PATH="$(command -v twee)"
-# The hint machinery lives behind --expert-help; without it nothing here works.
-for flag in hint-skel-factor hint-skel-cost resonance max-term-size proof-on-saturation; do
-  twee --expert-help 2>&1 | grep -q -- "--$flag" || die "twee lacks --$flag (wrong build?)"
-done
-ok "twee at $TWEE_PATH with hint support"
-
-say "3/6  Python environment ($ENV_NAME)"
+say "0/6  Python environment ($ENV_NAME) -- first, because it supplies GMP"
 command -v conda >/dev/null || die "conda not found; install miniconda first"
 # shellcheck disable=SC1091
 source "$(conda info --base)/etc/profile.d/conda.sh"
@@ -64,6 +41,54 @@ fi
 conda activate "$ENV_NAME"
 python -c "import stitch_core, dotenv, yaml, numpy" || die "python deps missing"
 ok "python $(python --version | awk '{print $2}') with stitch_core"
+
+say "1/6  Haskell toolchain (GHC $GHC_VERSION)"
+if ! command -v ghcup >/dev/null 2>&1 && [[ ! -x "$HOME/.ghcup/bin/ghcup" ]]; then
+  warn "ghcup not found; installing non-interactively"
+  curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org \
+    | BOOTSTRAP_HASKELL_NONINTERACTIVE=1 BOOTSTRAP_HASKELL_GHC_VERSION="$GHC_VERSION" sh
+fi
+export PATH="$HOME/.ghcup/bin:$HOME/.cabal/bin:$PATH"
+command -v ghcup >/dev/null || die "ghcup not on PATH; source ~/.ghcup/env"
+ghcup install ghc "$GHC_VERSION" 2>/dev/null || true
+ghcup set ghc "$GHC_VERSION"
+command -v cabal >/dev/null || ghcup install cabal --set
+ok "cabal $(cabal --version | head -1 | awk '{print $NF}'), ghc $(ghc --version | awk '{print $NF}')"
+
+# GHC links Integer against GMP. Clusters commonly ship the runtime
+# (libgmp.so.10) without the libgmp.so symlink from gmp-devel, and then EVERY
+# cabal build fails at link time with "cannot find -lgmp" -- including alex, so
+# the error surfaces long before twee itself. Point cabal at conda's copy.
+say "1b/6 GMP"
+GMP_LIB=""
+for cand in "$CONDA_PREFIX/lib/libgmp.so" "$CONDA_PREFIX/lib/libgmp.dylib" \
+            /usr/lib64/libgmp.so /usr/lib/x86_64-linux-gnu/libgmp.so; do
+  [[ -e "$cand" ]] && { GMP_LIB="$(dirname "$cand")"; break; }
+done
+[[ -n "$GMP_LIB" ]] || die "no libgmp.so found. Install it into the conda env with:
+      conda install -n $ENV_NAME -c conda-forge gmp
+    or load a cluster module (module avail gmp), or ask for gmp-devel."
+CABAL_LIB_FLAGS=(--extra-lib-dirs="$GMP_LIB" --extra-include-dirs="${GMP_LIB%/lib}/include")
+export LD_LIBRARY_PATH="$GMP_LIB:${LD_LIBRARY_PATH:-}"
+ok "libgmp at $GMP_LIB"
+
+say "2/6  twee $TWEE_VERSION"
+if command -v twee >/dev/null 2>&1 && twee --version 2>/dev/null | grep -q "$TWEE_VERSION"; then
+  ok "twee $TWEE_VERSION already installed"
+else
+  cabal update
+  cabal install "twee-$TWEE_VERSION" --constraint="$JUKEBOX_CONSTRAINT" \
+    "${CABAL_LIB_FLAGS[@]}" --overwrite-policy=always
+fi
+TWEE_PATH="$(command -v twee)"
+# The hint machinery lives behind --expert-help; without it nothing here works.
+for flag in hint-skel-factor hint-skel-cost resonance max-term-size proof-on-saturation; do
+  twee --expert-help 2>&1 | grep -q -- "--$flag" || die "twee lacks --$flag (wrong build?)"
+done
+ok "twee at $TWEE_PATH with hint support"
+
+say "3/6  Python environment"
+ok "created in step 0 (needed for GMP)"
 
 say "4/6  TPTP v$TPTP_VERSION"
 if [[ -d "$TPTP_ROOT/Axioms" ]]; then
