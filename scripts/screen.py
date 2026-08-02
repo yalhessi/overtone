@@ -24,7 +24,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import twee                                        # noqa: E402
+from overtone import runner                                      # noqa: E402
+from overtone.runner import ALWAYS, BASE_FLAGS                   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIONS = ["--flatten-goal", "--no-flatten-goal"]
@@ -39,22 +40,24 @@ def run_job(args) -> dict:
     # One input file per job, not per problem: the two goal directions run in
     # separate workers and would otherwise share a path and race.
     tag = direction.replace("--", "")
-    path = twee.build_input(problem, [],
-                            Path(outdir) / "inputs" / f"{problem}.{tag}.p")
-    r = twee.run(path, twee.BASE_FLAGS + [direction], budget)
-    if keep_output and r["proved"]:
+    path = runner.write_problem(
+        problem, Path(outdir) / "inputs" / f"{problem}.{tag}.p")
+    # use_max_time stays False: the 592 existing screen records were produced
+    # with an external timeout, and adding --max-time would change the search.
+    r = runner.run(path, [*BASE_FLAGS, direction], budget, problem=problem)
+    if keep_output and r.proved:
         d = Path(outdir) / "proofs"
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{problem}{direction.replace('--', '_')}.out").write_text(r["output"])
+        (d / f"{problem}{direction.replace('--', '_')}.out").write_text(r.output)
     return {
         "id": job_id(problem, direction),
         "problem": problem,
         "direction": direction,
         "budget": budget,
-        "result": r["result"],
-        "proved": r["proved"],
-        "cpu": round(r["cpu"], 2),
-        "wall": round(r["wall"], 2),
+        "result": r.status,
+        "proved": r.proved,
+        "cpu": round(r.cpu, 2),
+        "wall": round(r.wall, 2),
         "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
@@ -120,8 +123,8 @@ def write_markdown(md_path: Path, done: dict, planned: list, meta: dict):
         "",
         f"- started `{meta.get('started', '?')}`",
         f"- budget **{meta.get('budget')}s** per problem per goal direction",
-        f"- flags `{' '.join(twee.BASE_FLAGS)}` + direction + "
-        f"`{' '.join(twee.ALWAYS)}`, no hints",
+        f"- flags `{' '.join(BASE_FLAGS)}` + direction + "
+        f"`{' '.join(ALWAYS)}`, no hints",
         f"- problem list `{meta.get('problems', '?')}`",
         f"- progress **{len(done)}/{total}** jobs "
         f"({len(by_problem)} problems touched, {len(solved)} complete pairs solved)",

@@ -29,7 +29,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import twee                                        # noqa: E402
+from overtone import runner                                      # noqa: E402
+from overtone.runner import BASE_FLAGS, as_cnf_hint              # noqa: E402
+from overtone.problems import problem_path                       # noqa: E402
 from overtone.terms import (VAR, safe_term, term, unparse, alpha, fresh_vars,   # noqa: E402
                             symbols, subtrees, similarity, merged)
 from overtone.problems import (equations, problem_symbols, axiom_sets,         # noqa: E402
@@ -131,7 +133,7 @@ def find_donor(problem, domain, exclude, shortlist=5):
     Twitch's per-axiom similarity ranks the shortlist. The exact version is
     quadratic in axioms x subtrees and unusably slow on LCL-10 encodings.
     """
-    target_sets = axiom_sets(twee.problem_path(problem))
+    target_sets = axiom_sets(problem_path(problem))
     target_merged = merged(target_sets)
     coarse = []
     seen = set()
@@ -140,7 +142,7 @@ def find_donor(problem, domain, exclude, shortlist=5):
         if donor == problem or donor in exclude or donor in seen:
             continue
         seen.add(donor)
-        dsets = axiom_sets(twee.problem_path(donor))
+        dsets = axiom_sets(problem_path(donor))
         dm = merged(dsets)
         j = len(target_merged & dm) / len(target_merged | dm) if dm else 0.0
         coarse.append((j, donor, out, dsets))
@@ -159,7 +161,7 @@ def make_example(problem, exclude):
     if donor is None:
         print(f"  {problem}: no donor with a saved proof in {domain}")
         return None
-    target_syms = problem_symbols(twee.problem_path(problem))
+    target_syms = problem_symbols(problem_path(problem))
     counts = donor_terms(proof_file)
     hints, dropped = build_hints(counts, target_syms)
     if len(hints) < 3:
@@ -168,11 +170,11 @@ def make_example(problem, exclude):
 
     d = EXAMPLES / problem
     d.mkdir(parents=True, exist_ok=True)
-    (d / f"{problem}.p").write_text(twee.problem_path(problem).read_text())
+    (d / f"{problem}.p").write_text(problem_path(problem).read_text())
     (d / "hints.tptp").write_text(
-        "".join(twee.as_cnf_hint(h, i) for i, (h, _, _) in enumerate(hints, 1)))
-    twee.build_input(problem, [h for h, _, _ in hints],
-                     d / f"{problem}_hinted.p")
+        "".join(as_cnf_hint(h, i) for i, (h, _, _) in enumerate(hints, 1)))
+    runner.write_problem(problem, d / f"{problem}_hinted.p",
+                         hints=[h for h, _, _ in hints])
 
     lines = [
         f"# Sketch: {problem}",
@@ -211,15 +213,16 @@ def run_example(problem, budget):
     results = {"problem": problem, "budget": budget,
                "baseline": screen_baseline(problem), "hinted": {}}
     for direction in ("--flatten-goal", "--no-flatten-goal"):
-        r = twee.run(hinted, twee.BASE_FLAGS + HINT_FLAGS + [direction], budget)
+        r = runner.run(hinted, [*BASE_FLAGS, *HINT_FLAGS, direction], budget,
+                       problem=problem)
         results["hinted"][direction] = {
-            "result": r["result"], "proved": r["proved"],
-            "cpu": round(r["cpu"], 1)}
+            "result": r.status, "proved": r.proved,
+            "cpu": round(r.cpu, 1)}
         tag = direction.replace("--", "")
-        (d / f"{problem}_hinted.{tag}.out").write_text(r["output"])
-        print(f"  {problem} {direction}: {r['result']} {r['cpu']:.1f}s",
+        (d / f"{problem}_hinted.{tag}.out").write_text(r.output)
+        print(f"  {problem} {direction}: {r.status} {r.cpu:.1f}s",
               flush=True)
-        if r["proved"]:
+        if r.proved:
             break                     # one proof is enough; save the budget
     (d / "result.json").write_text(json.dumps(results, indent=2) + "\n")
     return results

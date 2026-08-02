@@ -23,7 +23,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import twee                                        # noqa: E402
+from overtone import runner                                      # noqa: E402
+from overtone.runner import BASE_FLAGS                           # noqa: E402
+from overtone.problems import problem_path                       # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 LEMMA = re.compile(r"^Lemma (\d+): (.+?) = (.+?)\.\s*$")
@@ -86,7 +88,7 @@ def write_rung(problem: str, extra_axioms, goal, dest: Path) -> Path:
     The original negated_conjecture is dropped: each rung has its own goal.
     `include(...)` lines are kept so twee still pulls the theory's axiom file.
     """
-    text = twee.problem_path(problem).read_text()
+    text = problem_path(problem).read_text()
     kept = []
     for role, body in _clauses(text):
         if role != "negated_conjecture":
@@ -145,32 +147,33 @@ def main():
     if not rungs:
         sys.exit("no rungs matched; are the waypoints from this donor proof?")
 
-    flags = twee.BASE_FLAGS + [a.direction]
+    flags = [*BASE_FLAGS, a.direction]
     proven, results = [], []
     for i, (n, lhs, rhs) in enumerate(rungs, start=1):
         path = write_rung(a.problem, proven, (lhs, rhs),
                           outdir / f"rung{i:02d}.p")
-        r = twee.run(path, flags, a.rung_budget)
+        r = runner.run(path, flags, a.rung_budget, problem=a.problem)
         results.append({"rung": i, "donor_lemma": n, "eq": f"{lhs} = {rhs}",
-                        "result": r["result"], "proved": r["proved"],
-                        "cpu": round(r["cpu"], 1)})
-        mark = "ok " if r["proved"] else "FAIL"
-        print(f"  rung {i:2d} (lemma {n:3d}) {mark} {r['cpu']:6.1f}s  {lhs} = {rhs}",
+                        "result": r.status, "proved": r.proved,
+                        "cpu": round(r.cpu, 1)})
+        mark = "ok " if r.proved else "FAIL"
+        print(f"  rung {i:2d} (lemma {n:3d}) {mark} {r.cpu:6.1f}s  {lhs} = {rhs}",
               flush=True)
-        if r["proved"]:
+        if r.proved:
             proven.append((lhs, rhs))
 
     print(f"\n{len(proven)}/{len(rungs)} rungs proven; final goal with "
           f"{len(proven)} added axioms")
     path = write_rung(a.problem, proven, None, outdir / "final.p")
-    r = twee.run(path, flags, a.final_budget)
-    (outdir / "final.out").write_text(r["output"])
-    print(f"  FINAL: {r['result']} {r['cpu']:.1f}s")
+    r = runner.run(path, flags, a.final_budget, problem=a.problem)
+    (outdir / "final.out").write_text(r.output)
+    print(f"  FINAL: {r.status} {r.cpu:.1f}s")
 
     json.dump({"problem": a.problem, "direction": a.direction,
                "rung_budget": a.rung_budget, "final_budget": a.final_budget,
                "rungs": results, "n_proven": len(proven),
-               "final": {k: r[k] for k in ("result", "proved", "cpu")}},
+               "final": {"result": r.status, "proved": r.proved,
+                         "cpu": round(r.cpu, 1)}},
               open(outdir / "ladder.json", "w"), indent=2)
 
 
