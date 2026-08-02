@@ -15,31 +15,13 @@ Leaving them out changes the search, so they are applied here too.
 """
 import argparse
 import json
-import os
-import re
-import resource
-import subprocess
 import sys
-import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from overtone import config, runner
+
+ROOT = config.ROOT
 SUCCESSES = ROOT / "twitch" / "data" / "experiments" / "hard_successes"
-ALWAYS = ["--kbo-weight0-unary", "--print-score"]
-
-
-def env(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        dotenv = ROOT / ".env"
-        if dotenv.exists():
-            for line in dotenv.read_text().splitlines():
-                if line.startswith(f"{name}="):
-                    val = line.split("=", 1)[1].strip()
-                    break
-    if not val:
-        sys.exit(f"{name} is not set; run ./bootstrap.sh")
-    return val
 
 
 def load_records(problem: str):
@@ -52,49 +34,6 @@ def load_records(problem: str):
         for entry in json.load(open(path)).get(f"{problem}.p", []):
             out.append({"source": source, **entry})
     return sorted(out, key=lambda e: e["time"])
-
-
-def as_cnf_hint(term: str, i: int) -> str:
-    """Byte-identical to Twitch's src/utils.py:160."""
-    return f"cnf(hint_{i}, axiom,\n\t $hint( {term} )).\n"
-
-
-def build_input(problem: str, hints, dest: Path) -> Path:
-    src = next((Path(env("TPTP_ROOT")) / "Problems").rglob(f"{problem}.p"), None)
-    if src is None:
-        sys.exit(f"{problem}.p not found under TPTP_ROOT/Problems")
-    body = src.read_text()
-    if hints:
-        body += "\n\n" + "\n".join(as_cnf_hint(h, i)
-                                   for i, h in enumerate(hints, start=1))
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(body)
-    return dest
-
-
-def run(path: Path, flags, timeout: int):
-    cmd = ([env("TWEE_PATH"), str(path), "--root", env("TPTP_ROOT")]
-           + [f for flag in flags for f in flag.split()] + ALWAYS)
-    before = resource.getrusage(resource.RUSAGE_CHILDREN)
-    started = time.monotonic()
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True)
-    try:
-        out, _ = proc.communicate(timeout=timeout)
-        status = "ran"
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        out, _ = proc.communicate()
-        status = "timeout"
-    after = resource.getrusage(resource.RUSAGE_CHILDREN)
-    cpu = (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
-    # twee exits 0 whether or not it proved anything; the RESULT line is the
-    # only reliable outcome. See FINDINGS.md.
-    m = re.search(r"^RESULT:\s*(\w+)", out, re.MULTILINE)
-    result = m.group(1) if m else ("Timeout" if status == "timeout" else "None")
-    return {"result": result, "proved": result in ("Unsatisfiable", "Theorem"),
-            "cpu": cpu, "wall": time.monotonic() - started, "output": out,
-            "cmd": cmd}
 
 
 def main():
@@ -135,33 +74,39 @@ def main():
 
     results = {}
     for label, hints in jobs:
-        path = build_input(a.problem, hints,
-                           a.outdir / f"{a.problem}_{label}.p")
+        path = runner.write_problem(a.problem,
+                                    a.outdir / f"{a.problem}_{label}.p",
+                                    hints=hints)
         print(f"\n  running {label} ({len(hints)} hints) ...", flush=True)
-        r = run(path, flags, timeout)
-        (a.outdir / f"{a.problem}_{label}.out").write_text(r["output"])
+        # use_max_time stays False: the recorded Twitch times were produced with
+        # an external timeout and no --max-time, so adding one would change the
+        # search and make the comparison meaningless.
+        r = runner.run(path, flags, timeout, problem=a.problem,
+                       n_hints=len(hints), use_max_time=False)
+        (a.outdir / f"{a.problem}_{label}.out").write_text(r.output)
         results[label] = r
-        verdict = "PROVED" if r["proved"] else f"NO PROOF ({r['result']})"
-        print(f"    {verdict}  {r['cpu']:.1f}s cpu  {r['wall']:.1f}s wall")
+        verdict = "PROVED" if r.proved else f"NO PROOF ({r.status})"
+        print(f"    {verdict}  {r.cpu:.1f}s cpu  {r.wall:.1f}s wall")
 
     h = results["hinted"]
-    print(f"\n  replication: recorded {rec['time']:.1f}s -> ours {h['cpu']:.1f}s cpu", end="")
-    if h["proved"]:
-        print(f"  ({h['cpu'] / rec['time']:.2f}x recorded)")
+    print(f"\n  replication: recorded {rec['time']:.1f}s -> ours {h.cpu:.1f}s cpu", end="")
+    if h.proved:
+        print(f"  ({h.cpu / rec['time']:.2f}x recorded)")
     else:
         print("  -- DID NOT REPRODUCE")
     if a.baseline:
         b = results["baseline"]
-        if b["proved"] and h["proved"]:
-            print(f"  hint effect: {b['cpu'] / h['cpu']:.2f}x speedup "
-                  f"(baseline {b['cpu']:.1f}s)")
-        elif h["proved"]:
-            print(f"  hint effect: baseline did not prove ({b['result']}) "
+        if b.proved and h.proved:
+            print(f"  hint effect: {b.cpu / h.cpu:.2f}x speedup "
+                  f"(baseline {b.cpu:.1f}s)")
+        elif h.proved:
+            print(f"  hint effect: baseline did not prove ({b.status}) "
                   f"within {timeout}s")
 
     json.dump({"problem": a.problem, "rank": a.rank, "recorded": rec["time"],
                "flags": flags, "timeout": timeout, "n_hints": len(rec["hints"]),
-               "results": {k: {x: v[x] for x in ("result", "proved", "cpu", "wall")}
+               "results": {k: {"result": v.status, "proved": v.proved,
+                               "cpu": v.cpu, "wall": v.wall}
                            for k, v in results.items()}},
               open(a.outdir / f"{a.problem}_replication.json", "w"), indent=2)
 

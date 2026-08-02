@@ -5,11 +5,16 @@ Every research direction in docs/EXPECTATIONS.md has been motivated or dropped
 on the strength of single timing measurements, several of which later moved.
 This measures how much of that movement is real.
 
-twee is deterministic with default flags (`cfg_random_mode = False`,
-`Twee.hs:120`), so repeats of the same configuration must derive an *identical*
-number of rules and reach an identical status. Only CPU time may vary, and only
-from machine noise. A differing rule count means something other than twee
-changed -- a contaminated input, the wrong binary, a stale file.
+`cfg_random_mode` is off by default (`Twee.hs:120`), so the search looked like
+it should be reproducible. It is not: twee schedules interreduction and queue
+simplification by elapsed CPU time (`Twee.hs:824-848` via `Twee/Task.hs`), so
+*when* they fire depends on machine load, and they change what the search does
+next. Measured over 5 repeats of identical input: cv 0.5% on REL029-1 and
+LAT190-10, but 67.7% on MVA006-1 and 26.4% on GRP666-5, with a different derived
+rule count on essentially every repeat.
+
+So a differing rule count is expected, not a bug signal, and single-run timings
+on the high-variance problems are close to meaningless.
 
 Two phases, because they answer different questions:
 
@@ -21,14 +26,11 @@ Two phases, because they answer different questions:
 """
 import argparse
 import json
-import statistics
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone.runner import Twee                                 # noqa: E402
+from overtone.runner import ALWAYS, BASE_FLAGS, Twee, summarise  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT = [
@@ -39,25 +41,6 @@ DEFAULT = [
 ]
 
 
-def summarise(rs):
-    cpus = [r.cpu for r in rs]
-    walls = [r.wall for r in rs]
-    mean = statistics.mean(cpus)
-    sd = statistics.stdev(cpus) if len(cpus) > 1 else 0.0
-    return {
-        "n": len(rs),
-        "status": sorted({r.status for r in rs}),
-        "n_rules": sorted({r.n_rules for r in rs}),
-        "cpu_mean": round(mean, 2),
-        "cpu_sd": round(sd, 3),
-        "cpu_cv_pct": round(100 * sd / mean, 2) if mean else 0.0,
-        "cpu_min": round(min(cpus), 2),
-        "cpu_max": round(max(cpus), 2),
-        "cpu_spread_pct": round(100 * (max(cpus) - min(cpus)) / mean, 2) if mean else 0.0,
-        "wall_mean": round(statistics.mean(walls), 2),
-    }
-
-
 def load_generators(n, problem, direction):
     """Background twee jobs to create CPU contention."""
     tw = Twee()
@@ -66,8 +49,7 @@ def load_generators(n, problem, direction):
     for _ in range(n):
         procs.append(subprocess.Popen(
             [tw.binary, str(src), "--root", str(tw.tptp_root),
-             "--all-lemmas", "--show-peaks", direction,
-             "--kbo-weight0-unary", "--print-score", "--max-time", "100000"],
+             *BASE_FLAGS, direction, *ALWAYS, "--max-time", "100000"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
     return procs
 
@@ -79,7 +61,6 @@ def main():
     ap.add_argument("--load", type=int, default=0,
                     help="background twee jobs to run concurrently (0 = solo)")
     ap.add_argument("--label", default=None)
-    ap.add_argument("--out", type=Path, default=ROOT / "docs" / "VARIANCE.md")
     a = ap.parse_args()
 
     phase = f"load{a.load}" if a.load else "solo"

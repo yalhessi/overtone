@@ -20,9 +20,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import batch, runner                               # noqa: E402
-from overtone.runner import ALWAYS, BASE_FLAGS                   # noqa: E402
+from overtone import batch, runner    
+from overtone.runner import ALWAYS, BASE_FLAGS     
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTIONS = ["--flatten-goal", "--no-flatten-goal"]
