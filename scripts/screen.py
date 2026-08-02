@@ -15,16 +15,13 @@ Resumable: results already in results.jsonl are skipped, so it is safe to kill
 and restart. Writes docs/RUNS.md after every completed job.
 """
 import argparse
-import json
-import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import runner                                      # noqa: E402
+from overtone import batch, runner                               # noqa: E402
 from overtone.runner import ALWAYS, BASE_FLAGS                   # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,14 +38,15 @@ def run_job(args) -> dict:
     # separate workers and would otherwise share a path and race.
     tag = direction.replace("--", "")
     path = runner.write_problem(
-        problem, Path(outdir) / "inputs" / f"{problem}.{tag}.p")
+        problem,
+        Path(outdir) / "inputs" / batch.INPUT_STEM.format(problem=problem, tag=tag))
     # use_max_time stays False: the 592 existing screen records were produced
     # with an external timeout, and adding --max-time would change the search.
     r = runner.run(path, [*BASE_FLAGS, direction], budget, problem=problem)
     if keep_output and r.proved:
         d = Path(outdir) / "proofs"
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{problem}{direction.replace('--', '_')}.out").write_text(r.output)
+        (d / batch.PROOF_STEM.format(problem=problem, tag=tag)).write_text(r.output)
     return {
         "id": job_id(problem, direction),
         "problem": problem,
@@ -60,16 +58,6 @@ def run_job(args) -> dict:
         "wall": round(r.wall, 2),
         "finished": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-
-
-def load_done(results_path: Path) -> dict:
-    done = {}
-    if results_path.exists():
-        for line in results_path.read_text().splitlines():
-            if line.strip():
-                rec = json.loads(line)
-                done[rec["id"]] = rec
-    return done
 
 
 MARKER = "<!-- BEGIN GENERATED -- everything below is rewritten each job -->"
@@ -201,7 +189,7 @@ def main():
 
     a.outdir.mkdir(parents=True, exist_ok=True)
     results_path = a.outdir / "results.jsonl"
-    done = load_done(results_path)
+    done = batch.load_done(results_path)
     todo = [(n, d, a.budget, str(a.outdir), a.keep_proofs)
             for n, d in planned if job_id(n, d) not in done]
 
@@ -229,25 +217,16 @@ def main():
         return
 
     started = time.monotonic()
-    with open(results_path, "a", buffering=1) as sink, \
-            ProcessPoolExecutor(max_workers=a.workers) as pool:
-        futures = {pool.submit(run_job, t): t for t in todo}
-        for i, fut in enumerate(as_completed(futures), start=1):
-            try:
-                rec = fut.result()
-            except Exception as e:                                # noqa: BLE001
-                spec = futures[fut]
-                print(f"  ERROR {spec[0]} {spec[1]}: {e}", file=sys.stderr,
-                      flush=True)
-                continue
-            sink.write(json.dumps(rec) + "\n")
-            done[rec["id"]] = rec
-            write_markdown(a.markdown, done, planned, meta)
-            mark = "PROVED" if rec["proved"] else rec["result"]
-            elapsed = (time.monotonic() - started) / 60
-            print(f"  [{i}/{len(todo)}] {rec['problem']:<12} "
-                  f"{rec['direction']:<18} {mark:<18} {rec['cpu']:7.1f}s "
-                  f"({elapsed:.0f}m elapsed)", flush=True)
+
+    def report(i, rec, done):
+        write_markdown(a.markdown, done, planned, meta)
+        mark = "PROVED" if rec["proved"] else rec["result"]
+        print(f"  [{i}/{len(todo)}] {rec['problem']:<12} "
+              f"{rec['direction']:<18} {mark:<18} {rec['cpu']:7.1f}s "
+              f"({(time.monotonic() - started) / 60:.0f}m elapsed)", flush=True)
+
+    done = batch.sweep(todo, run_job, results_path, workers=a.workers,
+                       on_result=report)
 
     print(f"\ndone in {(time.monotonic() - started) / 3600:.2f}h -> {a.markdown}")
 
