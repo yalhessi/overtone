@@ -7,5 +7,5 @@ cnf(rung_3, axiom,
     ( op(X, op(ld(X, unit), ld(ld(Y, unit), unit))) = at(X, Y) )).
 cnf(rung_4, axiom,
     ( op(X, ld(X, unit)) = at(X, unit) )).
-cnf(rung_goal, negated_conjecture,
+cnf(goal, negated_conjecture,
     ( join(sk_rung_1, rd(sk_rung_1, unit)) != rd(sk_rung_1, unit) )).

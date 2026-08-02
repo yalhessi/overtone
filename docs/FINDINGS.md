@@ -29,6 +29,84 @@ behind `--expert-help`: `--hint-skel-factor`, `--hint-skel-cost`, `--resonance`.
 
 ## Reproducibility
 
+### The mechanism, isolated
+
+**Interreduction is scheduled by elapsed CPU time, so it fires at a different
+point in the derivation on every run, and the search diverges from exactly that
+point.** Demonstrated on REL029-1 (1.9s, 6 runs, byte-identical input):
+
+| run | rules derived | interreduce fired after rule |
+|---|---|---|
+| r0 | 1690 | 1151 |
+| r1 | 1690 | 1153 |
+| r2 | 1684 | 1146 |
+| r3 | 1697 | 1143 |
+| r4 | 1697 | 1139 |
+| r5 | 1680 | 1145 |
+
+Across all **15 pairs of runs**, the first differing derived rule is *exactly*
+one after the earlier run's interreduce point — 15/15, no exceptions. The runs
+are bit-identical before it and divergent immediately after.
+
+The causal chain is therefore complete:
+
+1. `newTask 1 0.05 $ ... interreduce ...` fires when `getCPUTime` says enough
+   time has passed (`Twee/Task.hs:taskDue`).
+2. Machine load and cache state decide which derivation step that lands on.
+3. `interreduce` rewrites rules with respect to one another, changing the rule
+   set and hence which critical pairs exist and how they score.
+4. Every subsequent choice differs.
+
+**Confirmed by removing it.** `--no-simplify` disables interreduction, and the
+run becomes perfectly deterministic:
+
+| flags | rules derived over 4 runs | cpu |
+|---|---|---|
+| default | 1691, 1690, 1689, 1690 | 1.86–1.88s |
+| `--no-simplify` | **1222, 1222, 1222, 1222** | 1.15–1.16s |
+| `--always-simplify` | 2481, 2481, 2484, 2481 | 92.9–93.1s |
+
+`--always-simplify` (interreduce after every step) is *nearly* deterministic but
+not quite, so the other CPU-time-scheduled tasks — `simplifyQueue`,
+`recomputeGoals`, `checkCompleteness` — contribute a smaller share of the same
+effect. Interreduction is the dominant term.
+
+**`--no-simplify` is not a usable fix.** It buys determinism by disabling
+interreduction entirely, which is cheap on REL029-1 (1.6x *faster*, 1222 rules
+vs ~1690) and ruinous where interreduction is load-bearing: on MVA006-1 it ran
+past **1200s per attempt against a stock range of 94–245s**, i.e. at least 5x
+slower and probably non-terminating at any budget we would use. Abandoned.
+
+**Scheduling by step count instead of CPU time does work.**
+`build/twee-deterministic` patches `Twee/Task.hs` to fire tasks off a per-task
+count of `checkTask` calls — the same two conditions (minimum gap, fraction of
+iterations spent) in step units rather than picoseconds, with a
+`TWEE_STEPS_PER_SECOND` constant converting the existing frequencies. On
+REL029-1, 5 runs each:
+
+| steps/sec | rules | cpu | |
+|---|---|---|---|
+| 1,000 | 2083 | 4.16s | deterministic |
+| 3,000 | 2344 | 3.95s | deterministic |
+| **10,000** | **1559** | **1.54s** | **deterministic, 1.24x faster than stock** |
+| 30,000 | 1222 | 1.12s | deterministic (interreduce never fires) |
+| stock | 1680–1697 | 1.90s | varies |
+
+Every setting is bit-reproducible. Two caveats before treating this as the
+default: a step schedule interreduces at different *moments* than a time
+schedule, so it is a different prover configuration and every timing in this
+file would need re-baselining against it; and REL029-1 is a 1.9s problem, so
+whether determinism survives where interreduction is load-bearing is a separate
+question.
+
+This also explains why the effect looks so violent on some problems and not
+others. It is not that timing noise accumulates: a single scheduling difference
+forks the search once, and from there the two runs explore different spaces.
+Whether that costs 1% or 3x depends on whether the fork happens to land near the
+proof.
+
+### The original observation
+
 **twee's search is not reproducible run to run, because its maintenance work is
 scheduled by CPU time.** `Twee.hs:824-848` registers tasks with `newTask`, and
 `Twee/Task.hs` fires them off `getCPUTime`:

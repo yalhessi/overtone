@@ -16,18 +16,18 @@ cnf(rung_7, axiom,
 cnf(rung_8, axiom,
     ( ld(ld(X, unit), unit) = at(unit, X) )).
 cnf(rung_9, axiom,
-    ( join(meet(X, Y), meet(X, join(Y, Z))) = meet(X, join(Y, Z)) )).
-cnf(rung_10, axiom,
     ( join(X, op(X, join(Y, unit))) = op(X, join(Y, unit)) )).
-cnf(rung_11, axiom,
+cnf(rung_10, axiom,
     ( join(X, op(X, Y)) = op(X, join(Y, unit)) )).
-cnf(rung_12, axiom,
+cnf(rung_11, axiom,
     ( op(X, op(ld(X, unit), Y)) = op(at(X, unit), Y) )).
-cnf(rung_13, axiom,
+cnf(rung_12, axiom,
     ( rd(X, ld(op(X, join(Y, unit)), X)) = op(X, join(Y, unit)) )).
-cnf(rung_14, axiom,
+cnf(rung_13, axiom,
     ( rd(X, rd(unit, join(Y, unit))) = op(X, join(Y, unit)) )).
-cnf(rung_15, axiom,
+cnf(rung_14, axiom,
     ( ld(rd(X, op(join(Y, unit), X)), X) = op(join(Y, unit), X) )).
-cnf(rung_goal, negated_conjecture,
-    ( ld(rd(unit, join(sk_rung_1, unit)), sk_rung_2) != op(join(sk_rung_1, unit), sk_rung_2) )).
+cnf(rung_15, axiom,
+    ( ld(rd(unit, join(X, unit)), Y) = op(join(X, unit), Y) )).
+cnf(goal, negated_conjecture,
+    ( meet(rd(ld(sk_rung_1, sk_rung_2), sk_rung_3), ld(sk_rung_1, rd(sk_rung_2, sk_rung_3))) != ld(sk_rung_1, rd(sk_rung_2, sk_rung_3)) )).

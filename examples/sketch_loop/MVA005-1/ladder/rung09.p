@@ -15,5 +15,5 @@ cnf(rung_7, axiom,
     ( meet(rd(unit, X), ld(X, unit)) = ld(X, unit) )).
 cnf(rung_8, axiom,
     ( ld(ld(X, unit), unit) = at(unit, X) )).
-cnf(rung_goal, negated_conjecture,
-    ( join(meet(sk_rung_1, sk_rung_2), meet(sk_rung_1, join(sk_rung_2, sk_rung_3))) != meet(sk_rung_1, join(sk_rung_2, sk_rung_3)) )).
+cnf(goal, negated_conjecture,
+    ( join(sk_rung_1, op(sk_rung_1, join(sk_rung_2, unit))) != op(sk_rung_1, join(sk_rung_2, unit)) )).
