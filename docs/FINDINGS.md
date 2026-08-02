@@ -92,12 +92,67 @@ REL029-1, 5 runs each:
 | 30,000 | 1222 | 1.12s | deterministic (interreduce never fires) |
 | stock | 1680–1697 | 1.90s | varies |
 
-Every setting is bit-reproducible. Two caveats before treating this as the
-default: a step schedule interreduces at different *moments* than a time
-schedule, so it is a different prover configuration and every timing in this
-file would need re-baselining against it; and REL029-1 is a 1.9s problem, so
-whether determinism survives where interreduction is load-bearing is a separate
-question.
+Every setting is bit-reproducible.
+
+**It holds on the high-variance problem too, and is faster there.** MVA006-1,
+3 runs per configuration:
+
+| config | cpu | rules | |
+|---|---|---|---|
+| stock | 94.0, 245.3, 94.0, 157.5 | 9540–15856 | cv 47.9% |
+| **step, 10,000/s** | **80.6, 80.8, 81.3** | 9147 | deterministic, **1.76x faster than stock's mean** |
+| step, 1,000/s | 198.0, 199.1, 198.2 | 8373 | deterministic, 1.39x *slower* than stock |
+
+Faster than stock's *fastest* run (80.9s vs 94.0s) at the good scale, and
+deriving fewer rules than stock's minimum. The speedup is larger on the
+high-variance problem than on REL029-1 (1.76x vs 1.24x), which fits the
+mechanism: stock was forking into worse trajectories about half the time.
+
+**The scale is a real tuning parameter, not a free win.** At 1,000 steps/sec the
+run is still deterministic but derives *fewer* rules while taking longer — the
+time goes into interreduce rather than the search — and lands 1.39x worse than
+stock. 10,000 has been good on both problems tested; that is two problems.
+
+**Confirmed over 21 related problems at once.** The MVA005-1 ladder is 20 rungs
+of graded difficulty over one theory plus a final run, so one ladder execution is
+a 21-problem test. Run twice per build:
+
+| | rung cpu | final | total | failing rung |
+|---|---|---|---|---|
+| det rep1 | 324.9s | 139.0s | **463.9s** | lemma 227 |
+| det rep2 | 325.2s | 138.6s | **463.8s** | lemma 227 |
+| stock rep1 | 365.7s | 230.9s | 596.6s | lemma 269 |
+| stock rep2 | 336.0s | 134.5s | 470.5s | lemma 269 |
+
+The two deterministic runs agree on **every rung outcome and every rung time to
+within 0.1s**. The two stock runs agree on outcomes but their finals differ by
+1.7x (230.9s vs 134.5s) on identical input with identical rung results — that
+final is the number this project has been quoting as its headline hint result.
+
+**Determinism makes the ladder's answer stable without making it correct.** The
+builds disagree on exactly the rungs whose cost lands near the 120s rung cap:
+
+| rung | lemma | det (both) | stock (both) |
+|---|---|---|---|
+| 16 | 227 | **FAIL 120.1s** | ok 106.1 / 102.7s |
+| 18 | 243 | 30.2 / 30.3s | 72.9 / 49.7s |
+| 20 | 269 | ok 116.8s | **FAIL 120.1s** |
+
+Every other rung agrees within noise. Lemma 243 differs 2.4x between builds while
+passing under both, so the underlying cost genuinely differs — this is not only
+a threshold coin flip. The deterministic build reproducibly reports lemma 227 as
+the failure, but stock proves it in ~104s.
+
+So **pass/fail at a fixed rung budget is the wrong instrument for the refiner**.
+A rung costing 106s against a 120s cap is not "the step that is too hard". Rank
+rungs by *cost* instead: both builds and all four runs agree that 227, 269, 223
+and 243 are the expensive ones, and that ordering is stable where the binary
+verdict is not. Across the four stock ladder runs recorded so far the failing
+rung has been 227, 243, 269, 269 — three different answers.
+
+Remaining caveat: a step schedule interreduces at different *moments* than a
+time schedule, so this is a different prover configuration and every timing in
+this file would need re-baselining against it before adopting it as default.
 
 This also explains why the effect looks so violent on some problems and not
 others. It is not that timing noise accumulates: a single scheduling difference

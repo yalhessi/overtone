@@ -59,11 +59,15 @@ def write_rung(problem, proven, goal, dest: Path) -> Path:
 
 def run_ladder(problem, donor_proof: Path, waypoints, *, rung_budget=120,
                final_budget=1000, direction="--no-flatten-goal",
-               promote="hints", outdir: Path):
+               promote="hints", outdir: Path, binary: str | None = None):
     """Prove each rung, then the original goal with everything proven so far.
 
     `promote` decides how proven rungs reach the final run: "hints" (default,
     3.1x faster on MVA005-1) or "axioms" (what the first implementation did).
+
+    `binary` selects a twee build. A ladder is 20+ related problems of graded
+    difficulty over one theory, so it is a far better test bed than a single
+    problem for anything that changes prover behaviour.
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -78,7 +82,8 @@ def run_ladder(problem, donor_proof: Path, waypoints, *, rung_budget=120,
     proven, results = [], []
     for i, (n, lhs, rhs) in enumerate(rungs, start=1):
         path = write_rung(problem, proven, (lhs, rhs), outdir / f"rung{i:02d}.p")
-        r = runner.run(path, flags, rung_budget, problem=problem)
+        r = runner.run(path, flags, rung_budget, problem=problem,
+                       binary=binary)
         results.append({"rung": i, "donor_lemma": n, "eq": f"{lhs} = {rhs}",
                         "result": r.status, "proved": r.proved,
                         "cpu": round(r.cpu, 1)})
@@ -98,11 +103,13 @@ def run_ladder(problem, donor_proof: Path, waypoints, *, rung_budget=120,
             terms += [t for t in (lhs, rhs) if "(" in t and t not in terms]
         path = runner.write_problem(problem, outdir / "final.p", hints=terms)
         final_flags = [*BASE_FLAGS, *hintlib.HINT_FLAGS, direction]
-    r = runner.run(path, final_flags, final_budget, problem=problem)
+    r = runner.run(path, final_flags, final_budget, problem=problem,
+                   binary=binary)
     (outdir / "final.out").write_text(r.output)
     print(f"  FINAL: {r.status} {r.cpu:.1f}s")
 
     out = {"problem": problem, "direction": direction, "promote": promote,
+           "binary": binary or "stock",
            "rung_budget": rung_budget, "final_budget": final_budget,
            "rungs": results, "n_proven": len(proven),
            "rung_cpu": round(sum(x["cpu"] for x in results), 1),
