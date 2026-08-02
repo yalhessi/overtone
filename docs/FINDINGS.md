@@ -866,6 +866,49 @@ Caveat: 1.23x on one problem, whose donor has identical axioms (similarity
 helps generally. It is the first configuration here that beats plain twee on a
 clean measurement, and an explanation for why the earlier attempts did not.
 
+### Draft/sketch/prove without a donor: no flip (RNG029-5)
+
+The first test of the loop where the sketch is *drafted* rather than retrieved.
+RNG029-5 is the middle Moufang identity `(xy)(zx) = x((yz)x)` in an alternative
+ring: 15 axioms, rating 0.96, resisted at 4000s in both directions, and its
+domain has essentially no donor material (1 saved RNG proof for 13 resisted RNG
+problems, no Veroff coverage).
+
+Drafted 11 lemmas along the classical route -- associator alternating in each
+argument pair, hence the flexible law, hence Moufang -- plus the sign lemmas.
+Verified standalone against the problem's own axioms, deterministic build, 120s
+each. **7 of 11 verified in 483s:**
+
+| verified | cpu | failed |
+|---|---|---|
+| `neg_mult_r`, `neg_mult_l`, `neg_add` | 0.0s | `assoc_alt_12` (alternating in args 1,2) |
+| `associator(X,X,Y) = 0`, `associator(X,Y,Y) = 0` | 0.0s | `assoc_alt_23` (alternating in args 2,3) |
+| `associator(X,Y,X) = 0` | 1.3s | `left_moufang` |
+| **flexible: `(xy)x = x(yx)`** | **1.3s** | `right_moufang` |
+
+**Attempt with the 7 verified lemmas as 10 hints: Timeout at 1200s in both
+directions.** No flip.
+
+**The failure is predicted by the ablation, not mysterious.** Everything that
+verified is small and generic — `associator(X,X,Y)`, `multiply(multiply(X,Y),X)`,
+the sign lemmas. Those are the *accelerant* category, which the MVA005-1 ablation
+showed cannot solve a problem alone and only speed up a search that already
+works. Every lemma with real structural content — both alternating laws, both
+Moufang identities — failed verification. The verified subset is all accelerant
+and no waypoint.
+
+**The failed steps are too big, not unreachable.** `assoc_alt_12` is the
+linearisation of `associator(X,X,Y) = 0`, which twee proves in 0.0s: substituting
+`x+y` for `x` and expanding gives
+`associator(x,y,z) + associator(y,x,z) = 0` directly. So the refiner has a
+concrete subdivision available — state it additively to avoid `additive_inverse`
+on the right, and/or supply the linearised instance
+`associator(add(X,Y),add(X,Y),Z) = additive_identity` as an intermediate.
+
+Standing conclusion: the loop's *verification* half works cheaply and in
+parallel, and its *drafting* half has not yet produced a waypoint on a no-donor
+problem. One iteration of a design intended to take several.
+
 ### A concurrency bug that produced fake results
 
 `screen.py` originally wrote both goal directions of a problem to the same input
