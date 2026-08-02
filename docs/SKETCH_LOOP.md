@@ -112,7 +112,7 @@ it is research rather than plumbing and should wait for (a) to be exhausted.
 
 ### Cap policy
 
-`build_hints` ranks by occurrence count in the donor proof, which favours
+`overtone/agent/hints.py:build_hints` ranks by occurrence count in the donor proof, which favours
 accelerants. On MVA005-1 the cap of 25 happened to admit 13 waypoints alongside
 12 accelerants, so the structural content survived by luck — **a tighter cap
 would have kept only accelerants and lost the problem.** Rank for specificity so
@@ -237,7 +237,7 @@ selection makes the result unfalsifiable.
 
 ## Status
 
-`scripts/sketch_transfer.py` implements **v0: one iteration, no LLM.** The
+`overtone/agent/sketch.py` implements **v0: one iteration, no LLM.** The
 sketch is the proof of the most axiom-similar solved sibling, and the hints are
 that proof's intermediate rewrite-chain terms — Twitch's extraction, applied to
 the resisted set. It exists to exercise the bridge, executor and evaluation

@@ -53,27 +53,52 @@ deliberately polite rate — budget ~1.5h, and it resumes if interrupted.
 
 ```
 bootstrap.sh          one-shot setup; safe to re-run
+pyproject.toml        editable install, so `from overtone import ...` just works
 environment.yml       conda environment
 twitch/               submodule: the abstraction-mining pipeline
 overtone/             this project's python package
-  otter2twee.py       Otter/EQP equations -> twee $hint terms
-  rule_usefulness.py  derived-vs-used rule analysis over twee logs
-  twee.py             running twee and reading its RESULT line
-scripts/
+  config.py           paths and .env, resolved in one place
+  problems.py         locating and reading TPTP problems
+  terms.py            TPTP terms: parse, alpha-normalise, symbols, similarity
+  runner.py           running twee; TweeResult; per-run directories
+  proofs.py           parsing twee output
+  batch.py            resumable parallel sweeps + the results.jsonl format
+  otter.py            Otter/EQP equations -> twee $hint terms
+  agent/              the sketch loop -- isolated and deletable; core never
+                      imports it (deletion contract in agent/__init__.py)
+scripts/              thin CLIs over the package
   make_ueq_list.py    enumerate TPTP UEQ problems from the local distribution
   fetch_external.py   ETP, Robbins/Otter, Veroff, TSTP corpora
   replicate_twitch.py re-run a recorded Twitch success and compare times
   screen.py           high-budget baseline screen, both goal directions
   start_screen.sh     launch the screen in a detached tmux session
-  sketch_transfer.py  donor-proof hints for resisted problems (sketch loop v0)
-examples/sketch_loop/ per-problem sketch, hints, hinted problem, result
+  variance.py         run-to-run reproducibility of twee timings
+  rule_usefulness.py  derived-vs-used rule statistics over saved proofs
+  sketch_transfer.py  donor-proof hints for resisted problems      [agent]
+  ladder.py           run a sketch as a ladder of goals            [agent]
+  build_instrumented_twee.sh   twee patched to count hint firings
+examples/sketch_loop/ tracked sketch bundles; also the regression harness
 data/                 TPTP + external corpora (gitignored)
-logs/                 twee output (gitignored; grows to GBs)
+logs/                 sweep output (gitignored; grows to GBs)
+runs/                 per-run twee directories (gitignored)
 docs/FINDINGS.md      measured results and pitfalls -- read before designing runs
 docs/EXPECTATIONS.md  what neural guidance can realistically deliver here
 docs/SKETCH_LOOP.md   design for transferring proof sketches into hints
 docs/RUNS.md          live tracker for the screen; also its pre-registration
 ```
+
+Regenerating `examples/sketch_loop/` is the repo's regression test: it exercises
+env resolution, problem lookup, include handling, term parsing, similarity, hint
+adaptation and input building in one command.
+
+```bash
+./scripts/sketch_transfer.py MVA005-1 LCL054-10 LCL231-10 LAT138-1 \
+    GRP673-10 GRP674-11 KLE096-10 COL003-1
+git diff --stat examples/          # expected to be empty
+```
+
+Note `sketch.md` embeds the current screen baselines, so it legitimately changes
+when a new sweep completes.
 
 ## Before you run anything
 

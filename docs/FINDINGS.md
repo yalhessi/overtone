@@ -48,23 +48,36 @@ default and is a red herring — this is a separate mechanism.
 Measured with byte-identical inputs (same md5), same binary, same flags,
 sequential runs, 5 repeats:
 
-| problem | cpu mean | cpu cv | cpu spread | rules derived |
+| problem | cpu mean | cpu cv | cpu spread | distinct rule counts (of 5) |
 |---|---|---|---|---|
-| REL029-1 | 1.88s | 0.55% | 1.44% | 1689, 1690, 1697 |
-| LAT190-10 | 23.49s | 0.51% | 1.24% | 1889 … 1931 |
+| REL029-1 | 1.88s | 0.55% | 1.44% | 3 |
+| LAT190-10 | 23.49s | 0.51% | 1.24% | 5 |
+| **MVA006-1** | 191.73s | **67.68%** | 160.62% | 5 (8782 … 15862) |
+| **GRP666-5** | 186.06s | **26.37%** | 63.47% | 5 (20785 … 24979) |
 
-**Runtimes are stable (cv ~0.5%); the searches are not identical.** Three
-consequences:
+**Variance is strongly problem-dependent, and large where it matters.** The two
+fast problems are stable to ~0.5%; the two slow ones are not, and MVA006-1
+ranges over a factor of 2.6 in runtime and 1.8 in rules derived. The plausible
+mechanism is positive feedback: a slightly different `interreduce` moment
+changes the rule set, which changes the timing, which shifts the next
+maintenance window.
 
-- Single-run *timings* are reliable to within a couple of percent, so speedup
-  claims above ~5% are safe and anything smaller is noise.
+Four consequences:
+
+- **On fast problems, single-run timings are reliable** to a couple of percent.
+  On slow ones they are close to meaningless — report mean+-sd over n>=5 via
+  `overtone.runner.summarise`.
 - **Outcomes near a budget boundary can flip.** A problem finishing at 118s
   against a 120s cap may time out on a rerun. Donor lemma 270 in the MVA005-1
   ladder did exactly this (118.2s proved, 120.2s failed); it was attributed to
   directory contamination and is at least partly this instead.
 - **Derived-rule sets are a nondeterministic sample**, so the derived-vs-used
-  labels in `rule_usefulness.py` are drawn from one arbitrary run. The 91-98%
-  waste figures should be treated as approximate, not exact.
+  labels behind `scripts/rule_usefulness.py` come from one arbitrary run. The
+  91-98% waste figures are approximate, not exact.
+- **Screen timings and near-serial timings are not comparable.** GRP666-5 was
+  recorded at 396.0s in the 16-worker screen but averages 186.1s run solo -- a
+  2.1x gap. Contention does not just add clock time, it changes which searches
+  happen.
 
 Comparisons across different machine loads are also suspect: the screens ran at
 16-24 concurrent workers while the ablation and ladder experiments ran nearly
@@ -193,7 +206,7 @@ is 143MB.
 Two consequences for use. These hint sets are 3-5 orders of magnitude larger
 than the 9-33 range where Twitch's wins live, so they are a pool to select from,
 not a set to pass through. And they are Otter/Prover9 syntax, so they need
-`otter2twee.py` and inherit its open AC-association question.
+`overtone/otter.py` and inherit its open AC-association question.
 
 `ROBBINS/r2h.in` is a demodulation-free Otter check of the Robbins-to-Huntington
 derivation at `max_weight 5` — a second, independent hint list for the same
@@ -540,7 +553,7 @@ The generic hints are not useless either — adding them takes 852.9s down to
 firing count is a terrible proxy for value: the 62M-firing hints are the
 dispensable ones.
 
-**The extraction bug is real but subtler than it looked.** `build_hints` ranks
+**The extraction bug is real but subtler than it looked.** `overtone/agent/hints.py:build_hints` ranks
 by occurrence count in the donor proof, which favours generic terms. Here the
 cap of 25 happened to admit 13 specific hints alongside 12 generic ones, so the
 structural content survived by luck. **A tighter cap would have kept only
@@ -636,6 +649,14 @@ the unnamed intermediate rules twee builds toward each hard rung, which passing
 proven lemmas forward does not share; that is measurable by saving rung outputs
 and diffing derived-rule sets, and has not been done.
 
+**The rung count is now 20, not 21.** Rung selection matched waypoints against
+donor lemmas using a normaliser that replaced every variable with `*`, so
+`f(X,Y)` compared equal to `f(X,X)` and one lemma matched spuriously. Fixed in
+the refactor (`terms.alpha_key`). The numbers above were measured with the
+21-rung ladder and have not been re-run; the extra rung was one of the cheap
+ones, so the totals move by little, but they are not exactly reproducible from
+the current code.
+
 **An earlier revision of this section reported the ladder proving in 378.2s.
 That number came from two ladder runs writing the same output directory and is
 withdrawn.** The rung budget also matters more than expected: donor lemma 270
@@ -663,7 +684,7 @@ Caught because COL002-10 timed out in both directions at 1000s and then returned
 `Satisfiable` in 0.01s on a rerun. Three jobs corrupted (COL002-10, CSR040-10,
 CSR065-10); the latter two were counted among the resisted when they had never
 actually run. Fixed by giving each job its own input path and making
-`build_input` write atomically via rename (`overtone/twee.py`).
+`build_input` write atomically via rename (`overtone/runner.py`).
 
 The general lesson for this repo: a fast non-timeout result on a problem expected
 to be hard is a bug signature, not a discovery. Prefer atomic writes anywhere
