@@ -17,6 +17,8 @@ dependencies:
   - seaborn
   - scikit-learn
   - pip:
+      # the overtone package itself, editable; core is stdlib-only
+      - -e .
       - stitch_core==0.1.25
       - python-dotenv
       - psutil

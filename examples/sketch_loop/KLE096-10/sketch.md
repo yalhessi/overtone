@@ -10,7 +10,7 @@ chains (Twitch's extraction), adapted to the target signature.
 - extracted 6088 term occurrences (4682 distinct)
 - dropped 3 (absent non-nullary symbols, unparseable, or contentless)
 - kept 25 (cap 25; donor-only constants variabilised to Wn)
-- baseline: {"1000s --flatten-goal": "Timeout", "1000s --no-flatten-goal": "Timeout"}
+- baseline: {"1000s --flatten-goal": "Timeout", "1000s --no-flatten-goal": "Timeout", "4000s --flatten-goal": "Timeout", "4000s --no-flatten-goal": "Timeout"}
 
 | # | hint (adapted) | donor occurrences | donor term |
 |---|---|---|---|

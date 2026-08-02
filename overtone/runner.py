@@ -30,7 +30,9 @@ from dataclasses import dataclass, asdict, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from overtone import config
+
+ROOT = config.ROOT
 
 # Applied to every invocation, matching Twitch (twitch/src/utils.py:22).
 # Omitting these changes the search and makes results incomparable to the paper.
@@ -47,17 +49,7 @@ VARNAME = re.compile(r"\b([A-Z][A-Za-z0-9_]*)\b")
 
 
 def _env(name: str) -> str:
-    val = os.environ.get(name)
-    if not val:
-        dotenv = ROOT / ".env"
-        if dotenv.exists():
-            for line in dotenv.read_text().splitlines():
-                if line.startswith(f"{name}="):
-                    val = line.split("=", 1)[1].strip()
-                    break
-    if not val:
-        raise RuntimeError(f"{name} is not set; run ./bootstrap.sh")
-    return val
+    return config.env(name)
 
 
 @dataclass(frozen=True)

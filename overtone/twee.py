@@ -17,11 +17,12 @@ import os
 import re
 import resource
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+from overtone import config
+
+ROOT = config.ROOT
 
 # Applied to every invocation, matching Twitch.
 ALWAYS = ["--kbo-weight0-unary", "--print-score"]
@@ -34,24 +35,17 @@ SATURATED = ("Satisfiable", "CounterSatisfiable")
 
 def env(name: str) -> str:
     """Read `name` from the environment, falling back to the repo's .env."""
-    val = os.environ.get(name)
-    if not val:
-        dotenv = ROOT / ".env"
-        if dotenv.exists():
-            for line in dotenv.read_text().splitlines():
-                if line.startswith(f"{name}="):
-                    val = line.split("=", 1)[1].strip()
-                    break
-    if not val:
-        sys.exit(f"{name} is not set; run ./bootstrap.sh")
-    return val
+    return config.env(name)
 
 
 def problem_path(name: str) -> Path:
     """Locate a TPTP problem by bare name, e.g. ROB034-1."""
     hit = next((Path(env("TPTP_ROOT")) / "Problems").rglob(f"{name}.p"), None)
     if hit is None:
-        sys.exit(f"{name}.p not found under TPTP_ROOT/Problems")
+        # Raise, never sys.exit: this runs inside ProcessPoolExecutor workers,
+        # and SystemExit is a BaseException that `except Exception` will not
+        # catch -- one missing problem would kill a multi-hour sweep.
+        raise FileNotFoundError(f"{name}.p not found under TPTP_ROOT/Problems")
     return hit
 
 

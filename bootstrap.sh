@@ -104,6 +104,10 @@ ok "twee at $TWEE_PATH with hint support"
 
 say "3/6  Python environment"
 ok "created in step 0 (needed for GMP)"
+# Editable install so `from overtone import ...` resolves from any directory,
+# rather than every script prepending the repo root to sys.path.
+pip install -e "$ROOT" --quiet --no-deps
+ok "overtone installed (editable)"
 
 say "4/6  TPTP v$TPTP_VERSION"
 if [[ -d "$TPTP_ROOT/Axioms" ]]; then

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "overtone"
+version = "0.1.0"
+description = "Learned guidance for equational theorem proving with twee"
+requires-python = ">=3.12"
+# Deliberately no dependencies: the core is stdlib-only, so `import overtone`
+# works in any interpreter. Analysis extras live in environment.yml.
+dependencies = []
+
+[tool.setuptools]
+packages = ["overtone", "overtone.agent"]
