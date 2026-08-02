@@ -30,90 +30,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from overtone import twee                                        # noqa: E402
+from overtone.terms import (VAR, safe_term, term, unparse, alpha, fresh_vars,   # noqa: E402
+                            symbols, subtrees, similarity, merged)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples" / "sketch_loop"
 PROOFS = ROOT / "logs" / "screen" / "proofs"
 HINT_FLAGS = ["--hint-skel-factor 0.5", "--hint-skel-cost 0"]
 MAX_HINTS = 25          # stay inside the measured 9-33 sweet spot
-VAR = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
-
-
-# ---------------------------------------------------------------- term parsing
-
-def tokenize(s):
-    return re.findall(r"[A-Za-z0-9_$]+|[(),]", s)
-
-
-def parse(tokens, i=0):
-    """Parse name | name(t, ...) into nested tuples: ('f', arg, ...)."""
-    name = tokens[i]
-    i += 1
-    if i < len(tokens) and tokens[i] == "(":
-        args, i = [], i + 1
-        while tokens[i] != ")":
-            arg, i = parse(tokens, i)
-            args.append(arg)
-            if tokens[i] == ",":
-                i += 1
-        return (name, *args), i + 1
-    return name, i
-
-
-def term(s):
-    return parse(tokenize(s))[0]
-
-
-def safe_term(s):
-    """Parse or return None. TPTP carries clause shapes this grammar does not
-    cover (propositional atoms, $-constants, arithmetic); skip them rather than
-    abort a whole corpus scan."""
-    try:
-        toks = tokenize(s)
-        if not toks:
-            return None
-        t, i = parse(toks)
-        return t if i == len(toks) else None
-    except (IndexError, ValueError):
-        return None
-
-
-def unparse(t):
-    if isinstance(t, str):
-        return t
-    return f"{t[0]}({', '.join(unparse(a) for a in t[1:])})"
-
-
-def alpha(t, mapping, fresh):
-    """Rename variables by first occurrence so alpha-equal terms compare equal."""
-    if isinstance(t, str):
-        if VAR.match(t):
-            if t not in mapping:
-                mapping[t] = next(fresh)
-            return mapping[t]
-        return t
-    return (t[0], *(alpha(a, mapping, fresh) for a in t[1:]))
-
-
-def fresh_vars():
-    i = 0
-    while True:
-        yield f"V{i + 1}"
-        i += 1
-
-
-def symbols(t, out):
-    """Function/constant symbols of a term (variables excluded)."""
-    if isinstance(t, str):
-        if not VAR.match(t):
-            out.add((t, 0))
-        return out
-    out.add((t[0], len(t) - 1))
-    for a in t[1:]:
-        symbols(a, out)
-    return out
-
-
 # ------------------------------------------------------------------ problems
 
 def read_with_includes(path: Path) -> str:
@@ -171,16 +95,6 @@ def problem_symbols(path: Path):
     return syms
 
 
-# ---------------------------------------------------------------- similarity
-
-def subtrees(t, out):
-    out.add(t)
-    if not isinstance(t, str):
-        for a in t[1:]:
-            subtrees(a, out)
-    return out
-
-
 def axiom_sets(path: Path):
     sets = []
     for eq in equations(path):
@@ -193,20 +107,6 @@ def axiom_sets(path: Path):
         if s:
             sets.append(s)
     return sets
-
-
-def similarity(sets1, sets2):
-    """Twitch's structural similarity: mean directional best-match Jaccard."""
-    if not sets1 or not sets2:
-        return 0.0
-
-    def jac(a, b):
-        return len(a & b) / len(a | b) if a | b else 1.0
-
-    def direction(xs, ys):
-        return sum(max(jac(x, y) for y in ys) for x in xs) / len(xs)
-
-    return (direction(sets1, sets2) + direction(sets2, sets1)) / 2
 
 
 # ---------------------------------------------------------------- extraction
@@ -290,13 +190,6 @@ def screen_baseline(problem):
             r = json.loads(line)
             if r["problem"] == problem:
                 out[f"{r['budget']}s {r['direction']}"] = r["result"]
-    return out
-
-
-def merged(sets):
-    out = set()
-    for s in sets:
-        out |= s
     return out
 
 
