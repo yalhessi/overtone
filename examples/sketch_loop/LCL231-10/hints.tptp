@@ -1,0 +1,50 @@
+cnf(hint_1, axiom,
+	 $hint( axiom(implies(X, implies(Y, X))) )).
+cnf(hint_2, axiom,
+	 $hint( axiom(implies(X, or(not(Y), X))) )).
+cnf(hint_3, axiom,
+	 $hint( axiom(implies(implies(X, Y), implies(implies(Z, X), implies(Z, Y)))) )).
+cnf(hint_4, axiom,
+	 $hint( axiom(implies(implies(X, Y), implies(implies(Z, X), or(not(Z), Y)))) )).
+cnf(hint_5, axiom,
+	 $hint( axiom(implies(implies(X, Y), implies(or(not(Z), X), or(not(Z), Y)))) )).
+cnf(hint_6, axiom,
+	 $hint( theorem(implies(implies(X, Y), implies(implies(Z, X), implies(Z, Y)))) )).
+cnf(hint_7, axiom,
+	 $hint( ifeq(true, true, theorem(implies(implies(X, Y), implies(implies(Z, X), implies(Z, Y)))), true) )).
+cnf(hint_8, axiom,
+	 $hint( ifeq(axiom(implies(implies(X, Y), implies(implies(Z, X), implies(Z, Y)))), true, theorem(implies(implies(X, Y), implies(implies(Z, X), implies(Z, Y)))), true) )).
+cnf(hint_9, axiom,
+	 $hint( theorem(implies(or(X, Y), or(Y, X))) )).
+cnf(hint_10, axiom,
+	 $hint( ifeq(true, true, theorem(implies(or(X, Y), or(Y, X))), true) )).
+cnf(hint_11, axiom,
+	 $hint( ifeq(axiom(implies(or(X, Y), or(Y, X))), true, theorem(implies(or(X, Y), or(Y, X))), true) )).
+cnf(hint_12, axiom,
+	 $hint( ifeq(theorem(implies(implies(or(X, Y), or(Y, X)), Z)), true, theorem(Z), true) )).
+cnf(hint_13, axiom,
+	 $hint( ifeq(theorem(implies(implies(or(X, Y), or(Y, X)), Z)), true, ifeq(true, true, theorem(Z), true), true) )).
+cnf(hint_14, axiom,
+	 $hint( ifeq(theorem(implies(implies(or(X, Y), or(Y, X)), Z)), true, ifeq(theorem(implies(or(X, Y), or(Y, X))), true, theorem(Z), true), true) )).
+cnf(hint_15, axiom,
+	 $hint( theorem(implies(implies(X, or(Y, Z)), implies(X, or(Z, Y)))) )).
+cnf(hint_16, axiom,
+	 $hint( ifeq(true, true, theorem(implies(implies(X, or(Y, Z)), implies(X, or(Z, Y)))), true) )).
+cnf(hint_17, axiom,
+	 $hint( ifeq(theorem(implies(implies(or(Y, Z), or(Z, Y)), implies(implies(X, or(Y, Z)), implies(X, or(Z, Y))))), true, theorem(implies(implies(X, or(Y, Z)), implies(X, or(Z, Y)))), true) )).
+cnf(hint_18, axiom,
+	 $hint( theorem(implies(X, or(Y, X))) )).
+cnf(hint_19, axiom,
+	 $hint( ifeq(true, true, theorem(implies(X, or(Y, X))), true) )).
+cnf(hint_20, axiom,
+	 $hint( ifeq(axiom(implies(X, or(Y, X))), true, theorem(implies(X, or(Y, X))), true) )).
+cnf(hint_21, axiom,
+	 $hint( ifeq(theorem(implies(implies(X, or(Y, X)), Z)), true, theorem(Z), true) )).
+cnf(hint_22, axiom,
+	 $hint( ifeq(theorem(implies(implies(X, or(Y, X)), Z)), true, ifeq(true, true, theorem(Z), true), true) )).
+cnf(hint_23, axiom,
+	 $hint( ifeq(theorem(implies(implies(X, or(Y, X)), Z)), true, ifeq(theorem(implies(X, or(Y, X))), true, theorem(Z), true), true) )).
+cnf(hint_24, axiom,
+	 $hint( theorem(implies(X, or(X, Y))) )).
+cnf(hint_25, axiom,
+	 $hint( ifeq(true, true, theorem(implies(X, or(X, Y))), true) )).

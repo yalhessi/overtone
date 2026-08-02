@@ -1,0 +1,20 @@
+{
+  "problem": "GRP674-11",
+  "budget": 1000,
+  "baseline": {
+    "1000s --flatten-goal": "Timeout",
+    "1000s --no-flatten-goal": "Timeout"
+  },
+  "hinted": {
+    "--flatten-goal": {
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 1002.1
+    },
+    "--no-flatten-goal": {
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 1002.2
+    }
+  }
+}

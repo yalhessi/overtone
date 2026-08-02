@@ -1,0 +1,50 @@
+cnf(hint_1, axiom,
+	 $hint( apply(X, apply(X, Y)) )).
+cnf(hint_2, axiom,
+	 $hint( apply(apply(apply(w, b), X), Y) )).
+cnf(hint_3, axiom,
+	 $hint( apply(apply(apply(w, W1), X), Y) )).
+cnf(hint_4, axiom,
+	 $hint( apply(apply(w, apply(b, X)), Y) )).
+cnf(hint_5, axiom,
+	 $hint( apply(apply(apply(b, X), Y), Y) )).
+cnf(hint_6, axiom,
+	 $hint( apply(X, apply(Y, Y)) )).
+cnf(hint_7, axiom,
+	 $hint( apply(apply(w, apply(W1, Y)), X) )).
+cnf(hint_8, axiom,
+	 $hint( apply(apply(apply(W1, Y), X), X) )).
+cnf(hint_9, axiom,
+	 $hint( apply(X, apply(Y, X)) )).
+cnf(hint_10, axiom,
+	 $hint( apply(apply(apply(b, X), X), Y) )).
+cnf(hint_11, axiom,
+	 $hint( apply(apply(apply(W1, X), X), Y) )).
+cnf(hint_12, axiom,
+	 $hint( apply(apply(w, apply(apply(W1, X), Y)), Z) )).
+cnf(hint_13, axiom,
+	 $hint( apply(apply(apply(apply(W1, X), Y), Z), Z) )).
+cnf(hint_14, axiom,
+	 $hint( apply(apply(Y, apply(X, Z)), Z) )).
+cnf(hint_15, axiom,
+	 $hint( apply(apply(w, apply(b, X)), apply(apply(W1, Y), Z)) )).
+cnf(hint_16, axiom,
+	 $hint( apply(X, apply(apply(apply(W1, Y), Z), apply(apply(W1, Y), Z))) )).
+cnf(hint_17, axiom,
+	 $hint( apply(X, apply(Z, apply(Y, apply(apply(W1, Y), Z)))) )).
+cnf(hint_18, axiom,
+	 $hint( apply(apply(w, apply(apply(W1, X), apply(W1, Z))), Y) )).
+cnf(hint_19, axiom,
+	 $hint( apply(apply(apply(W1, Z), apply(X, Y)), Y) )).
+cnf(hint_20, axiom,
+	 $hint( apply(apply(X, Y), apply(Z, Y)) )).
+cnf(hint_21, axiom,
+	 $hint( apply(apply(w, apply(apply(W1, X), apply(apply(W1, Y), Z))), W) )).
+cnf(hint_22, axiom,
+	 $hint( apply(apply(apply(apply(W1, Y), Z), apply(X, W)), W) )).
+cnf(hint_23, axiom,
+	 $hint( apply(apply(Z, apply(Y, apply(X, W))), W) )).
+cnf(hint_24, axiom,
+	 $hint( apply(apply(w, apply(apply(W1, X), apply(W1, apply(apply(W1, Y), Z)))), W) )).
+cnf(hint_25, axiom,
+	 $hint( apply(apply(X, W), apply(apply(apply(W1, Y), Z), W)) )).

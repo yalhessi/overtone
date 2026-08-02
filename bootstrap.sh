@@ -69,6 +69,18 @@ done
       conda install -n $ENV_NAME -c conda-forge gmp
     or load a cluster module (module avail gmp), or ask for gmp-devel."
 CABAL_LIB_FLAGS=(--extra-lib-dirs="$GMP_LIB" --extra-include-dirs="${GMP_LIB%/lib}/include")
+# --extra-lib-dirs alone is NOT enough. cabal applies command-line configure flags
+# only to the *target* package, never to dependencies resolved from Hackage, so twee
+# itself would get the flag while alex, cereal, colour, ... all still die with
+# "cannot find -lgmp". (Verified: alex-3.5.4.2 builds with this exact flag when it is
+# the target and fails with it when it is a dependency.) LIBRARY_PATH is read by
+# gcc/ld directly, so it reaches every compiler invocation cabal spawns.
+#
+# LIBRARY_PATH is link-time only: the binaries record libgmp's soname (libgmp.so.10)
+# and resolve against the system copy at runtime, so this does not put conda's libgmp
+# on anything's *runtime* path -- which is what would break Lean (see the Rocq note in
+# ~/.zshrc). Keep it that way; do not promote this to LD_LIBRARY_PATH globally.
+export LIBRARY_PATH="$GMP_LIB:${LIBRARY_PATH:-}"
 export LD_LIBRARY_PATH="$GMP_LIB:${LD_LIBRARY_PATH:-}"
 ok "libgmp at $GMP_LIB"
 
@@ -82,8 +94,11 @@ else
 fi
 TWEE_PATH="$(command -v twee)"
 # The hint machinery lives behind --expert-help; without it nothing here works.
+# twee prints boolean flags in "--(no-)resonance" form, so a literal grep for
+# "--resonance" false-negatives on a perfectly good build. Normalise first.
+TWEE_HELP="$(twee --expert-help 2>&1 | sed 's/--(no-)/--/g')"
 for flag in hint-skel-factor hint-skel-cost resonance max-term-size proof-on-saturation; do
-  twee --expert-help 2>&1 | grep -q -- "--$flag" || die "twee lacks --$flag (wrong build?)"
+  grep -q -- "--$flag" <<<"$TWEE_HELP" || die "twee lacks --$flag (wrong build?)"
 done
 ok "twee at $TWEE_PATH with hint support"
 
@@ -96,7 +111,8 @@ if [[ -d "$TPTP_ROOT/Axioms" ]]; then
 else
   mkdir -p "$ROOT/data"
   curl -L --fail -o "$ROOT/data/TPTP.tgz" \
-    "https://www.tptp.org/TPTP/Distribution/TPTP-v$TPTP_VERSION.tgz"
+    "https://tptp.org/TPTP/Archive/TPTP-v$TPTP_VERSION.tgz"
+    # "https://www.tptp.org/TPTP/Distribution/TPTP-v$TPTP_VERSION.tgz"
   tar xzf "$ROOT/data/TPTP.tgz" -C "$ROOT/data"
   rm -f "$ROOT/data/TPTP.tgz"
 fi
@@ -161,5 +177,6 @@ cat <<EOF
   LOG_DIR   $LOG_DIR
   conda env $ENV_NAME
 
-  next: ./scripts/fetch_external.py --all      # ETP, Robbins/Otter, TSTP corpora
+  next: ./scripts/make_ueq_list.py             # data/lists/ueq.tsv, offline
+        ./scripts/fetch_external.py --all      # ETP, Robbins, Veroff, TSTP
 EOF

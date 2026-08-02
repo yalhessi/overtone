@@ -37,11 +37,17 @@ writes `.env`, and runs a smoke test that verifies hints actually change the
 search. It is idempotent; `./bootstrap.sh --smoke-only` re-verifies an existing
 install.
 
-Then fetch the external corpora:
+Then build the problem lists and fetch the external corpora:
 
 ```bash
-./scripts/fetch_external.py --all
+./scripts/make_ueq_list.py          # data/lists/ueq.tsv + per-status name lists
+./scripts/fetch_external.py --all   # ETP, Robbins, Veroff, TSTP
 ```
+
+`make_ueq_list.py` reads the `% SPC :` header of every problem in the local TPTP
+distribution, so it runs offline and cannot drift from what is on disk. TSTP has
+no bulk download, so its arm is a ~5700-request crawl of tptp.org's CGI at a
+deliberately polite rate — budget ~1.5h, and it resumes if interrupted.
 
 ## Layout
 
@@ -52,12 +58,21 @@ twitch/               submodule: the abstraction-mining pipeline
 overtone/             this project's python package
   otter2twee.py       Otter/EQP equations -> twee $hint terms
   rule_usefulness.py  derived-vs-used rule analysis over twee logs
+  twee.py             running twee and reading its RESULT line
 scripts/
-  fetch_external.py   ETP, Robbins/Otter, TSTP corpora
-experiments/          sweep drivers and configs
+  make_ueq_list.py    enumerate TPTP UEQ problems from the local distribution
+  fetch_external.py   ETP, Robbins/Otter, Veroff, TSTP corpora
+  replicate_twitch.py re-run a recorded Twitch success and compare times
+  screen.py           high-budget baseline screen, both goal directions
+  start_screen.sh     launch the screen in a detached tmux session
+  sketch_transfer.py  donor-proof hints for resisted problems (sketch loop v0)
+examples/sketch_loop/ per-problem sketch, hints, hinted problem, result
 data/                 TPTP + external corpora (gitignored)
 logs/                 twee output (gitignored; grows to GBs)
 docs/FINDINGS.md      measured results and pitfalls -- read before designing runs
+docs/EXPECTATIONS.md  what neural guidance can realistically deliver here
+docs/SKETCH_LOOP.md   design for transferring proof sketches into hints
+docs/RUNS.md          live tracker for the screen; also its pre-registration
 ```
 
 ## Before you run anything
@@ -76,8 +91,15 @@ The three that most often invalidate an experiment:
 |---|---|---|
 | TPTP UEQ | 1140 UNS, 260 SAT, 48 UNK, 7 OPN | primary train/eval |
 | ETP | ~2400 non-trivial, 1062 unresolved | uniform-signature transfer |
-| TSTP | ~23 systems per solved problem | donor proofs for hint mining |
+| TSTP | 3990 derivations, 930/1140 problems | donor proofs; only 5.8% of the >=0.9 band |
+| Veroff | 175 inputs, ~2.4M hints, 196 proofs | human oracle hints at the frontier |
 | Robbins/Otter | 4 rungs, 3 hint lists | oracle hints, frontier benchmark |
+
+Splits must not be random over problems. The intended hint source is donor
+proofs from structurally similar problems — which is what Twitch's
+`veroff_hints` path does at axiom-similarity >= 0.9 — so a random split puts
+near-duplicate siblings on both sides and scores memorisation of a donor the
+model should never have seen. Split by axiom-signature cluster or by theory.
 
 Evaluation is stratified — negative control (SAT problems), speedup on problems
 with baseline >= 1s, near-frontier (solvable only at high budget), frontier

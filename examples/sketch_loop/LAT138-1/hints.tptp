@@ -1,0 +1,50 @@
+cnf(hint_1, axiom,
+	 $hint( join(X, Y) )).
+cnf(hint_2, axiom,
+	 $hint( join(X, join(Y, Z)) )).
+cnf(hint_3, axiom,
+	 $hint( meet(X, Y) )).
+cnf(hint_4, axiom,
+	 $hint( join(meet(X, Y), meet(X, join(Z, meet(Y, join(W, meet(X, Y)))))) )).
+cnf(hint_5, axiom,
+	 $hint( meet(X, join(Z, meet(Y, join(W, meet(X, Y))))) )).
+cnf(hint_6, axiom,
+	 $hint( meet(X, join(Y, meet(X, Z))) )).
+cnf(hint_7, axiom,
+	 $hint( meet(Y, meet(X, Z)) )).
+cnf(hint_8, axiom,
+	 $hint( meet(meet(X, Z), Y) )).
+cnf(hint_9, axiom,
+	 $hint( join(X, meet(Y, X)) )).
+cnf(hint_10, axiom,
+	 $hint( join(X, meet(X, Y)) )).
+cnf(hint_11, axiom,
+	 $hint( join(join(Y, Z), X) )).
+cnf(hint_12, axiom,
+	 $hint( meet(X, meet(Y, join(X, Z))) )).
+cnf(hint_13, axiom,
+	 $hint( meet(X, meet(join(X, Z), Y)) )).
+cnf(hint_14, axiom,
+	 $hint( meet(meet(X, join(X, Z)), Y) )).
+cnf(hint_15, axiom,
+	 $hint( join(X, join(Y, meet(X, Z))) )).
+cnf(hint_16, axiom,
+	 $hint( join(X, join(meet(X, Z), Y)) )).
+cnf(hint_17, axiom,
+	 $hint( join(join(X, meet(X, Z)), Y) )).
+cnf(hint_18, axiom,
+	 $hint( meet(X, meet(Y, join(Z, meet(X, Y)))) )).
+cnf(hint_19, axiom,
+	 $hint( meet(X, meet(Y, join(Z, meet(Y, X)))) )).
+cnf(hint_20, axiom,
+	 $hint( meet(X, meet(Y, join(meet(Y, X), Z))) )).
+cnf(hint_21, axiom,
+	 $hint( meet(Y, meet(X, join(meet(Y, X), Z))) )).
+cnf(hint_22, axiom,
+	 $hint( meet(meet(Y, X), join(meet(Y, X), Z)) )).
+cnf(hint_23, axiom,
+	 $hint( join(X, join(Y, meet(Z, join(X, Y)))) )).
+cnf(hint_24, axiom,
+	 $hint( join(X, join(Y, meet(Z, join(Y, X)))) )).
+cnf(hint_25, axiom,
+	 $hint( join(X, join(Y, meet(join(Y, X), Z))) )).

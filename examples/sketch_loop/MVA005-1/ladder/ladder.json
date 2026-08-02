@@ -1,0 +1,182 @@
+{
+  "problem": "MVA005-1",
+  "direction": "--no-flatten-goal",
+  "rung_budget": 120,
+  "final_budget": 1000,
+  "rungs": [
+    {
+      "rung": 1,
+      "donor_lemma": 22,
+      "eq": "join(X, meet(X, Y)) = X",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 2,
+      "donor_lemma": 24,
+      "eq": "join(X, ld(unit, X)) = ld(unit, X)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 3,
+      "donor_lemma": 29,
+      "eq": "op(X, op(ld(X, unit), ld(ld(Y, unit), unit))) = at(X, Y)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 4,
+      "donor_lemma": 30,
+      "eq": "op(X, ld(X, unit)) = at(X, unit)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 5,
+      "donor_lemma": 35,
+      "eq": "join(X, rd(X, unit)) = rd(X, unit)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 6,
+      "donor_lemma": 42,
+      "eq": "meet(X, join(X, Y)) = X",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 7,
+      "donor_lemma": 105,
+      "eq": "meet(rd(unit, X), ld(X, unit)) = ld(X, unit)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 9.0
+    },
+    {
+      "rung": 8,
+      "donor_lemma": 145,
+      "eq": "ld(ld(X, unit), unit) = at(unit, X)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 9,
+      "donor_lemma": 156,
+      "eq": "join(meet(X, Y), meet(X, join(Y, Z))) = meet(X, join(Y, Z))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.3
+    },
+    {
+      "rung": 10,
+      "donor_lemma": 171,
+      "eq": "join(X, op(X, join(Y, unit))) = op(X, join(Y, unit))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.3
+    },
+    {
+      "rung": 11,
+      "donor_lemma": 172,
+      "eq": "join(X, op(X, Y)) = op(X, join(Y, unit))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 11.6
+    },
+    {
+      "rung": 12,
+      "donor_lemma": 181,
+      "eq": "op(X, op(ld(X, unit), Y)) = op(at(X, unit), Y)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.0
+    },
+    {
+      "rung": 13,
+      "donor_lemma": 187,
+      "eq": "rd(X, ld(op(X, join(Y, unit)), X)) = op(X, join(Y, unit))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.1
+    },
+    {
+      "rung": 14,
+      "donor_lemma": 188,
+      "eq": "rd(X, rd(unit, join(Y, unit))) = op(X, join(Y, unit))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 25.6
+    },
+    {
+      "rung": 15,
+      "donor_lemma": 213,
+      "eq": "ld(rd(X, op(join(Y, unit), X)), X) = op(join(Y, unit), X)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 8.4
+    },
+    {
+      "rung": 16,
+      "donor_lemma": 223,
+      "eq": "ld(rd(unit, join(X, unit)), Y) = op(join(X, unit), Y)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 33.5
+    },
+    {
+      "rung": 17,
+      "donor_lemma": 227,
+      "eq": "meet(rd(ld(X, Y), Z), ld(X, rd(Y, Z))) = ld(X, rd(Y, Z))",
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 120.3
+    },
+    {
+      "rung": 18,
+      "donor_lemma": 242,
+      "eq": "op(X, op(rd(unit, X), Y)) = op(at(X, unit), Y)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 1.0
+    },
+    {
+      "rung": 19,
+      "donor_lemma": 243,
+      "eq": "op(X, ld(X, op(at(X, unit), Y))) = op(at(X, unit), Y)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 36.8
+    },
+    {
+      "rung": 20,
+      "donor_lemma": 268,
+      "eq": "join(X, op(join(Y, unit), X)) = op(join(Y, unit), X)",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 0.5
+    },
+    {
+      "rung": 21,
+      "donor_lemma": 270,
+      "eq": "op(join(X, unit), X) = op(X, join(X, unit))",
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 118.2
+    }
+  ],
+  "n_proven": 20,
+  "final": {
+    "result": "Timeout",
+    "proved": false,
+    "cpu": 1001.7180859999999
+  }
+}

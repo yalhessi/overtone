@@ -20,3 +20,12 @@ scratch/
 .DS_Store
 .vscode/
 .idea/
+
+# Per-run twee output from overtone.runner (grows to GBs)
+runs/
+build/
+
+# Raw twee stdout under examples/ -- multi-MB each, and not reproducible run to
+# run (twee schedules maintenance by CPU time, see docs/FINDINGS.md). The
+# generated .p/.tptp/.md/.json are the artifacts worth tracking and diffing.
+examples/**/*.out

@@ -1,0 +1,20 @@
+{
+  "problem": "MVA005-1",
+  "budget": 1000,
+  "baseline": {
+    "1000s --flatten-goal": "Timeout",
+    "1000s --no-flatten-goal": "Timeout"
+  },
+  "hinted": {
+    "--flatten-goal": {
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 1001.3
+    },
+    "--no-flatten-goal": {
+      "result": "Unsatisfiable",
+      "proved": true,
+      "cpu": 546.8
+    }
+  }
+}

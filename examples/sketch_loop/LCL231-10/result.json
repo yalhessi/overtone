@@ -1,0 +1,20 @@
+{
+  "problem": "LCL231-10",
+  "budget": 1000,
+  "baseline": {
+    "1000s --flatten-goal": "Timeout",
+    "1000s --no-flatten-goal": "Timeout"
+  },
+  "hinted": {
+    "--flatten-goal": {
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 1001.9
+    },
+    "--no-flatten-goal": {
+      "result": "Timeout",
+      "proved": false,
+      "cpu": 1001.9
+    }
+  }
+}

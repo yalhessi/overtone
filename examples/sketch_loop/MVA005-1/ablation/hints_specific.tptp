@@ -1,0 +1,26 @@
+cnf(hint_1, axiom,
+	 $hint( join(X, meet(X, Y)) )).
+cnf(hint_2, axiom,
+	 $hint( op(X, join(Y, unit)) )).
+cnf(hint_3, axiom,
+	 $hint( join(meet(X, Y), X) )).
+cnf(hint_4, axiom,
+	 $hint( join(X, ld(unit, X)) )).
+cnf(hint_5, axiom,
+	 $hint( op(X, op(ld(X, unit), ld(ld(Y, unit), unit))) )).
+cnf(hint_6, axiom,
+	 $hint( op(X, ld(X, unit)) )).
+cnf(hint_7, axiom,
+	 $hint( join(X, rd(X, unit)) )).
+cnf(hint_8, axiom,
+	 $hint( meet(X, join(X, Y)) )).
+cnf(hint_9, axiom,
+	 $hint( meet(rd(unit, X), ld(X, unit)) )).
+cnf(hint_10, axiom,
+	 $hint( ld(ld(X, unit), unit) )).
+cnf(hint_11, axiom,
+	 $hint( op(at(X, unit), Y) )).
+cnf(hint_12, axiom,
+	 $hint( op(join(Y, unit), X) )).
+cnf(hint_13, axiom,
+	 $hint( meet(rd(ld(X, Y), Z), ld(X, rd(Y, Z))) )).
