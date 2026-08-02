@@ -32,83 +32,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from overtone import twee                                        # noqa: E402
 from overtone.terms import (VAR, safe_term, term, unparse, alpha, fresh_vars,   # noqa: E402
                             symbols, subtrees, similarity, merged)
+from overtone.problems import (equations, problem_symbols, axiom_sets,         # noqa: E402
+                               read_with_includes, cnf_clauses)
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES = ROOT / "examples" / "sketch_loop"
 PROOFS = ROOT / "logs" / "screen" / "proofs"
 HINT_FLAGS = ["--hint-skel-factor 0.5", "--hint-skel-cost 0"]
 MAX_HINTS = 25          # stay inside the measured 9-33 sweet spot
-# ------------------------------------------------------------------ problems
-
-def read_with_includes(path: Path) -> str:
-    text = path.read_text(errors="replace")
-    for inc in re.findall(r"include\(\s*'([^']+)'\s*\)", text):
-        p = Path(twee.env("TPTP_ROOT")) / inc
-        if p.exists():
-            text += "\n" + p.read_text(errors="replace")
-    return text
-
-
-def cnf_clauses(text):
-    """Yield (role, body) for each cnf(...) clause, matching parens properly.
-
-    A regex cannot do this: clause bodies contain nested parentheses, so any
-    non-greedy `\\)` stops inside the first term and silently truncates it.
-    """
-    for m in re.finditer(r"cnf\s*\(", text):
-        i, depth = m.end(), 1
-        while i < len(text) and depth:
-            if text[i] == "(":
-                depth += 1
-            elif text[i] == ")":
-                depth -= 1
-            i += 1
-        inner = text[m.end():i - 1]
-        parts = inner.split(",", 2)
-        if len(parts) == 3:
-            yield parts[1].strip(), parts[2].strip()
-
-
-def equations(path: Path, roles=("axiom", "hypothesis")):
-    """Unit equation strings for the given clause roles, includes resolved."""
-    out = []
-    for role, body in cnf_clauses(read_with_includes(path)):
-        if role not in roles:
-            continue
-        body = re.sub(r"\s+", " ", body).strip()
-        while body.startswith("(") and body.endswith(")"):
-            body = body[1:-1].strip()
-        # unit equations only: disjunctions and negations are not UEQ material
-        if "!=" in body or "=" not in body or "|" in body or "~" in body:
-            continue
-        out.append(body)
-    return out
-
-
-def problem_symbols(path: Path):
-    syms = set()
-    for eq in equations(path, roles=("axiom", "hypothesis", "negated_conjecture")):
-        for side in eq.split("=", 1):
-            t = safe_term(side.strip())
-            if t is not None:
-                symbols(t, syms)
-    return syms
-
-
-def axiom_sets(path: Path):
-    sets = []
-    for eq in equations(path):
-        lhs, rhs = eq.split("=", 1)
-        s = set()
-        for side in (lhs, rhs):
-            t = safe_term(side.strip())
-            if t is not None:
-                subtrees(alpha(t, {}, fresh_vars()), s)
-        if s:
-            sets.append(s)
-    return sets
-
-
 # ---------------------------------------------------------------- extraction
 
 def donor_terms(out_path: Path):
