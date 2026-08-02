@@ -32,6 +32,13 @@ def main():
     ap.add_argument("--direction", default="--no-flatten-goal")
     ap.add_argument("--promote", choices=("hints", "axioms"), default="hints",
                     help="how proven rungs reach the final run (default hints)")
+    ap.add_argument("--verify", choices=("standalone", "chained"),
+                    default="standalone",
+                    help="standalone (default) proves each rung from the "
+                         "problem's own axioms; chained also carries the "
+                         "previously proven lemmas, which is 3.4x slower")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="parallel rung verification (standalone only)")
     ap.add_argument("--binary", help="twee build to use (default: TWEE_PATH)")
     ap.add_argument("--outdir", type=Path)
     a = ap.parse_args()
@@ -43,8 +50,9 @@ def main():
     try:
         run_ladder(a.problem, a.donor_proof, waypoints,
                    rung_budget=a.rung_budget, final_budget=a.final_budget,
-                   direction=a.direction, promote=a.promote, outdir=outdir,
-                   binary=a.binary)
+                   direction=a.direction, promote=a.promote,
+                   verify=a.verify, workers=a.workers,
+                   outdir=outdir, binary=a.binary)
     except (ValueError, FileNotFoundError) as e:
         sys.exit(str(e))
 

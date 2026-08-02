@@ -804,6 +804,68 @@ rungs "proved" in 0.0s; with fresh constants, real times appear (34.1s, 36.6s)
 and two rungs fail outright. The 0.0s row was the fast-result bug signature
 again.
 
+### Why the ladder was slower: chaining, not decomposition
+
+The ladder's premise is that each rung starts from more knowledge. That premise
+is what made it slow, and two mechanisms compound.
+
+**Completion amortises; the ladder discards it.** The donor MVA001-1 derives
+**all 263 lemmas in 21.7s** -- one completion, one shared rewrite system. The
+chained ladder spends **324.9s** re-deriving 20 of them individually: a 15x
+blowup from throwing the sharing away.
+
+**Carrying lemmas forward actively hurts, and the penalty compounds with depth.**
+Each expensive rung proved three ways, deterministic build:
+
+| rung | lemma | prior | standalone | as axioms | as hints |
+|---|---|---|---|---|---|
+| 13 | 188 | 12 | 8.6s | 16.3s | 15.1s |
+| 15 | 223 | 14 | 8.0s | 22.4s | 17.6s |
+| 16 | 227 | 15 | **22.4s** | **143.4s** | 92.1s |
+| 18 | 243 | 16 | 7.9s | 30.3s | 27.7s |
+| 20 | 269 | 18 | **11.5s** | **117.3s** | 68.0s |
+
+1.9x at 12 prior lemmas, 10.2x at 18 -- every added equation enlarges the rewrite
+system, giving more rules to interreduce and more critical pairs to score. This
+is the axioms-vs-hints effect already recorded for the final run, but applying at
+*every* rung and growing with position. Hints are less bad than axioms and still
+worse than nothing.
+
+**The localisation signal was an artifact of this.** Lemma 227 -- the rung the
+ladder reports as too hard, failing at 120.1s -- proves **standalone in 22.4s**.
+The ladder was reporting its own accumulation penalty as intrinsic difficulty.
+
+**Standalone verification over all 20 rungs: 94.3s proving 20/20**, against
+324.9s chained proving 19/20. 3.4x cheaper *and* complete. Three rungs (105, 187,
+242) are genuinely faster chained -- their predecessors are real shortcuts -- but
+they save ~22s against ~250s lost, so standalone is the right default. Standalone
+rungs are also independent and parallelise; a chain cannot.
+
+### MVA005-1, every arm on the deterministic build
+
+| arm | final | verify | end-to-end |
+|---|---|---|---|
+| no hints | 317.2 / 316.6 / 318.0s | — | **317.2s** |
+| flat hints (25) | 408.2 / 408.9 / 407.8s | — | 408.3s |
+| ladder, chained -> hints | 139.0 / 138.6s | 324.9s | 463.9s |
+| **skeleton, standalone -> hints** | 164.2s | 94.3s | **258.5s** |
+
+All cv <= 0.2%, so these are finally comparable. Three readings:
+
+- **Flat hints are worse than no hints** (408.3s vs 317.2s, a 1.29x slowdown).
+  The v0 hint set actively harms this problem; earlier readings of that
+  comparison were lost in 69-100% variance.
+- **Standalone skeleton verification is the only arm that beats plain twee**,
+  1.23x end-to-end, and its 94.3s is 20 independent jobs -- bounded by the
+  slowest rung (22.4s) given cores, so ~187s wall.
+- The chained ladder has the *fastest final* (139.0s) because it carries 19
+  lemmas rather than 20. Hint-set size again; end-to-end is the number to quote.
+
+Caveat: 1.23x on one problem, whose donor has identical axioms (similarity
+1.000) -- close to a best case. This is not yet evidence that skeleton transfer
+helps generally. It is the first configuration here that beats plain twee on a
+clean measurement, and an explanation for why the earlier attempts did not.
+
 ### A concurrency bug that produced fake results
 
 `screen.py` originally wrote both goal directions of a problem to the same input
