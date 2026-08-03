@@ -88,6 +88,19 @@ def load_details(sketch, outdir: Path, results):
     return details
 
 
+ANNOT = Path(__file__).resolve().parents[1] / "data" / "lists" / "tptp_nodes.json"
+
+
+def load_annot(path: Path):
+    """Which nodes are TPTP problems in their own right, with ratings.
+
+    A node carrying a problem name is a benchmark someone else has to solve, not
+    an internal step -- worth seeing on the graph, because it is what makes a
+    sketch checkable against the outside world.
+    """
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -102,6 +115,8 @@ def main():
                     default=config.ROOT / "docs" / "img" / "rng_dag.svg")
     ap.add_argument("--title", default="Alternative-ring sketch")
     ap.add_argument("--engine", choices=("auto", "dot", "builtin"), default="auto")
+    ap.add_argument("--annot", type=Path, default=ANNOT,
+                    help="JSON of {node: {tptp: [...], note: str}}")
     ap.add_argument("--html", type=Path, nargs="?",
                     const=config.ROOT / "docs" / "img" / "rng_dag.html",
                     help="also write an interactive page: hover traces "
@@ -119,14 +134,16 @@ def main():
                + " · ".join(f"{k} {sum(1 for v in st.values() if v['status'] == k)}"
                             for k in blueprint.STATUS_ORDER
                             if any(v["status"] == k for v in st.values())))
+        annot = load_annot(a.annot)
         out = blueprint.render(sketch, a.out, results, title=a.title,
-                               subtitle=sub, engine=a.engine)
+                               subtitle=sub, engine=a.engine, annot=annot)
         print(f"{out}  ({sub})", flush=True)
         if a.html:
             details = load_details(sketch, a.results.parent, results)
             a.html.parent.mkdir(parents=True, exist_ok=True)
             a.html.write_text(blueprint.to_html(sketch, results, details,
-                                                title=a.title, subtitle=sub))
+                                                title=a.title, subtitle=sub,
+                                                annot=annot))
             print(f"{a.html}", flush=True)
         if not a.watch or done == len(sketch.nodes):
             return

@@ -186,15 +186,18 @@ def main():
                     help="do not re-attempt a failed node standalone")
     a = ap.parse_args()
 
-    known = ()
+    known, prior_results = (), ()
     prior = OUT / "dag.json"
     if a.resume and prior.exists():
-        known = tuple(json.loads(prior.read_text()).get("proved", {}))
+        d = json.loads(prior.read_text())
+        known = tuple(d.get("proved", {}))
+        prior_results = tuple(d.get("results", ()))
 
     t0 = time.time()
     out = verify("RNG029-5", SKETCH, outdir=OUT, budget=DEFAULT_BUDGET,
                  budgets=TIER_BUDGET, scope=a.scope, channel=a.channel,
                  workers=a.workers, binary=_binary(), known=known,
+                 prior_results=prior_results,
                  retry_standalone=not a.no_retry)
     print(f"\n{out['n_proved']}/{out['n_nodes']} nodes proved")
     for n in out["missing"]:

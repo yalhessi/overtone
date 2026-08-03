@@ -171,7 +171,8 @@ def _job(a):
 
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
            scope="parents", channel=None, directions=DIRECTIONS, workers=8,
-           binary: str | None = None, known=(), retry_standalone=True):
+           binary: str | None = None, known=(), prior_results=(),
+           retry_standalone=True):
     """Prove every node, in topological order, each in the scope its edges imply.
 
     A node whose parents did not prove is skipped rather than attempted without
@@ -188,14 +189,18 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
     *edge*, so the cost of one extra run per failure buys the only check there is.
 
     `known` names nodes already proved by an earlier run, so a resumed run
-    re-verifies nothing. `budgets` overrides `budget` per node. `channel` forces
+    re-verifies nothing; pass that run's `results` as `prior_results` so the
+    merged record stays complete. `budgets` overrides `budget` per node. `channel` forces
     a channel; leaving it None applies `channel_for`, which is the point of the
     DAG.
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     budgets = budgets or {}
-    results = []
+    # Carry the earlier run's rows forward. Without this a resumed run writes a
+    # dag.json describing only the nodes it re-ran, and anything reading it --
+    # the blueprint, for one -- reports every other node as never attempted.
+    results = list(prior_results)
     proved = {n: {"cpu": None, "direction": None, "n_support": 0,
                   "channel": "cached"} for n in known if n in sketch.nodes}
     if proved:

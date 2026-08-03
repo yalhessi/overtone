@@ -1,0 +1,260 @@
+<title>Decomposing the alternative-ring frontier — results</title>
+<style>
+  :root{
+    --ground:#eef0f5; --raised:#f7f8fb; --sunk:#e3e7ef;
+    --ink:#181d29; --soft:#4d566b; --faint:#7b849a;
+    --line:#cfd5e2; --line-soft:#dee3ec;
+    --accent:#2f4fd8; --accent-soft:#e2e7fb;
+    --ok:#0f7a52; --ok-soft:#dcefe6;
+    --warn:#9a6206; --warn-soft:#f6ebd8;
+    --bad:#b03a30; --bad-soft:#f7e2df;
+    --serif:"Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#0d1017; --raised:#141924; --sunk:#0a0d13;
+    --ink:#dde3ef; --soft:#9aa4bb; --faint:#6d7690;
+    --line:#272e3d; --line-soft:#1e2431;
+    --accent:#8ea3ff; --accent-soft:#1b2444;
+    --ok:#4fc38d; --ok-soft:#0f2b20;
+    --warn:#d9a441; --warn-soft:#2e2312;
+    --bad:#e8776a; --bad-soft:#2e1715;}}
+  :root[data-theme="dark"]{
+    --ground:#0d1017; --raised:#141924; --sunk:#0a0d13;
+    --ink:#dde3ef; --soft:#9aa4bb; --faint:#6d7690;
+    --line:#272e3d; --line-soft:#1e2431;
+    --accent:#8ea3ff; --accent-soft:#1b2444;
+    --ok:#4fc38d; --ok-soft:#0f2b20;
+    --warn:#d9a441; --warn-soft:#2e2312;
+    --bad:#e8776a; --bad-soft:#2e1715;}
+  :root[data-theme="light"]{
+    --ground:#eef0f5; --raised:#f7f8fb; --sunk:#e3e7ef;
+    --ink:#181d29; --soft:#4d566b; --faint:#7b849a;
+    --line:#cfd5e2; --line-soft:#dee3ec;
+    --accent:#2f4fd8; --accent-soft:#e2e7fb;
+    --ok:#0f7a52; --ok-soft:#dcefe6;
+    --warn:#9a6206; --warn-soft:#f6ebd8;
+    --bad:#b03a30; --bad-soft:#f7e2df;}
+
+  body{background:var(--ground);color:var(--ink);font-family:var(--sans);
+       font-size:15.5px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:38px 22px 76px;
+        display:flex;flex-direction:column;gap:40px;}
+  .eyebrow{font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;
+           color:var(--faint);font-weight:650;}
+  h1{font-family:var(--serif);font-size:33px;line-height:1.14;font-weight:600;
+     text-wrap:balance;margin-top:7px;}
+  h2{font-family:var(--serif);font-size:22px;font-weight:600;text-wrap:balance;}
+  h3{font-size:13.5px;font-weight:650;}
+  p{max-width:70ch;color:var(--soft);}
+  code{font-family:var(--mono);font-size:.9em;}
+  section{display:flex;flex-direction:column;gap:14px;}
+  .head{display:flex;flex-direction:column;gap:4px;}
+  header{border-bottom:2px solid var(--ink);padding-bottom:20px;}
+
+  .tiles{display:flex;flex-wrap:wrap;gap:0;margin-top:20px;
+         border:1px solid var(--line);background:var(--raised);}
+  .tile{flex:1 1 150px;padding:14px 16px;border-right:1px solid var(--line-soft);
+        display:flex;flex-direction:column;gap:2px;}
+  .tile:last-child{border-right:0;}
+  .tile b{font-family:var(--mono);font-size:23px;font-weight:600;
+          font-variant-numeric:tabular-nums;line-height:1.1;}
+  .tile span{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+             color:var(--faint);font-weight:650;}
+  .tile.ok b{color:var(--ok);} .tile.bad b{color:var(--bad);}
+  .tile.warn b{color:var(--warn);}
+
+  .scroller{overflow-x:auto;border:1px solid var(--line);background:var(--raised);}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;}
+  th,td{padding:7px 13px;text-align:left;border-bottom:1px solid var(--line-soft);
+        white-space:nowrap;}
+  thead th{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+           color:var(--faint);font-weight:650;background:var(--sunk);
+           border-bottom:1px solid var(--line);}
+  tbody tr:last-child td{border-bottom:0;}
+  td.p{font-family:var(--mono);}
+  td.n{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;}
+  .flip{color:var(--ok);font-weight:650;}
+  .fail{color:var(--bad);font-weight:650;}
+  .wd{color:var(--faint);text-decoration:line-through;}
+
+  ol.steps{display:flex;flex-direction:column;gap:11px;list-style:none;
+           counter-reset:s;padding:0;}
+  ol.steps li{display:grid;grid-template-columns:26px 1fr;gap:13px;counter-increment:s;}
+  ol.steps li::before{content:counter(s);font-family:var(--mono);font-size:12px;
+                      color:var(--accent);font-weight:650;padding-top:2px;}
+  ol.steps p{margin:2px 0 0;font-size:13.5px;}
+  ol.steps b{color:var(--ink);}
+
+  .lemmas{border:1px solid var(--line);background:var(--sunk);border-radius:5px;
+          padding:13px 15px;font-family:var(--mono);font-size:12.5px;line-height:1.9;
+          overflow-x:auto;}
+  .lemmas i{color:var(--faint);font-style:normal;}
+
+  .cards{display:flex;flex-wrap:wrap;gap:11px;}
+  .card{flex:1 1 260px;background:var(--raised);border:1px solid var(--line);
+        border-left:3px solid var(--accent);padding:12px 14px;
+        display:flex;flex-direction:column;gap:5px;}
+  .card.bad{border-left-color:var(--bad);}
+  .card p{margin:0;font-size:13px;max-width:none;}
+  .card .big{font-family:var(--mono);font-size:15px;font-weight:650;color:var(--ink);}
+
+  .caveat{border:1px solid var(--warn);background:var(--warn-soft);
+          border-radius:5px;padding:13px 15px;}
+  .caveat h3{color:var(--warn);margin-bottom:5px;}
+  .caveat p{max-width:none;font-size:13.5px;}
+  footer{border-top:1px solid var(--line);padding-top:15px;font-size:12px;
+         color:var(--faint);}
+  @media(max-width:640px){h1{font-size:26px;}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">overtone · twee · alternative rings</div>
+  <h1>Six lemmas solve ten frontier problems a 4000-second search could not</h1>
+  <p>Every result below is verified from the problems' own axioms on a
+     determinised build of twee 2.6.1. Baselines are our own recorded runs at
+     4000&nbsp;s CPU in both goal directions.</p>
+  <div class="tiles">
+    <div class="tile ok"><b>10</b><span>problems flipped</span></div>
+    <div class="tile ok"><b>29/29</b><span>sketch nodes verified</span></div>
+    <div class="tile"><b>6</b><span>lemmas needed</span></div>
+    <div class="tile warn"><b>2</b><span>results withdrawn</span></div>
+    <div class="tile bad"><b>0/3</b><span>other theories</span></div>
+  </div>
+</header>
+
+<section>
+  <div class="head">
+    <div class="eyebrow">result</div>
+    <h2>The RNG Moufang family</h2>
+    <p>Ratings are the fraction of state-of-the-art systems that fail at TPTP's
+       evaluation limit. All of these are known theorems — the question is
+       whether a saturation prover reaches them.</p>
+  </div>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>problem</th><th>identity</th><th class="n">rating</th>
+        <th class="n">baseline</th><th class="n">with 6 lemmas</th><th>verdict</th></tr></thead>
+      <tbody>
+        <tr><td class="p">RNG027-7</td><td>right Moufang</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">0.0s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG028-7</td><td>left Moufang</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">0.0s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG028-9</td><td>left Moufang, assoc. form</td><td class="n">0.91</td><td class="n">timeout</td><td class="n">0.1s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG025-5</td><td>associator alternating</td><td class="n">0.74</td><td class="n">timeout</td><td class="n">0.2s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG027-8</td><td>right Moufang, assoc. form</td><td class="n">0.91</td><td class="n">timeout</td><td class="n">0.6s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG027-9</td><td>right Moufang, assoc. form</td><td class="n">0.91</td><td class="n">timeout</td><td class="n">1.2s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG028-8</td><td>left Moufang, assoc. form</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">1.4s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG029-7</td><td>middle Moufang</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">24.3s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG029-6</td><td>middle Moufang</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">183.9s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG029-5</td><td>middle Moufang</td><td class="n">0.96</td><td class="n">timeout</td><td class="n">197.3s</td><td class="flip">flip</td></tr>
+        <tr><td class="p">RNG027-5</td><td>right Moufang</td><td class="n">0.96</td><td class="n">3555.6s</td><td class="n">0.0s</td><td>speedup</td></tr>
+        <tr><td class="p">RNG028-5</td><td>left Moufang</td><td class="n">0.96</td><td class="n">3825.8s</td><td class="n">0.0s</td><td>speedup</td></tr>
+        <tr><td class="p wd">RNG027-10</td><td class="wd">right Moufang</td><td class="n wd">1.00</td><td class="n wd">timeout</td><td class="n wd">0.0s</td><td class="fail">withdrawn</td></tr>
+        <tr><td class="p wd">RNG029-10</td><td class="wd">middle Moufang</td><td class="n wd">1.00</td><td class="n wd">timeout</td><td class="n wd">1.3s</td><td class="fail">withdrawn</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="caveat">
+    <h3>Why two are withdrawn</h3>
+    <p>RNG027-10 and RNG029-10 are re-encodings whose axiom sets are
+       <em>missing</em> three and four of RNG029-5's axioms. Lemmas proved from
+       the stronger theory are not theorems of the weaker one, so appending them
+       adds assumptions rather than lemmas and the proofs establish nothing about
+       those problems. Any transfer must assert
+       <code>donor_axioms ⊆ target_axioms</code> or re-verify from scratch.</p>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <div class="eyebrow">the lemmas</div>
+    <h2>All six, in full</h2>
+    <p>Written with <code>(x,y,z)</code> for the associator. Each is verified
+       from the alternative-ring axioms before use; the whole 29-node sketch
+       derives in ~19 minutes of wall time.</p>
+  </div>
+  <div class="lemmas">
+    (x,y,z) = (y,z,x) <i>— the associator is cyclic</i><br>
+    (x,y,z) + y(zx) = (yz)x <i>— definition, rearranged</i><br>
+    (x,y,z) + (yx)z = y(xz) <i>— definition, rearranged</i><br>
+    (xy)x = x(yx) <i>— the flexible law</i><br>
+    ((xy)z)y = x(y(zy)) <i>— right Moufang</i><br>
+    ((xy)x)z = x(y(xz)) <i>— left Moufang</i>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <div class="eyebrow">method</div>
+    <h2>Decompose, then verify in the scope the edges imply</h2>
+  </div>
+  <ol class="steps">
+    <li><p><b>Draft the route from informal mathematics.</b> The classical one:
+      the associator is trilinear, hence alternating, hence the flexible law,
+      hence Moufang. The first draft had the right mathematics and the wrong
+      shape — it stated Moufang as a step when Moufang was the goal.</p></li>
+    <li><p><b>Record dependencies, not order.</b> A sketch is a DAG. Each node is
+      verified against the problem's own axioms with its direct parents supplied
+      as axioms — worth ~3000× over proving it standalone.</p></li>
+    <li><p><b>Treat the budget as a diagnostic.</b> A correct decomposition
+      verifies every node in seconds. A node needing minutes means the sketch is
+      wrong there; the fix is to revise it, not to wait longer.</p></li>
+    <li><p><b>Read the failures.</b> Three of four faults were mis-wired edges,
+      not hard lemmas, and each was found by comparing against a structurally
+      similar node that worked.</p></li>
+  </ol>
+  <div class="cards">
+    <div class="card"><span class="big">3.3s → timeout</span>
+      <p>The Teichmüller identity, given five plausible but irrelevant parents.
+         Wrong edges cost more than missing ones — and this one blocked six
+         downstream nodes.</p></div>
+    <div class="card"><span class="big">37.9s → 2.1s</span>
+      <p>A trilinearity lemma, after adding one node the sketch had omitted: the
+         associator definition rearranged additively.</p></div>
+    <div class="card"><span class="big">timeout → 1.0s</span>
+      <p>Left Moufang in associator form, after replacing a single parent copied
+         from its mirror sibling with the correct one.</p></div>
+    <div class="card"><span class="big">234 → 4</span>
+      <p>A donor proof runs 234 lemmas deep; four do the work. Chain length is an
+         artifact of starting from bare axioms, not the structure of the proof.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="head">
+    <div class="eyebrow">scope</div>
+    <h2>What does not generalise</h2>
+    <p>The same pipeline, run end to end on three other theories, fails in three
+       distinguishable ways. The verification machinery worked every time — only
+       donor selection failed.</p>
+  </div>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>target</th><th>donor</th><th class="n">axiom sim.</th>
+        <th class="n">lemmas that held</th><th>donor proof</th><th>diagnosis</th></tr></thead>
+      <tbody>
+        <tr><td class="p">GRP673-10</td><td class="p">GRP664-10</td><td class="n">0.817</td>
+          <td class="n">177 / 260</td><td>278 lemmas, depth 23</td><td>donor's goal irrelevant</td></tr>
+        <tr><td class="p">LAT138-1</td><td class="p">LAT139-1</td><td class="n">0.930</td>
+          <td class="n">18 / 20</td><td>20 lemmas, depth 7</td><td>donor too easy</td></tr>
+        <tr><td class="p">COL003-1</td><td class="p">COL066-1</td><td class="n">0.897</td>
+          <td class="n">2 / 13</td><td>13 lemmas, depth 4</td><td>similarity overstated</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>RNG worked because it had three properties at once: identical axiom sets, a
+     deep donor proof, and a donor whose <em>goal was itself a lemma every target
+     needed</em>. Ranking donors by axiom similarity cannot detect the third — two
+     problems can share every axiom and prove unrelated things. That is the next
+     thing to fix, and it is why drafting, not mining, is the primary approach.</p>
+</section>
+
+<footer>
+  twee 2.6.1, determinised build (maintenance rescheduled from CPU time to a step
+  counter; coefficient of variation 47.9% → 0.4%). TPTP v9.2.1. Baselines are
+  recorded runs at 4000&nbsp;s CPU in both goal directions.
+</footer>
+
+</div>

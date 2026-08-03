@@ -196,7 +196,7 @@ def to_svg(sketch, results=(), *, title="", subtitle=""):
     return "\n".join(p)
 
 
-def to_dot(sketch, results=(), *, title=""):
+def to_dot(sketch, results=(), *, title="", annot=None):
     """Graphviz source. Colour rides on `class`, not on baked-in attributes.
 
     Presentation attributes lose to any CSS rule, so emitting a class per node
@@ -204,6 +204,7 @@ def to_dot(sketch, results=(), *, title=""):
     graphviz still does the layout.
     """
     st = statuses(sketch, results)
+    annot = annot or {}
     esc = lambda s: str(s).replace('\\', '\\\\').replace('"', '\\"')
     out = ["digraph sketch {",
            '  bgcolor="transparent"; rankdir=TB; nodesep=0.28; ranksep=0.52;',
@@ -220,12 +221,16 @@ def to_dot(sketch, results=(), *, title=""):
                 else f'\\n>{s["cpu"]:.0f}s')
         scope = f' · {s["n_support"]}p' if s["n_support"] else ""
         tip = f'{lhs} = {rhs}  —  {LABEL[s["status"]]}'
+        tptp = (annot.get(name) or {}).get("tptp") or []
+        # TPTP identity is the most useful thing on a node: it says the
+        # step is a benchmark problem, not merely an internal lemma.
+        tag = ("\\n(" + ", ".join(tptp[:2]) + ")") if tptp else ""
         fill, line, text = PALETTE[s["status"]][:3]
         # Both the class and the concrete colours: the class lets the injected
         # stylesheet re-theme the SVG, and the attributes mean `dot -Tpng` on
         # the .dot alone still comes out coloured.
         out.append(f'  "{name}" [id="node-{name}" class="n-{s["status"]}" '
-                   f'label="{name}{when}{scope}" '
+                   f'label="{name}{tag}{when}{scope}" '
                    f'fillcolor="{fill}" color="{line}" fontcolor="{text}" '
                    f'tooltip="{esc(tip)}"];')
     for name, (_, _, parents) in sketch.nodes.items():
@@ -274,7 +279,8 @@ def _legend_svg(sketch, results, width):
     return "".join(parts), x
 
 
-def render(sketch, dest, results=(), *, title="", subtitle="", engine="auto"):
+def render(sketch, dest, results=(), *, title="", subtitle="",
+           engine="auto", annot=None):
     """Write `dest` (.svg) plus a sibling .dot. Returns the svg path.
 
     `engine="dot"` uses graphviz, which minimises edge crossings properly;
@@ -283,7 +289,7 @@ def render(sketch, dest, results=(), *, title="", subtitle="", engine="auto"):
     """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dot_src = to_dot(sketch, results, title=title)
+    dot_src = to_dot(sketch, results, title=title, annot=annot)
     dest.with_suffix(".dot").write_text(dot_src + "\n")
 
     binary = _dot_binary() if engine in ("auto", "dot") else None
@@ -345,7 +351,7 @@ def _raw_dot_svg(dot_src):
 
 
 def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
-            subtitle=""):
+            subtitle="", annot=None):
     """A self-contained page: the graph, plus what each node means and its proof.
 
     Hovering a node lights its ancestors and descendants, which is the question
@@ -355,7 +361,7 @@ def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
     trace arrives as the 15 KB that is worth reading.
     """
     st = statuses(sketch, results)
-    details = details or {}
+    details, annot = details or {}, annot or {}
     children = {n: [] for n in sketch.nodes}
     for n, (_, _, parents) in sketch.nodes.items():
         for p in parents:
@@ -368,7 +374,9 @@ def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
                    "children": sorted(children[n]), "status": st[n]["status"],
                    "label": LABEL[st[n]["status"]], "cpu": st[n]["cpu"],
                    "runs": d.get("runs", []), "proof": d.get("proof", ""),
-                   "goal": d.get("goal", "")}
+                   "goal": d.get("goal", ""),
+                   "tptp": (annot.get(n) or {}).get("tptp", []),
+                   "note": (annot.get(n) or {}).get("note", "")}
     counts = {k: sum(1 for v in st.values() if v["status"] == k)
               for k in STATUS_ORDER}
     swatches = "".join(
@@ -392,7 +400,7 @@ def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
             f'<p class="sub">{escape(subtitle)}</p></div>'
             f'<div class="keys">{swatches}</div></header>'
             f'<div class="body"><div class="canvas" id="canvas">'
-            f"{_raw_dot_svg(to_dot(sketch, results, title=''))}</div>"
+            f"{_raw_dot_svg(to_dot(sketch, results, title='', annot=annot))}</div>"
             f'<aside id="panel"><div class="empty">Hover a node to trace its '
             f"dependencies. Click one for its statement and proof.</div></aside>"
             f'</div></div><div id="tip"></div>'
@@ -445,6 +453,9 @@ h4{margin:20px 0 7px;font-size:10.5px;letter-spacing:.12em;text-transform:upperc
   border:1px solid var(--line);background:var(--bg);color:var(--soft);cursor:pointer;}
 .chip:hover{border-color:var(--accent);color:var(--accent);}
 .none{font-size:12px;color:var(--faint);font-style:italic;}
+.tptp{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;}
+.tptp span{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--accent);color:var(--accent);}
+.note{margin-top:9px;font-size:12px;line-height:1.5;color:var(--soft);border-left:2px solid var(--line);padding-left:9px;}
 table{border-collapse:collapse;width:100%;font-size:12px;}
 td,th{padding:4px 8px;text-align:left;border-bottom:1px solid var(--line);}
 th{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--faint);}
@@ -505,8 +516,11 @@ function show(n){
     <th style="text-align:right">cpu</th></tr>${d.runs.map(r=>
     `<tr><td>${esc(r.direction)}</td><td>${esc(r.result)}</td>
      <td class="n">${r.cpu==null?'—':r.cpu.toFixed(1)+'s'}</td></tr>`).join('')}</table>`:'';
+  const tptp=(d.tptp&&d.tptp.length)
+    ?`<div class="tptp">${d.tptp.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:'';
   panel.innerHTML=`<div class="pname">${esc(n)}</div>
-    <span class="pill n-${d.status}">${esc(d.label)}</span>
+    <span class="pill n-${d.status}">${esc(d.label)}</span>${tptp}
+    ${d.note?`<div class="note">${esc(d.note)}</div>`:''}
     <h4>statement</h4><div class="eq">${esc(d.lhs)}<br>= ${esc(d.rhs)}</div>
     ${d.goal?`<h4>as sent to twee</h4><div class="eq">${esc(d.goal)}</div>`:''}
     <h4>depends on</h4>${chips(d.parents)}
@@ -524,7 +538,7 @@ g.querySelectorAll('g.node').forEach(node=>{
   node.addEventListener('mouseenter',e=>{
     if(!selected)light(n,false);
     const d=D[n];
-    tip.innerHTML=`<b>${esc(n)}</b>${esc(d.lhs)} = ${esc(d.rhs)}
+    tip.innerHTML=`<b>${esc(n)}${d.tptp&&d.tptp.length?'  ('+esc(d.tptp.join(', '))+')':''}</b>${esc(d.lhs)} = ${esc(d.rhs)}
       <span><br>${esc(d.label)}${d.cpu!=null?' · '+d.cpu.toFixed(1)+'s':''}
       · ${d.parents.length} parent(s), ${d.children.length} dependent(s)</span>`;
     tip.classList.add('on');});

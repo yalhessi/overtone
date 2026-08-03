@@ -1,0 +1,106 @@
+{
+ "neg_mult_r": {
+  "tptp": [
+   "RNG014-6"
+  ],
+  "note": "TPTP: RNG014-6 (rating 0.09)"
+ },
+ "neg_mult_l": {
+  "tptp": [
+   "RNG013-6"
+  ],
+  "note": "TPTP: RNG013-6 (rating 0.09)"
+ },
+ "assoc_xxy": {
+  "tptp": [
+   "RNG023-6",
+   "RNG023-7"
+  ],
+  "note": "TPTP: RNG023-6 (rating 0.00), RNG023-7 (rating 0.00)"
+ },
+ "assoc_xyy": {
+  "tptp": [
+   "RNG024-6",
+   "RNG024-7"
+  ],
+  "note": "TPTP: RNG024-6 (rating 0.00), RNG024-7 (rating 0.04)"
+ },
+ "assoc_xyx": {
+  "tptp": [
+   "RNG025-6",
+   "RNG025-7"
+  ],
+  "note": "TPTP: RNG025-6 (rating 0.57), RNG025-7 (rating 0.48)"
+ },
+ "assoc_add_1": {
+  "tptp": [
+   "RNG021-6",
+   "RNG021-7"
+  ],
+  "note": "TPTP: RNG021-6 (rating 0.35), RNG021-7 (rating 0.35)"
+ },
+ "assoc_add_2": {
+  "tptp": [
+   "RNG020-6",
+   "RNG020-7"
+  ],
+  "note": "TPTP: RNG020-6 (rating 0.35), RNG020-7 (rating 0.22)"
+ },
+ "assoc_add_3": {
+  "tptp": [
+   "RNG019-6",
+   "RNG019-7"
+  ],
+  "note": "TPTP: RNG019-6 (rating 0.35), RNG019-7 (rating 0.30)"
+ },
+ "alt23_additive": {
+  "tptp": [
+   "RNG025-4",
+   "RNG025-5"
+  ],
+  "note": "TPTP: RNG025-4 (rating 0.83), RNG025-5 (rating 0.74)"
+ },
+ "right_moufang_a": {
+  "tptp": [
+   "RNG027-8",
+   "RNG027-9"
+  ],
+  "note": "TPTP: RNG027-8 (rating 0.91), RNG027-9 (rating 0.91)"
+ },
+ "left_moufang_a": {
+  "tptp": [
+   "RNG028-8",
+   "RNG028-9"
+  ],
+  "note": "TPTP: RNG028-8 (rating 0.96), RNG028-9 (rating 0.91)"
+ },
+ "right_moufang": {
+  "tptp": [
+   "RNG027-5",
+   "RNG027-7",
+   "RNG027-10 (different axioms)"
+  ],
+  "note": "TPTP: RNG027-10 (rating 1.00), RNG027-5 (rating 0.96), RNG027-7 (rating 0.96) NOTE: the -10 encoding states the same conjecture but over a DIFFERENT axiom set, missing several of RNG029-5's axioms. Matching the conjecture is not solving the problem -- lemmas proved from the stronger theory are not theorems of the weaker one, so that problem is NOT claimed."
+ },
+ "middle_moufang": {
+  "tptp": [
+   "RNG029-5",
+   "RNG029-10 (different axioms)"
+  ],
+  "note": "TPTP: RNG029-10 (rating 1.00), RNG029-5 (rating 0.96) NOTE: the -10 encoding states the same conjecture but over a DIFFERENT axiom set, missing several of RNG029-5's axioms. Matching the conjecture is not solving the problem -- lemmas proved from the stronger theory are not theorems of the weaker one, so that problem is NOT claimed."
+ },
+ "teichmuller": {
+  "tptp": [
+   "RNG026-6",
+   "RNG026-7"
+  ],
+  "note": "TPTP RNG026-6/7 (rating 0.39/0.30) state the Teichmuller identity as a difference equal to zero rather than as an equation, so it does not match syntactically. Holds in any ring -- pure expansion of the associator definition."
+ },
+ "left_moufang": {
+  "tptp": [
+   "~RNG028-5",
+   "~RNG028-7"
+  ],
+  "note": "Equivalent to RNG028-5/7 (rating 0.96) but not identical: those state (x(yx))z = x(y(xz)) where this node has ((xy)x)z. The two differ by exactly the flexible law, which is why adding it flipped that whole cluster."
+ }
+}
