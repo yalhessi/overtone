@@ -109,6 +109,20 @@ ok "created in step 0 (needed for GMP)"
 pip install -e "$ROOT" --quiet --no-deps
 ok "overtone installed (editable)"
 
+# Graphviz, for sketch blueprints (scripts/blueprint.py). Optional: the renderer
+# falls back to a built-in layered layout when `dot` is absent. Installed into
+# its own prefix because the conda package conflicts with this environment's
+# python=3.13 pin.
+if command -v dot >/dev/null 2>&1; then
+  ok "graphviz already on PATH ($(dot -V 2>&1))"
+elif [[ -x "$ROOT/build/gv/bin/dot" ]]; then
+  ok "graphviz at build/gv"
+else
+  conda create -y -q -p "$ROOT/build/gv" graphviz >/dev/null 2>&1 \
+    && ok "graphviz installed to build/gv" \
+    || echo "    ! graphviz unavailable; blueprints use the built-in renderer"
+fi
+
 say "4/6  TPTP v$TPTP_VERSION"
 if [[ -d "$TPTP_ROOT/Axioms" ]]; then
   ok "TPTP already at $TPTP_ROOT"

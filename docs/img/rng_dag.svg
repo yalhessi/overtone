@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+
+
+<svg style="max-width:100%;height:auto" width="1331" height="502"
+ viewBox="0 0 1331 502" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><style>svg{background:#f7f8fb}text{fill:#181d29}.n-proved>polygon,.n-proved>path{fill:#dcefe6;stroke:#0f7a52}.n-proved>text{fill:#0b3d2a}.n-proved_scoped>polygon,.n-proved_scoped>path{fill:#f6ebd8;stroke:#9a6206}.n-proved_scoped>text{fill:#4a2f05}.n-failed>polygon,.n-failed>path{fill:#f7e2df;stroke:#b03a30}.n-failed>text{fill:#5a1a15}.n-blocked>polygon,.n-blocked>path{fill:#e6e9f0;stroke:#8d95a8}.n-blocked>text{fill:#4d566b}.n-pending>polygon,.n-pending>path{fill:#eef0f5;stroke:#b3bccd}.n-pending>text{fill:#5b6478}@media(prefers-color-scheme:dark){svg{background:#0d1017}text{fill:#dde3ef}g.edge>path{stroke:#39414f}g.edge>polygon{fill:#39414f;stroke:#39414f}.n-proved>polygon,.n-proved>path{fill:#12301f;stroke:#4fc38d}.n-proved>text{fill:#bfe8d2}.n-proved_scoped>polygon,.n-proved_scoped>path{fill:#2e2312;stroke:#d9a441}.n-proved_scoped>text{fill:#f0dcb4}.n-failed>polygon,.n-failed>path{fill:#2e1715;stroke:#e8776a}.n-failed>text{fill:#f5cdc7}.n-blocked>polygon,.n-blocked>path{fill:#171c26;stroke:#4a5468}.n-blocked>text{fill:#8b94a8}.n-pending>polygon,.n-pending>path{fill:#131822;stroke:#39404f}.n-pending>text{fill:#7b8497}}</style>
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 442.07)">
+<title>sketch</title>
+<text xml:space="preserve" text-anchor="middle" x="661.25" y="-421.72" font-family="sans-serif" font-size="13.00">Alternative&#45;ring sketch</text>
+
+<g id="node&#45;neg_mult_r" class="node n&#45;proved">
+<title>neg_mult_r</title>
+<g id="a_node&#45;neg_mult_r"><a xlink:title="multiply(X,additive_inverse(Y)) = additive_inverse(multiply(X,Y)) &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M68.16,-411.32C68.16,-411.32 12,-411.32 12,-411.32 6,-411.32 0,-405.32 0,-399.32 0,-399.32 0,-384.74 0,-384.74 0,-378.74 6,-372.74 12,-372.74 12,-372.74 68.16,-372.74 68.16,-372.74 74.16,-372.74 80.16,-378.74 80.16,-384.74 80.16,-384.74 80.16,-399.32 80.16,-399.32 80.16,-405.32 74.16,-411.32 68.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="40.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">neg_mult_r</text>
+<text xml:space="preserve" text-anchor="middle" x="40.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;neg_mult_l" class="node n&#45;proved">
+<title>neg_mult_l</title>
+<g id="a_node&#45;neg_mult_l"><a xlink:title="multiply(additive_inverse(X),Y) = additive_inverse(multiply(X,Y)) &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M168.16,-411.32C168.16,-411.32 112,-411.32 112,-411.32 106,-411.32 100,-405.32 100,-399.32 100,-399.32 100,-384.74 100,-384.74 100,-378.74 106,-372.74 112,-372.74 112,-372.74 168.16,-372.74 168.16,-372.74 174.16,-372.74 180.16,-378.74 180.16,-384.74 180.16,-384.74 180.16,-399.32 180.16,-399.32 180.16,-405.32 174.16,-411.32 168.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="140.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">neg_mult_l</text>
+<text xml:space="preserve" text-anchor="middle" x="140.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;neg_add" class="node n&#45;proved">
+<title>neg_add</title>
+<g id="a_node&#45;neg_add"><a xlink:title="additive_inverse(add(X,Y)) = add(additive_inverse(X),additive_inverse(Y)) &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M250.16,-411.32C250.16,-411.32 212,-411.32 212,-411.32 206,-411.32 200,-405.32 200,-399.32 200,-399.32 200,-384.74 200,-384.74 200,-378.74 206,-372.74 212,-372.74 212,-372.74 250.16,-372.74 250.16,-372.74 256.16,-372.74 262.16,-378.74 262.16,-384.74 262.16,-384.74 262.16,-399.32 262.16,-399.32 262.16,-405.32 256.16,-411.32 250.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="231.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">neg_add</text>
+<text xml:space="preserve" text-anchor="middle" x="231.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;cancel_r" class="node n&#45;proved">
+<title>cancel_r</title>
+<g id="a_node&#45;cancel_r"><a xlink:title="add(add(X,Y),additive_inverse(Y)) = X &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M338.16,-411.32C338.16,-411.32 294,-411.32 294,-411.32 288,-411.32 282,-405.32 282,-399.32 282,-399.32 282,-384.74 282,-384.74 282,-378.74 288,-372.74 294,-372.74 294,-372.74 338.16,-372.74 338.16,-372.74 344.16,-372.74 350.16,-378.74 350.16,-384.74 350.16,-384.74 350.16,-399.32 350.16,-399.32 350.16,-405.32 344.16,-411.32 338.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="316.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">cancel_r</text>
+<text xml:space="preserve" text-anchor="middle" x="316.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;assoc_xxy" class="node n&#45;proved">
+<title>assoc_xxy</title>
+<g id="a_node&#45;assoc_xxy"><a xlink:title="associator(X,X,Y) = additive_identity &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M432.16,-411.32C432.16,-411.32 382,-411.32 382,-411.32 376,-411.32 370,-405.32 370,-399.32 370,-399.32 370,-384.74 370,-384.74 370,-378.74 376,-372.74 382,-372.74 382,-372.74 432.16,-372.74 432.16,-372.74 438.16,-372.74 444.16,-378.74 444.16,-384.74 444.16,-384.74 444.16,-399.32 444.16,-399.32 444.16,-405.32 438.16,-411.32 432.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="407.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">assoc_xxy</text>
+<text xml:space="preserve" text-anchor="middle" x="407.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;assoc_xyx" class="node n&#45;proved_scoped">
+<title>assoc_xyx</title>
+<g id="a_node&#45;assoc_xyx"><a xlink:title="associator(X,Y,X) = additive_identity &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M259.16,-335.74C259.16,-335.74 209,-335.74 209,-335.74 203,-335.74 197,-329.74 197,-323.74 197,-323.74 197,-309.16 197,-309.16 197,-303.16 203,-297.16 209,-297.16 209,-297.16 259.16,-297.16 259.16,-297.16 265.16,-297.16 271.16,-303.16 271.16,-309.16 271.16,-309.16 271.16,-323.74 271.16,-323.74 271.16,-329.74 265.16,-335.74 259.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="234.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">assoc_xyx</text>
+<text xml:space="preserve" text-anchor="middle" x="234.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">1.6s · 2p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__assoc_xyx" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;assoc_xyx</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M369.54,-375.06C342.88,-363.73 306.97,-348.45 278.82,-336.48"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="279.72,-334.58 273.38,-334.16 278.07,-338.44 279.72,-334.58"/>
+</g>
+
+<g id="node&#45;lin_left_inst" class="node n&#45;proved_scoped">
+<title>lin_left_inst</title>
+<g id="a_node&#45;lin_left_inst"><a xlink:title="associator(add(X,Y),add(X,Y),Z) = additive_identity &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M693.16,-335.74C693.16,-335.74 619,-335.74 619,-335.74 613,-335.74 607,-329.74 607,-323.74 607,-323.74 607,-309.16 607,-309.16 607,-303.16 613,-297.16 619,-297.16 619,-297.16 693.16,-297.16 693.16,-297.16 699.16,-297.16 705.16,-303.16 705.16,-309.16 705.16,-309.16 705.16,-323.74 705.16,-323.74 705.16,-329.74 699.16,-335.74 693.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="656.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">lin_left_inst</text>
+<text xml:space="preserve" text-anchor="middle" x="656.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__lin_left_inst" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;lin_left_inst</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M444.63,-380.31C483,-369.31 544.27,-351.61 597.08,-335.74 597.85,-335.51 598.63,-335.27 599.41,-335.04"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="599.8,-337.11 604.93,-333.36 598.58,-333.1 599.8,-337.11"/>
+</g>
+
+<g id="node&#45;alt12_additive" class="node n&#45;proved_scoped">
+<title>alt12_additive</title>
+<g id="a_node&#45;alt12_additive"><a xlink:title="add(associator(X,Y,Z),associator(Y,X,Z)) = additive_identity &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M667.16,-260.16C667.16,-260.16 587,-260.16 587,-260.16 581,-260.16 575,-254.16 575,-248.16 575,-248.16 575,-233.58 575,-233.58 575,-227.58 581,-221.58 587,-221.58 587,-221.58 667.16,-221.58 667.16,-221.58 673.16,-221.58 679.16,-227.58 679.16,-233.58 679.16,-233.58 679.16,-248.16 679.16,-248.16 679.16,-254.16 673.16,-260.16 667.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="627.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">alt12_additive</text>
+<text xml:space="preserve" text-anchor="middle" x="627.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 5p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__alt12_additive" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;alt12_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M423.44,-372.31C446.72,-345.75 487.03,-300.01 491.08,-297.16 514.13,-280.93 542.65,-268.4 567.61,-259.41"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="568.01,-261.49 572.97,-257.52 566.62,-257.53 568.01,-261.49"/>
+</g>
+
+<g id="node&#45;alt23_additive" class="node n&#45;proved_scoped">
+<title>alt23_additive</title>
+<g id="a_node&#45;alt23_additive"><a xlink:title="add(associator(X,Y,Z),associator(X,Z,Y)) = additive_identity &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M897.16,-260.16C897.16,-260.16 817,-260.16 817,-260.16 811,-260.16 805,-254.16 805,-248.16 805,-248.16 805,-233.58 805,-233.58 805,-227.58 811,-221.58 817,-221.58 817,-221.58 897.16,-221.58 897.16,-221.58 903.16,-221.58 909.16,-227.58 909.16,-233.58 909.16,-233.58 909.16,-248.16 909.16,-248.16 909.16,-254.16 903.16,-260.16 897.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="857.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">alt23_additive</text>
+<text xml:space="preserve" text-anchor="middle" x="857.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 5p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__alt23_additive" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;alt23_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M444.53,-390.78C535.17,-389.46 763.12,-381.54 821.08,-335.74 841.69,-319.45 850.51,-289.87 854.28,-268.25"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="856.35,-268.59 855.2,-262.33 852.2,-267.94 856.35,-268.59"/>
+</g>
+
+<g id="node&#45;absorb_12a" class="node n&#45;proved_scoped">
+<title>absorb_12a</title>
+<g id="a_node&#45;absorb_12a"><a xlink:title="associator(X,add(X,Y),Z) = associator(X,Y,Z) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M543.16,-260.16C543.16,-260.16 487,-260.16 487,-260.16 481,-260.16 475,-254.16 475,-248.16 475,-248.16 475,-233.58 475,-233.58 475,-227.58 481,-221.58 487,-221.58 487,-221.58 543.16,-221.58 543.16,-221.58 549.16,-221.58 555.16,-227.58 555.16,-233.58 555.16,-233.58 555.16,-248.16 555.16,-248.16 555.16,-254.16 549.16,-260.16 543.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="515.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">absorb_12a</text>
+<text xml:space="preserve" text-anchor="middle" x="515.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 2p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__absorb_12a" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;absorb_12a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M414.07,-372.23C421.97,-352.41 436.12,-320.82 454.08,-297.16 462.76,-285.73 474.01,-274.76 484.49,-265.65"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="485.73,-267.35 488.94,-261.86 483.01,-264.15 485.73,-267.35"/>
+</g>
+
+<g id="node&#45;absorb_12b" class="node n&#45;proved_scoped">
+<title>absorb_12b</title>
+<g id="a_node&#45;absorb_12b"><a xlink:title="associator(add(X,Y),Y,Z) = associator(X,Y,Z) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M443.16,-260.16C443.16,-260.16 387,-260.16 387,-260.16 381,-260.16 375,-254.16 375,-248.16 375,-248.16 375,-233.58 375,-233.58 375,-227.58 381,-221.58 387,-221.58 387,-221.58 443.16,-221.58 443.16,-221.58 449.16,-221.58 455.16,-227.58 455.16,-233.58 455.16,-233.58 455.16,-248.16 455.16,-248.16 455.16,-254.16 449.16,-260.16 443.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="415.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">absorb_12b</text>
+<text xml:space="preserve" text-anchor="middle" x="415.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 2p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__absorb_12b" class="edge e&#45;proved_scoped">
+<title>assoc_xxy&#45;&gt;absorb_12b</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M408.07,-372.33C409.08,-353.38 410.68,-323.23 412.08,-297.16 412.58,-287.81 413.14,-277.56 413.63,-268.46"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="415.73,-268.57 413.96,-262.47 411.53,-268.35 415.73,-268.57"/>
+</g>
+
+<g id="node&#45;right_moufang_a" class="node n&#45;failed">
+<title>right_moufang_a</title>
+<g id="a_node&#45;right_moufang_a"><a xlink:title="associator(X,multiply(X,Y),Z) = multiply(associator(X,Y,Z),X) &#160;— &#160;attempted, unproven">
+<path fill="#f7e2df" stroke="#b03a30" stroke-width="1.4" d="M600.16,-184.58C600.16,-184.58 514,-184.58 514,-184.58 508,-184.58 502,-178.58 502,-172.58 502,-172.58 502,-158 502,-158 502,-152 508,-146 514,-146 514,-146 600.16,-146 600.16,-146 606.16,-146 612.16,-152 612.16,-158 612.16,-158 612.16,-172.58 612.16,-172.58 612.16,-178.58 606.16,-184.58 600.16,-184.58"/>
+<text xml:space="preserve" text-anchor="middle" x="557.08" y="-170.04" font-family="monospace" font-size="10.00" fill="#5a1a15">right_moufang_a</text>
+<text xml:space="preserve" text-anchor="middle" x="557.08" y="-155.79" font-family="monospace" font-size="10.00" fill="#5a1a15">&gt;60s</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__right_moufang_a" class="edge e&#45;failed">
+<title>assoc_xxy&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M369.67,-374.73C353.82,-365.71 336.97,-352.82 328.08,-335.74 304.65,-290.74 296.69,-261.45 328.08,-221.58 348.44,-195.72 433.72,-180.52 494.24,-172.8"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="494.15,-174.93 499.84,-172.1 493.63,-170.76 494.15,-174.93"/>
+</g>
+
+<g id="node&#45;left_moufang_a" class="node n&#45;failed">
+<title>left_moufang_a</title>
+<g id="a_node&#45;left_moufang_a"><a xlink:title="associator(X,multiply(Y,X),Z) = multiply(X,associator(X,Y,Z)) &#160;— &#160;attempted, unproven">
+<path fill="#f7e2df" stroke="#b03a30" stroke-width="1.4" d="M724.16,-184.58C724.16,-184.58 644,-184.58 644,-184.58 638,-184.58 632,-178.58 632,-172.58 632,-172.58 632,-158 632,-158 632,-152 638,-146 644,-146 644,-146 724.16,-146 724.16,-146 730.16,-146 736.16,-152 736.16,-158 736.16,-158 736.16,-172.58 736.16,-172.58 736.16,-178.58 730.16,-184.58 724.16,-184.58"/>
+<text xml:space="preserve" text-anchor="middle" x="684.08" y="-170.04" font-family="monospace" font-size="10.00" fill="#5a1a15">left_moufang_a</text>
+<text xml:space="preserve" text-anchor="middle" x="684.08" y="-155.79" font-family="monospace" font-size="10.00" fill="#5a1a15">&gt;60s</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xxy__left_moufang_a" class="edge e&#45;failed">
+<title>assoc_xxy&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M393,-372.27C369.21,-338.12 327.17,-265.33 365.08,-221.58 402.86,-177.97 565.71,-196.89 622.08,-184.58 622.75,-184.43 623.43,-184.28 624.1,-184.13"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="624.48,-186.2 629.83,-182.76 623.51,-182.11 624.48,-186.2"/>
+</g>
+
+<g id="node&#45;assoc_xyy" class="node n&#45;proved">
+<title>assoc_xyy</title>
+<g id="a_node&#45;assoc_xyy"><a xlink:title="associator(X,Y,Y) = additive_identity &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M1128.16,-411.32C1128.16,-411.32 1078,-411.32 1078,-411.32 1072,-411.32 1066,-405.32 1066,-399.32 1066,-399.32 1066,-384.74 1066,-384.74 1066,-378.74 1072,-372.74 1078,-372.74 1078,-372.74 1128.16,-372.74 1128.16,-372.74 1134.16,-372.74 1140.16,-378.74 1140.16,-384.74 1140.16,-384.74 1140.16,-399.32 1140.16,-399.32 1140.16,-405.32 1134.16,-411.32 1128.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="1103.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">assoc_xyy</text>
+<text xml:space="preserve" text-anchor="middle" x="1103.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyy__assoc_xyx" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;assoc_xyx</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1065.46,-387.84C924.98,-375.95 431.4,-334.16 279.14,-321.27"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="279.54,-319.19 273.39,-320.78 279.19,-323.38 279.54,-319.19"/>
+</g>
+
+<g id="node&#45;lin_right_inst" class="node n&#45;proved_scoped">
+<title>lin_right_inst</title>
+<g id="a_node&#45;lin_right_inst"><a xlink:title="associator(X,add(Y,Z),add(Y,Z)) = additive_identity &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M1049.16,-335.74C1049.16,-335.74 969,-335.74 969,-335.74 963,-335.74 957,-329.74 957,-323.74 957,-323.74 957,-309.16 957,-309.16 957,-303.16 963,-297.16 969,-297.16 969,-297.16 1049.16,-297.16 1049.16,-297.16 1055.16,-297.16 1061.16,-303.16 1061.16,-309.16 1061.16,-309.16 1061.16,-323.74 1061.16,-323.74 1061.16,-329.74 1055.16,-335.74 1049.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="1009.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">lin_right_inst</text>
+<text xml:space="preserve" text-anchor="middle" x="1009.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyy__lin_right_inst" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;lin_right_inst</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1078.87,-372.08C1066.7,-362.55 1051.84,-350.92 1038.96,-340.84"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1040.54,-339.41 1034.52,-337.36 1037.95,-342.71 1040.54,-339.41"/>
+</g>
+
+<g id="edge&#45;assoc_xyy__alt12_additive" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;alt12_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1065.54,-383.17C1024.08,-373.95 955.7,-357.18 899.08,-335.74 862.91,-322.04 857.19,-311.01 821.08,-297.16 764.19,-275.34 747.63,-277 689.08,-260.16 688.42,-259.97 687.75,-259.78 687.09,-259.59"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="687.78,-257.6 681.43,-257.95 686.61,-261.63 687.78,-257.6"/>
+</g>
+
+<g id="edge&#45;assoc_xyy__alt23_additive" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;alt23_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1065.58,-382.97C1032.52,-374.68 984.01,-359.59 947.08,-335.74 918.25,-317.12 891.93,-287.52 875.3,-266.54"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="877.04,-265.35 871.69,-261.91 873.72,-267.94 877.04,-265.35"/>
+</g>
+
+<g id="node&#45;absorb_23a" class="node n&#45;proved_scoped">
+<title>absorb_23a</title>
+<g id="a_node&#45;absorb_23a"><a xlink:title="associator(X,Y,add(Y,Z)) = associator(X,Y,Z) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M1139.16,-260.16C1139.16,-260.16 1083,-260.16 1083,-260.16 1077,-260.16 1071,-254.16 1071,-248.16 1071,-248.16 1071,-233.58 1071,-233.58 1071,-227.58 1077,-221.58 1083,-221.58 1083,-221.58 1139.16,-221.58 1139.16,-221.58 1145.16,-221.58 1151.16,-227.58 1151.16,-233.58 1151.16,-233.58 1151.16,-248.16 1151.16,-248.16 1151.16,-254.16 1145.16,-260.16 1139.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="1111.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">absorb_23a</text>
+<text xml:space="preserve" text-anchor="middle" x="1111.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 2p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyy__absorb_23a" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;absorb_23a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1140.51,-372.73C1154.67,-363.71 1169.25,-351.37 1177.08,-335.74 1184.76,-320.41 1184.33,-312.7 1177.08,-297.16 1171.21,-284.59 1160.92,-273.87 1150.19,-265.3"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1151.59,-263.72 1145.54,-261.78 1149.05,-267.07 1151.59,-263.72"/>
+</g>
+
+<g id="node&#45;absorb_23b" class="node n&#45;proved_scoped">
+<title>absorb_23b</title>
+<g id="a_node&#45;absorb_23b"><a xlink:title="associator(X,Y,add(Z,Y)) = associator(X,Y,Z) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M1239.16,-260.16C1239.16,-260.16 1183,-260.16 1183,-260.16 1177,-260.16 1171,-254.16 1171,-248.16 1171,-248.16 1171,-233.58 1171,-233.58 1171,-227.58 1177,-221.58 1183,-221.58 1183,-221.58 1239.16,-221.58 1239.16,-221.58 1245.16,-221.58 1251.16,-227.58 1251.16,-233.58 1251.16,-233.58 1251.16,-248.16 1251.16,-248.16 1251.16,-254.16 1245.16,-260.16 1239.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="1211.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">absorb_23b</text>
+<text xml:space="preserve" text-anchor="middle" x="1211.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 2p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyy__absorb_23b" class="edge e&#45;proved_scoped">
+<title>assoc_xyy&#45;&gt;absorb_23b</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1140.85,-377.67C1160.41,-368.8 1182.89,-355.17 1196.08,-335.74 1209.5,-315.97 1212.54,-288.54 1212.65,-268.43"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1214.75,-268.49 1212.57,-262.52 1210.55,-268.54 1214.75,-268.49"/>
+</g>
+
+<g id="edge&#45;assoc_xyy__right_moufang_a" class="edge e&#45;failed">
+<title>assoc_xyy&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1140.8,-379.76C1165.38,-370.93 1196.89,-356.59 1219.08,-335.74 1258.48,-298.72 1298.19,-260.9 1261.08,-221.58 1212.27,-169.86 692.22,-196.34 622.08,-184.58 621.4,-184.47 620.71,-184.35 620.02,-184.22"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="620.5,-182.18 614.2,-183.08 619.68,-186.3 620.5,-182.18"/>
+</g>
+
+<g id="edge&#45;assoc_xyy__left_moufang_a" class="edge e&#45;failed">
+<title>assoc_xyy&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1140.67,-385.78C1191.81,-377.79 1279.14,-360.79 1298.08,-335.74 1328.67,-295.26 1332.31,-259.03 1298.08,-221.58 1261.16,-181.18 891.25,-170.04 744.05,-167.2"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="744.49,-165.1 738.45,-167.09 744.41,-169.3 744.49,-165.1"/>
+</g>
+
+<g id="node&#45;flexible" class="node n&#45;proved_scoped">
+<title>flexible</title>
+<g id="a_node&#45;flexible"><a xlink:title="multiply(multiply(X,Y),X) = multiply(X,multiply(Y,X)) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M259.16,-260.16C259.16,-260.16 209,-260.16 209,-260.16 203,-260.16 197,-254.16 197,-248.16 197,-248.16 197,-233.58 197,-233.58 197,-227.58 203,-221.58 209,-221.58 209,-221.58 259.16,-221.58 259.16,-221.58 265.16,-221.58 271.16,-227.58 271.16,-233.58 271.16,-233.58 271.16,-248.16 271.16,-248.16 271.16,-254.16 265.16,-260.16 259.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="234.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#4a2f05">flexible</text>
+<text xml:space="preserve" text-anchor="middle" x="234.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#4a2f05">0.0s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyx__flexible" class="edge e&#45;proved_scoped">
+<title>assoc_xyx&#45;&gt;flexible</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M234.08,-296.5C234.08,-287.92 234.08,-277.63 234.08,-268.3"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="236.18,-268.42 234.08,-262.42 231.98,-268.42 236.18,-268.42"/>
+</g>
+
+<g id="node&#45;right_moufang" class="node n&#45;blocked">
+<title>right_moufang</title>
+<g id="a_node&#45;right_moufang"><a xlink:title="multiply(Z,multiply(multiply(X,Y),X)) = multiply(multiply(multiply(Z,X),Y),X) &#160;— &#160;blocked — a parent is unproven">
+<path fill="#e6e9f0" stroke="#8d95a8" stroke-width="1.4" d="M172.16,-109C172.16,-109 98,-109 98,-109 92,-109 86,-103 86,-97 86,-97 86,-85 86,-85 86,-79 92,-73 98,-73 98,-73 172.16,-73 172.16,-73 178.16,-73 184.16,-79 184.16,-85 184.16,-85 184.16,-97 184.16,-97 184.16,-103 178.16,-109 172.16,-109"/>
+<text xml:space="preserve" text-anchor="middle" x="135.08" y="-88.62" font-family="monospace" font-size="10.00" fill="#4d566b">right_moufang</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyx__right_moufang" class="edge e&#45;blocked">
+<title>assoc_xyx&#45;&gt;right_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M209.52,-296.51C198.42,-286.76 186.04,-274.02 178.08,-260.16 151.51,-213.87 141.12,-151.15 137.25,-116.88"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="139.37,-117.01 136.65,-111.27 135.19,-117.46 139.37,-117.01"/>
+</g>
+
+<g id="node&#45;left_moufang" class="node n&#45;blocked">
+<title>left_moufang</title>
+<g id="a_node&#45;left_moufang"><a xlink:title="multiply(multiply(multiply(X,Y),X),Z) = multiply(X,multiply(Y,multiply(X,Z))) &#160;— &#160;blocked — a parent is unproven">
+<path fill="#e6e9f0" stroke="#8d95a8" stroke-width="1.4" d="M284.16,-109C284.16,-109 216,-109 216,-109 210,-109 204,-103 204,-97 204,-97 204,-85 204,-85 204,-79 210,-73 216,-73 216,-73 284.16,-73 284.16,-73 290.16,-73 296.16,-79 296.16,-85 296.16,-85 296.16,-97 296.16,-97 296.16,-103 290.16,-109 284.16,-109"/>
+<text xml:space="preserve" text-anchor="middle" x="250.08" y="-88.62" font-family="monospace" font-size="10.00" fill="#4d566b">left_moufang</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_xyx__left_moufang" class="edge e&#45;blocked">
+<title>assoc_xyx&#45;&gt;left_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M212.06,-296.49C202.42,-286.73 192.17,-274 187.08,-260.16 181.16,-244.07 183.23,-238.29 187.08,-221.58 196.15,-182.2 218.86,-140.91 234.39,-115.81"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="236.06,-117.09 237.48,-110.89 232.51,-114.86 236.06,-117.09"/>
+</g>
+
+<g id="edge&#45;flexible__right_moufang_a" class="edge e&#45;failed">
+<title>flexible&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M271.66,-225.97C276.48,-224.39 281.38,-222.88 286.08,-221.58 356.51,-202.11 438.96,-186.25 494.26,-176.59"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="494.34,-178.71 499.9,-175.61 493.63,-174.57 494.34,-178.71"/>
+</g>
+
+<g id="edge&#45;flexible__left_moufang_a" class="edge e&#45;failed">
+<title>flexible&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M271.49,-232C288.68,-228.53 309.37,-224.57 328.08,-221.58 458.12,-200.77 493.17,-211.52 622.08,-184.58 622.75,-184.44 623.43,-184.3 624.11,-184.15"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="624.47,-186.22 629.84,-182.82 623.52,-182.13 624.47,-186.22"/>
+</g>
+
+<g id="edge&#45;flexible__right_moufang" class="edge e&#45;blocked">
+<title>flexible&#45;&gt;right_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M221.54,-221.14C203.64,-194.41 170.77,-145.31 151.12,-115.96"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="152.91,-114.86 147.83,-111.04 149.42,-117.19 152.91,-114.86"/>
+</g>
+
+<g id="edge&#45;flexible__left_moufang" class="edge e&#45;blocked">
+<title>flexible&#45;&gt;left_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M236.11,-221.14C238.96,-194.75 244.18,-146.54 247.37,-117.08"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="249.43,-117.5 247.99,-111.31 245.26,-117.05 249.43,-117.5"/>
+</g>
+
+<g id="node&#45;middle_moufang" class="node n&#45;blocked">
+<title>middle_moufang</title>
+<g id="a_node&#45;middle_moufang"><a xlink:title="multiply(multiply(X,Y),multiply(Z,X)) = multiply(X,multiply(multiply(Y,Z),X)) &#160;— &#160;blocked — a parent is unproven">
+<path fill="#e6e9f0" stroke="#8d95a8" stroke-width="1.4" d="M290.16,-36C290.16,-36 210,-36 210,-36 204,-36 198,-30 198,-24 198,-24 198,-12 198,-12 198,-6 204,0 210,0 210,0 290.16,0 290.16,0 296.16,0 302.16,-6 302.16,-12 302.16,-12 302.16,-24 302.16,-24 302.16,-30 296.16,-36 290.16,-36"/>
+<text xml:space="preserve" text-anchor="middle" x="250.08" y="-15.62" font-family="monospace" font-size="10.00" fill="#4d566b">middle_moufang</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;flexible__middle_moufang" class="edge e&#45;blocked">
+<title>flexible&#45;&gt;middle_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M248.36,-221.22C265.96,-196.94 294.92,-152.45 306.08,-109 310.06,-93.5 312.34,-87.73 306.08,-73 300.91,-60.84 291.52,-50.09 281.89,-41.45"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="283.41,-39.99 277.48,-37.69 280.68,-43.18 283.41,-39.99"/>
+</g>
+
+<g id="node&#45;assoc_def_add" class="node n&#45;proved">
+<title>assoc_def_add</title>
+<g id="a_node&#45;assoc_def_add"><a xlink:title="add(associator(X,Y,Z),multiply(X,multiply(Y,Z))) = multiply(multiply(X,Y),Z) &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M805.16,-411.32C805.16,-411.32 731,-411.32 731,-411.32 725,-411.32 719,-405.32 719,-399.32 719,-399.32 719,-384.74 719,-384.74 719,-378.74 725,-372.74 731,-372.74 731,-372.74 805.16,-372.74 805.16,-372.74 811.16,-372.74 817.16,-378.74 817.16,-384.74 817.16,-384.74 817.16,-399.32 817.16,-399.32 817.16,-405.32 811.16,-411.32 805.16,-411.32"/>
+<text xml:space="preserve" text-anchor="middle" x="768.08" y="-396.78" font-family="monospace" font-size="10.00" fill="#0b3d2a">assoc_def_add</text>
+<text xml:space="preserve" text-anchor="middle" x="768.08" y="-382.53" font-family="monospace" font-size="10.00" fill="#0b3d2a">0.0s</text>
+</a>
+</g>
+</g>
+
+<g id="node&#45;assoc_add_1" class="node n&#45;proved_scoped">
+<title>assoc_add_1</title>
+<g id="a_node&#45;assoc_add_1"><a xlink:title="associator(add(X,Y),Z,W) = add(associator(X,Z,W),associator(Y,Z,W)) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M575.16,-335.74C575.16,-335.74 513,-335.74 513,-335.74 507,-335.74 501,-329.74 501,-323.74 501,-323.74 501,-309.16 501,-309.16 501,-303.16 507,-297.16 513,-297.16 513,-297.16 575.16,-297.16 575.16,-297.16 581.16,-297.16 587.16,-303.16 587.16,-309.16 587.16,-309.16 587.16,-323.74 587.16,-323.74 587.16,-329.74 581.16,-335.74 575.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="544.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">assoc_add_1</text>
+<text xml:space="preserve" text-anchor="middle" x="544.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">1.9s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_def_add__assoc_add_1" class="edge e&#45;proved_scoped">
+<title>assoc_def_add&#45;&gt;assoc_add_1</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M718.61,-375.32C684.42,-364.39 637.92,-349.39 597.08,-335.74 596.32,-335.49 595.55,-335.23 594.78,-334.97"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="595.66,-333.05 589.31,-333.12 594.32,-337.03 595.66,-333.05"/>
+</g>
+
+<g id="node&#45;assoc_add_2" class="node n&#45;proved_scoped">
+<title>assoc_add_2</title>
+<g id="a_node&#45;assoc_add_2"><a xlink:title="associator(X,add(Y,Z),W) = add(associator(X,Y,W),associator(X,Z,W)) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M799.16,-335.74C799.16,-335.74 737,-335.74 737,-335.74 731,-335.74 725,-329.74 725,-323.74 725,-323.74 725,-309.16 725,-309.16 725,-303.16 731,-297.16 737,-297.16 737,-297.16 799.16,-297.16 799.16,-297.16 805.16,-297.16 811.16,-303.16 811.16,-309.16 811.16,-309.16 811.16,-323.74 811.16,-323.74 811.16,-329.74 805.16,-335.74 799.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="768.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">assoc_add_2</text>
+<text xml:space="preserve" text-anchor="middle" x="768.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">0.6s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_def_add__assoc_add_2" class="edge e&#45;proved_scoped">
+<title>assoc_def_add&#45;&gt;assoc_add_2</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M768.08,-372.08C768.08,-363.5 768.08,-353.21 768.08,-343.88"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="770.18,-344 768.08,-338 765.98,-344 770.18,-344"/>
+</g>
+
+<g id="node&#45;assoc_add_3" class="node n&#45;proved_scoped">
+<title>assoc_add_3</title>
+<g id="a_node&#45;assoc_add_3"><a xlink:title="associator(X,Y,add(Z,W)) = add(associator(X,Y,Z),associator(X,Y,W)) &#160;— &#160;proved with its parents supplied">
+<path fill="#f6ebd8" stroke="#9a6206" stroke-width="1.4" d="M1155.16,-335.74C1155.16,-335.74 1093,-335.74 1093,-335.74 1087,-335.74 1081,-329.74 1081,-323.74 1081,-323.74 1081,-309.16 1081,-309.16 1081,-303.16 1087,-297.16 1093,-297.16 1093,-297.16 1155.16,-297.16 1155.16,-297.16 1161.16,-297.16 1167.16,-303.16 1167.16,-309.16 1167.16,-309.16 1167.16,-323.74 1167.16,-323.74 1167.16,-329.74 1161.16,-335.74 1155.16,-335.74"/>
+<text xml:space="preserve" text-anchor="middle" x="1124.08" y="-321.2" font-family="monospace" font-size="10.00" fill="#4a2f05">assoc_add_3</text>
+<text xml:space="preserve" text-anchor="middle" x="1124.08" y="-306.95" font-family="monospace" font-size="10.00" fill="#4a2f05">0.6s · 1p</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;assoc_def_add__assoc_add_3" class="edge e&#45;proved_scoped">
+<title>assoc_def_add&#45;&gt;assoc_add_3</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M817.65,-384.35C878.08,-375.66 983.02,-358.83 1071.08,-335.74 1071.86,-335.54 1072.64,-335.33 1073.42,-335.11"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1073.79,-337.19 1078.97,-333.51 1072.62,-333.16 1073.79,-337.19"/>
+</g>
+
+<g id="edge&#45;assoc_add_1__alt12_additive" class="edge e&#45;proved_scoped">
+<title>assoc_add_1&#45;&gt;alt12_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M565.45,-296.5C576.01,-287.15 588.85,-275.76 600.08,-265.81"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="601.44,-267.41 604.53,-261.86 598.65,-264.27 601.44,-267.41"/>
+</g>
+
+<g id="edge&#45;assoc_add_1__absorb_12b" class="edge e&#45;proved_scoped">
+<title>assoc_add_1&#45;&gt;absorb_12b</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M510.86,-296.5C493.71,-286.72 472.66,-274.71 454.67,-264.45"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="455.89,-262.73 449.63,-261.58 453.81,-266.38 455.89,-262.73"/>
+</g>
+
+<g id="edge&#45;assoc_add_2__alt12_additive" class="edge e&#45;proved_scoped">
+<title>assoc_add_2&#45;&gt;alt12_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M731.77,-296.5C712.86,-286.63 689.61,-274.5 669.83,-264.18"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="671.03,-262.44 664.74,-261.52 669.09,-266.16 671.03,-262.44"/>
+</g>
+
+<g id="edge&#45;assoc_add_2__alt23_additive" class="edge e&#45;proved_scoped">
+<title>assoc_add_2&#45;&gt;alt23_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M791,-296.5C802.42,-287.06 816.34,-275.55 828.45,-265.54"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="829.67,-267.26 832.95,-261.82 826.99,-264.02 829.67,-267.26"/>
+</g>
+
+<g id="edge&#45;assoc_add_2__absorb_12a" class="edge e&#45;proved_scoped">
+<title>assoc_add_2&#45;&gt;absorb_12a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M724.51,-300.06C721.33,-299.05 718.16,-298.07 715.08,-297.16 649.23,-277.72 630.75,-280.21 565.08,-260.16 564.31,-259.92 563.53,-259.68 562.74,-259.44"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="563.55,-257.49 557.2,-257.63 562.25,-261.49 563.55,-257.49"/>
+</g>
+
+<g id="edge&#45;assoc_add_3__alt23_additive" class="edge e&#45;proved_scoped">
+<title>assoc_add_3&#45;&gt;alt23_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1080.5,-300.1C1077.32,-299.08 1074.16,-298.09 1071.08,-297.16 1019.5,-281.62 960.14,-266.5 917.04,-256.01"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="917.68,-254 911.35,-254.63 916.69,-258.08 917.68,-254"/>
+</g>
+
+<g id="edge&#45;assoc_add_3__absorb_23a" class="edge e&#45;proved_scoped">
+<title>assoc_add_3&#45;&gt;absorb_23a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1120.73,-296.5C1119.22,-287.92 1117.4,-277.63 1115.75,-268.3"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1117.82,-267.94 1114.71,-262.39 1113.68,-268.67 1117.82,-267.94"/>
+</g>
+
+<g id="edge&#45;assoc_add_3__absorb_23b" class="edge e&#45;proved_scoped">
+<title>assoc_add_3&#45;&gt;absorb_23b</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M1146.48,-296.5C1157.65,-287.06 1171.26,-275.55 1183.1,-265.54"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="1184.25,-267.31 1187.48,-261.83 1181.54,-264.1 1184.25,-267.31"/>
+</g>
+
+<g id="edge&#45;lin_left_inst__alt12_additive" class="edge e&#45;proved_scoped">
+<title>lin_left_inst&#45;&gt;alt12_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M648.61,-296.5C645.16,-287.75 641.01,-277.21 637.28,-267.74"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="639.29,-267.12 635.13,-262.3 635.38,-268.66 639.29,-267.12"/>
+</g>
+
+<g id="edge&#45;lin_right_inst__alt23_additive" class="edge e&#45;proved_scoped">
+<title>lin_right_inst&#45;&gt;alt23_additive</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M969.94,-296.5C949.46,-286.59 924.27,-274.4 902.89,-264.04"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="903.91,-262.2 897.59,-261.48 902.08,-265.98 903.91,-262.2"/>
+</g>
+
+<g id="edge&#45;alt12_additive__right_moufang_a" class="edge e&#45;failed">
+<title>alt12_additive&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M609.05,-220.92C600.24,-211.65 589.52,-200.39 580.12,-190.5"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="581.85,-189.28 576.19,-186.38 578.81,-192.18 581.85,-189.28"/>
+</g>
+
+<g id="edge&#45;alt12_additive__left_moufang_a" class="edge e&#45;failed">
+<title>alt12_additive&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M641.76,-220.92C648.81,-211.82 657.34,-200.81 664.9,-191.05"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="666.42,-192.52 668.43,-186.49 663.1,-189.95 666.42,-192.52"/>
+</g>
+
+<g id="edge&#45;alt23_additive__right_moufang_a" class="edge e&#45;failed">
+<title>alt23_additive&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M804.39,-224.03C801.25,-223.18 798.13,-222.35 795.08,-221.58 718.87,-202.22 698.41,-203.46 622.08,-184.58 621.41,-184.41 620.73,-184.25 620.05,-184.08"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="620.63,-182.06 614.3,-182.6 619.59,-186.12 620.63,-182.06"/>
+</g>
+
+<g id="edge&#45;alt23_additive__left_moufang_a" class="edge e&#45;failed">
+<title>alt23_additive&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M812.53,-220.92C788.92,-210.88 759.81,-198.5 735.27,-188.06"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="736.36,-186.24 730.01,-185.83 734.71,-190.11 736.36,-186.24"/>
+</g>
+
+<g id="node&#45;teichmuller" class="node n&#45;proved">
+<title>teichmuller</title>
+<g id="a_node&#45;teichmuller"><a xlink:title="add(associator(multiply(X,Y),Z,W),associator(X,Y,multiply(Z,W))) = add(add(associator(X,multiply(Y,Z),W),multiply(X,associator(Y,Z,W))),multiply(associator(X,Y,Z),W)) &#160;— &#160;proved from the axioms">
+<path fill="#dcefe6" stroke="#0f7a52" stroke-width="1.4" d="M773.16,-260.16C773.16,-260.16 711,-260.16 711,-260.16 705,-260.16 699,-254.16 699,-248.16 699,-248.16 699,-233.58 699,-233.58 699,-227.58 705,-221.58 711,-221.58 711,-221.58 773.16,-221.58 773.16,-221.58 779.16,-221.58 785.16,-227.58 785.16,-233.58 785.16,-233.58 785.16,-248.16 785.16,-248.16 785.16,-254.16 779.16,-260.16 773.16,-260.16"/>
+<text xml:space="preserve" text-anchor="middle" x="742.08" y="-245.62" font-family="monospace" font-size="10.00" fill="#0b3d2a">teichmuller</text>
+<text xml:space="preserve" text-anchor="middle" x="742.08" y="-231.37" font-family="monospace" font-size="10.00" fill="#0b3d2a">3.3s</text>
+</a>
+</g>
+</g>
+
+<g id="edge&#45;teichmuller__right_moufang_a" class="edge e&#45;failed">
+<title>teichmuller&#45;&gt;right_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M698.71,-222.62C672.71,-212.28 639.43,-199.04 611.66,-188"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="612.63,-186.12 606.28,-185.86 611.08,-190.03 612.63,-186.12"/>
+</g>
+
+<g id="edge&#45;teichmuller__left_moufang_a" class="edge e&#45;failed">
+<title>teichmuller&#45;&gt;left_moufang_a</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" d="M727.14,-220.92C719.97,-211.82 711.29,-200.81 703.6,-191.05"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="705.36,-189.89 700,-186.48 702.06,-192.49 705.36,-189.89"/>
+</g>
+
+<g id="edge&#45;right_moufang_a__right_moufang" class="edge e&#45;blocked">
+<title>right_moufang_a&#45;&gt;right_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M501.32,-158.07C429.71,-149.57 301.8,-132.62 194.08,-109 193.42,-108.86 192.76,-108.71 192.09,-108.56"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="192.8,-106.57 186.48,-107.22 191.83,-110.65 192.8,-106.57"/>
+</g>
+
+<g id="edge&#45;left_moufang_a__left_moufang" class="edge e&#45;blocked">
+<title>left_moufang_a&#45;&gt;left_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M631.45,-148.21C628.29,-147.42 625.15,-146.67 622.08,-146 510.21,-121.51 376.93,-105.22 304.14,-97.4"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="304.7,-95.35 298.52,-96.8 304.26,-99.52 304.7,-95.35"/>
+</g>
+
+<g id="edge&#45;right_moufang__middle_moufang" class="edge e&#45;blocked">
+<title>right_moufang&#45;&gt;middle_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M163.51,-72.45C179.13,-62.81 198.63,-50.77 215.17,-40.55"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="216.16,-42.41 220.16,-37.47 213.96,-38.83 216.16,-42.41"/>
+</g>
+
+<g id="edge&#45;left_moufang__middle_moufang" class="edge e&#45;blocked">
+<title>left_moufang&#45;&gt;middle_moufang</title>
+<path fill="none" stroke="#9aa3b5" stroke-width="1.1" stroke-dasharray="5,2" d="M250.08,-72.45C250.08,-63.85 250.08,-53.35 250.08,-43.93"/>
+<polygon fill="#9aa3b5" stroke="#9aa3b5" stroke-width="1.1" points="252.18,-44.01 250.08,-38.01 247.98,-44.01 252.18,-44.01"/>
+</g>
+</g>
+<text x="14" y="461" font-size="11" opacity=".6" font-family="ui-monospace,Menlo,monospace">21/26 proved · proved 8 · proved_scoped 13 · failed 2 · blocked 3</text><g transform="translate(0,474)"><g class="n-proved"><polygon points="14,0 25,0 25,11 14,11" stroke-width="1.4"/></g><text x="31" y="9.5" font-size="10.5" opacity=".75" font-family="ui-monospace,Menlo,monospace">proved from the axioms (8)</text><g class="n-proved_scoped"><polygon points="196.2,0 207.2,0 207.2,11 196.2,11" stroke-width="1.4"/></g><text x="213.2" y="9.5" font-size="10.5" opacity=".75" font-family="ui-monospace,Menlo,monospace">proved with its parents supplied (13)</text><g class="n-failed"><polygon points="439.4,0 450.4,0 450.4,11 439.4,11" stroke-width="1.4"/></g><text x="456.4" y="9.5" font-size="10.5" opacity=".75" font-family="ui-monospace,Menlo,monospace">attempted, unproven (2)</text><g class="n-blocked"><polygon points="603.3,0 614.3,0 614.3,11 603.3,11" stroke-width="1.4"/></g><text x="620.3" y="9.5" font-size="10.5" opacity=".75" font-family="ui-monospace,Menlo,monospace">blocked — a parent is unproven (3)</text></g></svg>
