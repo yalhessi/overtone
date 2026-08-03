@@ -128,9 +128,12 @@ DAG = {
     "right_moufang_a": (f"{A}(X,{M}(X,Y),Z)", f"{M}({A}(X,Y,Z),X)",
                         ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
                          "right_moufang"]),
+    # Mirror of right_moufang_a, so it takes left_moufang -- not right_moufang,
+    # which is what it was first given by copying its sibling's parent list.
+    # That single wrong parent cost a 300s timeout against 1.0s.
     "left_moufang_a":  (f"{A}(X,{M}(Y,X),Z)", f"{M}(X,{A}(X,Y,Z))",
                         ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
-                         "right_moufang"]),
+                         "left_moufang"]),
     # -- tier 9: Moufang, product form -- these are the targets -----------
     # The one hard step: 192.4s from the three lemmas above, timeout without
     # them. Everything downstream is then under 90s.

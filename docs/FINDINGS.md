@@ -1040,6 +1040,69 @@ Open: `right_moufang` at 193.6s is well above the point where a node is suspect,
 so a missing node sits under it. Candidate intermediates ranked from its own
 failed search are in `logs/decompose/candidates.json`.
 
+### Ten flips in the RNG Moufang family, and where the method stops
+
+Six lemmas -- cyclicity, two associator-definition variants, the flexible law,
+right Moufang, left Moufang, all proved from RNG029-5's own axioms -- appended to
+the real TPTP problem files, 300-600s, both directions:
+
+| flip (baseline: timeout at 4000s, both directions) | rating | cpu |
+|---|---|---|
+| RNG027-7, RNG028-7 | 0.96 | 0.0s |
+| RNG028-9 | 0.91 | 0.1s |
+| RNG025-5 | 0.74 | 0.2s |
+| RNG027-8 | 0.91 | 0.6s |
+| RNG027-9 | 0.91 | 1.2s |
+| RNG028-8 | 0.96 | 1.4s |
+| RNG029-7 | 0.96 | 24.3s |
+| RNG029-6 | 0.96 | 183.9s |
+| RNG029-5 | 0.96 | 197.3s |
+
+Plus RNG027-5 at 3555.6s -> 0.0s and RNG028-5 at 3825.8s -> 0.0s. On RNG025-5
+the drafted 19-lemma library had needed 2484s; six mined lemmas take 0.2s.
+
+The RNG028 cluster initially resisted, and the cause was syntactic: it states
+left Moufang as `(x(yx))z = x(y(xz))` where our node had `((xy)x)z`, which differ
+by exactly the flexible law. Adding it flipped all five remaining problems.
+
+**Two results withdrawn.** RNG027-10 and RNG029-10 (both rating 1.00) proved in
+0.0s and 1.3s, but they are [Sma18] re-encodings whose axiom sets are *missing*
+3 and 4 of RNG029-5's axioms. Lemmas proved from the stronger theory are not
+theorems of the weaker one, so appending them adds assumptions rather than
+lemmas and the proofs establish nothing about those problems. `transfer_dag.py`
+verifies donor lemmas against the target before using them and would have caught
+this; the fixed-library script did not check containment. Any transfer must
+assert `donor_axioms <= target_axioms` or re-verify.
+
+### Cross-theory transfer fails, in three distinguishable ways
+
+`scripts/transfer_dag.py` runs the whole method as one command: pick the most
+axiom-similar solved sibling, read its proof as a citation DAG, verify that DAG
+against the *target's* axioms, supply the deepest survivors as axioms.
+
+| target | donor | sim | held | donor proof | result |
+|---|---|---|---|---|---|
+| GRP673-10 | GRP664-10 | 0.817 | 177/260 | 278 lemmas, depth 23 | Timeout 300s |
+| LAT138-1 | LAT139-1 | 0.930 | 18/20 | 20 lemmas, depth 7 | Timeout 300s |
+| COL003-1 | COL066-1 | 0.897 | 2/13 | 13 lemmas, depth 4 | Timeout 300s |
+
+Three different faults, none of them the verification machinery:
+
+- **GRP: the donor's goal is irrelevant.** Lots transfers, but the survivors stop
+  at depth 11-13 of a depth-23 proof -- everything near the donor's goal fails,
+  so ranking by depth selects precisely the useless material.
+- **LAT: the donor is too easy.** 18 of 20 lemmas transfer and none of them help;
+  a proof 20 lemmas long contains nothing a resisted problem needs.
+- **COL: the similarity metric overstates.** 2 of 13 lemmas are theorems of the
+  target's theory at a claimed 0.897.
+
+RNG succeeded because it had all three properties at once: identical axiom sets,
+a deep donor proof (234 lemmas, depth 34), and a donor whose **goal was itself a
+lemma every target needed** -- RNG027-5 proves right Moufang, which is exactly
+what the other twelve require. That is a narrow condition, and axiom similarity
+does not detect it. The measured conclusion is that `find_donor` optimises the
+wrong quantity: relatedness of *goals* is what matters, not of axioms.
+
 ### A wrong edge costs more than a missing one (teichmuller)
 
 The Teichmuller identity holds in **any** ring -- it is pure expansion of the
