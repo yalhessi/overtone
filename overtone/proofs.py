@@ -73,6 +73,26 @@ def lemmas(text: str):
     return out
 
 
+def proof_section(text: str) -> str:
+    """The human-readable proof: axioms used, lemmas, and the goal's chain.
+
+    twee prints the search trace first (one line per derived rule, tens of
+    thousands of them) and the proof only at the end, so this is the small,
+    interesting fraction -- typically well under a kilobyte where the trace is
+    megabytes. Returns "" when the run did not prove anything.
+    """
+    start = -1
+    for marker in PROOF_MARKERS:
+        start = text.find(marker)
+        if start != -1:
+            break
+    if start == -1:
+        return ""
+    end = text.find("RESULT:", start)
+    body = text[start:end if end != -1 else None]
+    return body.split("\n", 1)[-1].strip("\n")
+
+
 def chain_terms(text: str):
     """Counter of the intermediate terms of the proof's rewrite chains.
 
