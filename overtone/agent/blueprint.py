@@ -196,6 +196,17 @@ def to_svg(sketch, results=(), *, title="", subtitle=""):
     return "\n".join(p)
 
 
+def _qualified(label: str) -> bool:
+    """Does this TPTP label carry a caveat rather than a plain claim?
+
+    "~NAME" marks a statement equivalent to that problem's conjecture but not
+    identical to it; a parenthesised note marks a differing axiom set, where
+    matching the conjecture is not solving the problem. Both must survive
+    truncation.
+    """
+    return label.startswith("~") or "(" in label
+
+
 def to_dot(sketch, results=(), *, title="", annot=None):
     """Graphviz source. Colour rides on `class`, not on baked-in attributes.
 
@@ -224,7 +235,19 @@ def to_dot(sketch, results=(), *, title="", annot=None):
         tptp = (annot.get(name) or {}).get("tptp") or []
         # TPTP identity is the most useful thing on a node: it says the
         # step is a benchmark problem, not merely an internal lemma.
-        tag = ("\\n(" + ", ".join(tptp[:2]) + ")") if tptp else ""
+        #
+        # Truncating the list must never be what hides a warning. Anything
+        # qualified -- a differing axiom set, an equivalent-but-not-identical
+        # statement -- is always shown, and a silently dropped tail is counted
+        # rather than omitted.
+        shown = [t for t in tptp if _qualified(t)]
+        for t in tptp:
+            if t not in shown and len(shown) < 3:
+                shown.append(t)
+        shown.sort(key=tptp.index)
+        rest = len(tptp) - len(shown)
+        tag = ("\\n(" + ", ".join(shown)
+               + (f", +{rest} more" if rest else "") + ")") if tptp else ""
         fill, line, text = PALETTE[s["status"]][:3]
         # Both the class and the concrete colours: the class lets the injected
         # stylesheet re-theme the SVG, and the attributes mean `dot -Tpng` on
