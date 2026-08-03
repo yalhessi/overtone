@@ -996,6 +996,50 @@ Four readings:
 Direction also stops mattering once parents are supplied: every unaided success
 was `--flatten-goal` only, while parents-as-axioms proves both ways at 0.0s.
 
+### Three resisted Moufang targets, decomposed (RNG029-5, RNG028-7, RNG027-8)
+
+The primary target of the sketch line. RNG029-5 is the middle Moufang identity
+in an alternative ring, rated 0.96, and it resisted 4000s in both goal
+directions, resisted the 19-lemma drafted library, and has no donor of its own.
+
+Verified as a 29-node DAG against RNG029-5's own axioms, 1122s wall end to end:
+
+| node | parents | cpu |
+|---|---|---|
+| 26-node base sketch (sign, alternating, trilinearity, absorption) | | <= 2.7s each |
+| `assoc_cyclic` `(x,y,z) = (y,z,x)` | alt12, alt23 | 0.0s |
+| `assoc_def_246`, `assoc_def_247` | cyclic + core | 0.2s each |
+| **`right_moufang`** `((xy)z)y = x(y(zy))` | the three above | **193.6s** |
+| **`right_moufang_a`** = RNG027-8, rating 0.91 | + right_moufang | **0.5s** |
+| **`left_moufang`** = RNG028-7, rating 0.96 | + right_moufang | **35.0s** |
+| **`middle_moufang`** = RNG029-5, rating 0.96 | + right_moufang | **107.6s** |
+
+Summed CPU along the successful path is ~344s, against >8000s of failed baseline
+per target. Only `left_moufang_a` remains unproved, at 300s, including on the
+standalone retry.
+
+**No donor lemma appears anywhere in this.** A donor was used once, and only to
+*locate* the intermediates: RNG027-5's proof has 234 lemmas, its goal cites four,
+and the same four serve all three targets. Three of those four then turned out to
+be reachable from the drafted sketch in under a second. The donor's role was
+selection, not supply.
+
+**The chain length was an artifact of the starting point.** Reconstructing the
+donor's proof as a DAG -- 234 nodes, 35 layers, 548 edges, citations as edges --
+verifies 234/234 with *every node at 0.0s*, where the same proof cost 3555.6s
+from bare axioms. But 234 was never the decomposition: four lemmas were. Reading
+twee's own search order as the structure of the proof is what made the problem
+look intractable.
+
+**Scale, and where hints stop working.** Supplying all 234 mined lemmas as hints
+proves *none* of the four targets at 300s, while eight as axioms proves three of
+them. That is the sharpest form of the axioms-vs-hints result here: the hint
+channel cannot substitute for a decomposition at any quantity.
+
+Open: `right_moufang` at 193.6s is well above the point where a node is suspect,
+so a missing node sits under it. Candidate intermediates ranked from its own
+failed search are in `logs/decompose/candidates.json`.
+
 ### A wrong edge costs more than a missing one (teichmuller)
 
 The Teichmuller identity holds in **any** ring -- it is pure expansion of the

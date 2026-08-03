@@ -111,20 +111,37 @@ DAG = {
                        f"add(add({A}(X,{M}(Y,Z),W),{M}(X,{A}(Y,Z,W))),"
                        f"{M}({A}(X,Y,Z),W))",
                        []),
+    # -- tier 7b: the three lemmas the whole Moufang family actually needs --
+    # Found by asking which of a donor proof's 234 lemmas its *goal* cited: four,
+    # and the same four for all three targets. Three are cheap and reachable from
+    # this sketch; the fourth is right_moufang itself. So the donor's 34-deep
+    # chain was an artifact of starting from bare axioms, not the decomposition.
+    "assoc_cyclic":   (f"{A}(X,Y,Z)", f"{A}(Y,Z,X)",
+                       ["alt12_additive", "alt23_additive"]),
+    "assoc_def_246":  (f"add({A}(X,Y,Z),{M}(Y,{M}(Z,X)))", f"{M}({M}(Y,Z),X)",
+                       ["assoc_cyclic", "flexible", "assoc_xyx",
+                        "alt12_additive", "alt23_additive"]),
+    "assoc_def_247":  (f"add({A}(X,Y,Z),{M}({M}(Y,X),Z))", f"{M}(Y,{M}(X,Z))",
+                       ["assoc_cyclic", "flexible", "assoc_xyx",
+                        "alt12_additive", "alt23_additive"]),
     # -- tier 8: Moufang, associator form (= RNG027-8/9, RNG028-8/9) ------
     "right_moufang_a": (f"{A}(X,{M}(X,Y),Z)", f"{M}({A}(X,Y,Z),X)",
-                        ["teichmuller", "alt12_additive", "alt23_additive",
-                         "assoc_xxy", "assoc_xyy", "flexible"]),
+                        ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
+                         "right_moufang"]),
     "left_moufang_a":  (f"{A}(X,{M}(Y,X),Z)", f"{M}(X,{A}(X,Y,Z))",
-                        ["teichmuller", "alt12_additive", "alt23_additive",
-                         "assoc_xxy", "assoc_xyy", "flexible"]),
+                        ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
+                         "right_moufang"]),
     # -- tier 9: Moufang, product form -- these are the targets -----------
-    "right_moufang":  (f"{M}(Z,{M}({M}(X,Y),X))", f"{M}({M}({M}(Z,X),Y),X)",
-                       ["right_moufang_a", "flexible", "assoc_xyx"]),
+    # The one hard step: 192.4s from the three lemmas above, timeout without
+    # them. Everything downstream is then under 90s.
+    "right_moufang":  (f"{M}({M}({M}(X,Y),Z),Y)", f"{M}(X,{M}(Y,{M}(Z,Y)))",
+                       ["assoc_cyclic", "assoc_def_246", "assoc_def_247"]),
     "left_moufang":   (f"{M}({M}({M}(X,Y),X),Z)", f"{M}(X,{M}(Y,{M}(X,Z)))",
-                       ["left_moufang_a", "flexible", "assoc_xyx"]),
+                       ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
+                        "right_moufang"]),
     "middle_moufang": (f"{M}({M}(X,Y),{M}(Z,X))", f"{M}(X,{M}({M}(Y,Z),X))",
-                       ["left_moufang", "right_moufang", "flexible"]),
+                       ["assoc_cyclic", "assoc_def_246", "assoc_def_247",
+                        "right_moufang"]),
 }
 
 # Budget is a diagnostic, not a resource. A good decomposition verifies every
@@ -134,7 +151,9 @@ DAG = {
 # right, and the one that did not (assoc_add_1 at 32.9s) was missing a node.
 # So a timeout here means "revise the sketch", not "raise the budget".
 DEFAULT_BUDGET = 60
-TIER_BUDGET = {}
+TIER_BUDGET = {"right_moufang": 400, "left_moufang": 300,
+               "middle_moufang": 300, "right_moufang_a": 300,
+               "left_moufang_a": 300}
 SLOW = 30          # over this, a node is suspect even when it proves
 
 
