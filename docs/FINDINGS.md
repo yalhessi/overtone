@@ -909,6 +909,149 @@ Standing conclusion: the loop's *verification* half works cheaply and in
 parallel, and its *drafting* half has not yet produced a waypoint on a no-donor
 problem. One iteration of a design intended to take several.
 
+### The drafted library flips one problem, and the control is clean
+
+Iteration 3 of the alternative-ring library (19 drafted lemmas, verified in
+**both** goal directions -- 13/19, up from 10 single-direction) was attempted on
+10 RNG problems sharing `RNG003-0.ax`, 4000s, both directions, deterministic
+build. **RNG025-5 proved at 2484s** (`--no-flatten-goal`; 3357s the other way);
+the other nine timed out at ~4004s.
+
+That attempt changed two things against the screen baseline -- it added hints
+*and* moved from the stock to the deterministic build -- so the missing arm was
+run:
+
+| RNG025-5, deterministic build, 4000s | `--no-flatten-goal` | `--flatten-goal` |
+|---|---|---|
+| 19 drafted hints | **Unsatisfiable 2484s** | Unsatisfiable 3357s |
+| no hints | Timeout 4003.4s | Timeout 4003.9s |
+
+RNG029-5 also timed out in both directions without hints. So the flip is
+attributable to the hint library, not to the build. It is the first flip here
+from a *drafted* (non-donor) sketch.
+
+Two things keep it modest. RNG025-5 is **rated 0.74**, so roughly a quarter of
+state-of-the-art systems solve it -- this is a flip over our own baseline, not an
+ATP first. And its conjecture is one of the library's own unverified lemmas
+(`alt23_additive`), so the library mainly proved its own missing rung.
+
+### TPTP shipped an axioms-vs-hints experiment: RNG025-4 vs RNG025-5
+
+The two problems have the **same conjecture and the same axiom include**.
+RNG025-5 adds seven inline axioms, which are exactly the sign lemmas our library
+drafted (`(-x)y = -(xy)`, `x(-y) = -(xy)`, `(-x)(-y) = xy`, and four
+distributivity-with-inverse variants). Same screen, build, budget and direction:
+
+| problem | 1000s `--flatten-goal` |
+|---|---|
+| RNG025-4 (without the seven) | **Unsatisfiable 371.9s** |
+| RNG025-5 (with them as axioms) | Timeout -- and still Timeout at 4000s |
+
+Seven true, relevant lemmas added as axioms turned a 372s proof into a >4000s
+failure. The same lemmas as *hints* proved RNG025-5 in 2484s. We did not
+construct this pair.
+
+Note the field disagrees about direction: RNG025-4 is rated 0.83 and RNG025-5
+is 0.74, so for most systems the extra axioms help. The penalty looks specific to
+completion-based provers, or to this configuration.
+
+### Context scope decides the drafted rungs, and it inverts the promotion rule
+
+`alt12_additive` follows in four rewrite steps from lemmas that all verified
+(`lin_left_inst`, `assoc_add_1`, `assoc_add_2`, `assoc_xxy`, `assoc_xyy`), yet
+timed out at 300s. Standalone verification supplied none of them. Three scopes x
+two channels x two directions, 600s, deterministic build:
+
+| lemma | scope | as axioms | as hints |
+|---|---|---|---|
+| `alt12_additive` | none | 592.5s / Timeout | — |
+| | **direct parents (5)** | **0.2s / 0.0s** | Timeout / Timeout |
+| | all 13 verified | 0.1s / 0.0s | Timeout / Timeout |
+| `alt23_additive` | none | 415.4s / Timeout | — |
+| | **direct parents (5)** | **0.1s / 0.0s** | 483.1s / Timeout |
+| | all 13 verified | 0.1s / 0.1s | 194.5s / Timeout |
+
+(cells are `--flatten-goal` / `--no-flatten-goal`)
+
+Four readings:
+
+- **Supplying the direct parents as axioms is worth ~3000-4000x** (592.5s ->
+  0.2s), and converts a `--no-flatten-goal` timeout into 0.0s.
+- **The minimal parent set is sufficient.** 5 lemmas and 13 lemmas both land at
+  0.0-0.2s, so scope should follow *direct parents*, not the ancestor closure.
+- **Axioms beat hints decisively -- the opposite of MVA005-1**, where 20 lemmas
+  as axioms timed out and the same as hints proved in 173.6s. Here `alt12` never
+  proved from any hint configuration, and parents-as-hints (>600.7s) was *worse*
+  than supplying nothing (592.5s). The distinguishing variable is set size and
+  precision: **5 exact logical parents -> axioms; 20 loosely related lemmas
+  (19 supplied against a 179-lemma closure) -> hints.**
+  `agent/ladder.py`'s unconditional `promote="hints"` default was set from the
+  MVA005-1 measurement alone and is wrong for the small-precise case.
+- **Two separable causes.** `alt23` standalone needs 415.4s and `alt12` 592.5s,
+  both above the 300s verification budget used overnight. So the "6 of 19 failed"
+  result was partly under-budgeting and partly scope; the `none` control arms are
+  what separate them, and without those arms the whole effect would have been
+  misattributed to scope.
+
+Direction also stops mattering once parents are supplied: every unaided success
+was `--flatten-goal` only, while parents-as-axioms proves both ways at 0.0s.
+
+### A wrong edge costs more than a missing one (teichmuller)
+
+The Teichmuller identity holds in **any** ring -- it is pure expansion of the
+associator definition, needing only distributivity and additive associativity --
+and is TPTP RNG026 at rating 0.30-0.39. Drafted into the DAG it was given five
+parents: the three trilinearity lemmas and the two sign lemmas. It timed out at
+900s in both directions, and because verification is topological that blocked
+six downstream nodes: both associator-form Moufang identities, both product
+forms, and middle Moufang.
+
+The statement was correct (checked against RNG026). The edges were not.
+Trilinearity is adjacent in the theory and absent from the derivation.
+
+| scope | supplied | derived rules | `--flatten-goal` | `--no-flatten-goal` |
+|---|---|---|---|---|
+| **none** | 0 | **2,290** | **3.3s** | Timeout 901.1s |
+| sign lemmas | 2 | 15,821 | 358.6s | Timeout 901.4s |
+| as drafted | 5 | — | Timeout 900s | Timeout 900s |
+
+**Two true, relevant lemmas cost 109x; five cost the problem.** Same mechanism as
+everywhere else -- an axiom joins the rewrite system and forms critical pairs
+with every rule -- but this is the cleanest measurement of it we have, because
+scope is the only variable and the standalone control is in the same table.
+
+This qualifies the R1 result rather than contradicting it. Correct parents were
+worth ~3000x on `alt12_additive`; incorrect parents are worth -infinity here. The
+quantity that matters is whether the supplied lemmas lie on the derivation path,
+and *nothing in the pipeline checks that*: the prover's soundness catches a wrong
+statement, and no mechanism catches a wrong edge.
+
+Hence `agent/dag.py` now retries any failed node standalone before recording
+failure (`retry_standalone=True`). One extra run per failure is the entire cost,
+and it would have saved this branch.
+
+Note also what the DAG format buys and costs. A flat lemma list cannot record a
+wrong edge -- but it cannot record a right one either, and the right ones are
+worth 3000x. The format is load-bearing, and the drafter is now the component
+most able to break it.
+
+### Three rating-1.00 / 0.96 problems fell to the plain 4000s screen
+
+No hints, no sketch, stock build, `--no-flatten-goal`:
+
+| problem | rating | cpu |
+|---|---|---|
+| **RNG027-10** | **1.00** | 3271.1s |
+| RNG027-5 | 0.96 | 3555.6s |
+| RNG028-5 | 0.96 | 3825.8s |
+
+Rating is the fraction of state-of-the-art systems that fail at TPTP's evaluation
+limit, so 1.00 means no current system solves it under competition conditions.
+All three land in the last 20% of a 4000s budget, so the honest description is
+**budget, not capability**. It remains the strongest RNG result here -- stronger
+than the hinted RNG025-5 flip -- and it sharpens the alternative hypothesis that
+any sketch result has to beat.
+
 ### A concurrency bug that produced fake results
 
 `screen.py` originally wrote both goal directions of a problem to the same input

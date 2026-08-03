@@ -104,6 +104,36 @@ and wrong operationally.
 It also fixes a structural mistake in v0: flattening an ordered ladder into an
 unordered bag of 25 hints discards the sketch's most useful content, its order.
 
+**A ladder is still too flat: the sketch is a DAG** (`FINDINGS.md`, "Context
+scope"). An order says what comes before what; it does not say which earlier
+rungs a given rung actually *needs*, and that turns out to be the decisive
+quantity. `alt12_additive` follows in four rewrite steps from five lemmas that
+had all verified; proved standalone it timed out at 300s and needed 592.5s at a
+larger budget, and given exactly those five parents as axioms it proves in 0.2s.
+Supplying all thirteen verified lemmas is no better, so the right scope is the
+*direct parents*, not the ancestor closure.
+
+That also settles which channel to use, and the answer is not global:
+
+| the supporting set is… | channel | evidence |
+|---|---|---|
+| this goal's direct parents, a handful | **axioms** | `alt12_additive` 592.5s → 0.2s; never proved from any hint configuration |
+| a large approximate bag | **hints** | MVA005-1: 20 as axioms timed out, the same as hints proved in 173.6s |
+
+So the channel follows from whether the lemmas are known to be this goal's
+parents — a property of the sketch's *structure*, not its size. `agent/dag.py`
+implements this: `Sketch` carries the edges, `scope()` reads them, and
+`channel_for()` picks the channel from them. A sketch with no edges recorded
+(what the donor path produces) degrades exactly to the standalone ladder, which
+is the correct treatment for donor rungs — those came from a real proof and are
+reachable from the axioms by construction, which is precisely what a drafted rung
+is not.
+
+TPTP supplies an independent instance: RNG025-4 and RNG025-5 share a conjecture
+and an axiom include, and RNG025-5 adds seven true, relevant sign lemmas as
+axioms. Same screen, build, budget, direction — 371.9s becomes a timeout, and
+still times out at 4000s.
+
 **(b) Graded proximity — needs a twee change, later.** Replace binary matching
 with partial credit proportional to how much of a waypoint's structure is
 present, i.e. a potential function over distance-to-waypoint. We now have the
