@@ -41,12 +41,16 @@ class Budget:
     """
     node: int = 60
     slow: int = 30
+    # A node may still need more than `node` -- `right_moufang` takes 192.6s --
+    # and a sketch says so per node via `budgets`. That is not a licence to wait
+    # out a bad decomposition: anything over `slow` is still reported as suspect,
+    # so an oversized budget is visible rather than absorbed.
     final: int = 300
     workers: int = 8
 
 
 def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
-                binary=None, directions=DIRECTIONS):
+                budgets=None, binary=None, directions=DIRECTIONS):
     """Pipeline A: one problem, one honest cost.
 
     Four rules, each enforced here rather than by convention:
@@ -64,7 +68,8 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     v = verify(problem, sketch, outdir=outdir / "nodes", budget=budget.node,
-               directions=directions, workers=budget.workers, binary=binary)
+               budgets=budgets, directions=directions, workers=budget.workers,
+               binary=binary)
     proved = [n for n in sketch.nodes if n in v["proved"]]
     a = attempt(problem, sketch.equations(proved), outdir=outdir / "attempt",
                 budget=budget.final, binary=binary, directions=directions)
@@ -82,7 +87,8 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
 
 
 def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
-               binary=None, directions=DIRECTIONS, on_missing="skip"):
+               budgets=None, binary=None, directions=DIRECTIONS,
+               on_missing="skip"):
     """Pipeline B: a library once, a marginal cost per target.
 
     Reports **two** numbers and never adds them: what the library cost to derive,
@@ -98,7 +104,8 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     lib = verify(host, sketch, outdir=outdir / "library", budget=budget.node,
-                 directions=directions, workers=budget.workers, binary=binary)
+                 budgets=budgets, directions=directions, workers=budget.workers,
+                 binary=binary)
     proved = [n for n in sketch.nodes if n in lib["proved"]]
     eqs = sketch.equations(proved)
 

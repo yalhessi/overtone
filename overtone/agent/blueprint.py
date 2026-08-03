@@ -374,7 +374,7 @@ def _raw_dot_svg(dot_src):
 
 
 def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
-            subtitle="", annot=None):
+            subtitle="", annot=None, timeline=None):
     """A self-contained page: the graph, plus what each node means and its proof.
 
     Hovering a node lights its ancestors and descendants, which is the question
@@ -382,26 +382,58 @@ def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
     worst. Clicking opens the node's statement, its per-direction runs, and the
     proof twee actually found -- `proofs.proof_section`, so a 655 KB search
     trace arrives as the 15 KB that is worth reading.
-    """
-    st = statuses(sketch, results)
-    details, annot = details or {}, annot or {}
-    children = {n: [] for n in sketch.nodes}
-    for n, (_, _, parents) in sketch.nodes.items():
-        for p in parents:
-            children[p].append(n)
 
-    data = {}
-    for n, (lhs, rhs, parents) in sketch.nodes.items():
-        d = details.get(n, {})
-        data[n] = {"lhs": lhs, "rhs": rhs, "parents": parents,
-                   "children": sorted(children[n]), "status": st[n]["status"],
-                   "label": LABEL[st[n]["status"]], "cpu": st[n]["cpu"],
-                   "runs": d.get("runs", []), "proof": d.get("proof", ""),
-                   "goal": d.get("goal", ""),
-                   "tptp": (annot.get(n) or {}).get("tptp", []),
-                   "note": (annot.get(n) or {}).get("note", "")}
-    counts = {k: sum(1 for v in st.values() if v["status"] == k)
-              for k in STATUS_ORDER}
+    `timeline` is a list of `{label, sketch, results, note}`, oldest first, and
+    turns the page into a scrubber over a sketch's revisions. The two things
+    worth seeing about a sketch are where it ended and how it got there -- and
+    parent edits are the most valuable and least visible of those: correcting
+    one took `left_moufang_a` from a 300s timeout to 1.0s, which is a single
+    line in a diff and invisible in a picture. No timeline means a one-step
+    trajectory, so there is one code path rather than two.
+    """
+    from overtone.agent.dag import diff
+
+    details, annot = details or {}, annot or {}
+    steps = list(timeline or []) or [{"label": "current", "sketch": sketch,
+                                      "results": results, "note": ""}]
+
+    def node_data(sk, res, with_details):
+        st = statuses(sk, res)
+        kids = {n: [] for n in sk.nodes}
+        for n, (_, _, ps) in sk.nodes.items():
+            for q in ps:
+                kids[q].append(n)
+        out = {}
+        for n, (lhs, rhs, parents) in sk.nodes.items():
+            d = details.get(n, {}) if with_details else {}
+            out[n] = {"lhs": lhs, "rhs": rhs, "parents": list(parents),
+                      "children": sorted(kids[n]), "status": st[n]["status"],
+                      "label": LABEL[st[n]["status"]], "cpu": st[n]["cpu"],
+                      "runs": d.get("runs", []), "proof": d.get("proof", ""),
+                      "goal": d.get("goal", ""),
+                      "tptp": (annot.get(n) or {}).get("tptp", []),
+                      "note": (annot.get(n) or {}).get("note", "")}
+        return out, st
+
+    svgs, meta, prev = [], [], None
+    for i, step in enumerate(steps):
+        sk, res = step["sketch"], step.get("results", ())
+        nodes, st = node_data(sk, res, with_details=(i == len(steps) - 1))
+        d = (diff(prev, sk) if prev is not None
+             else {"added": [], "removed": [], "restated": [], "reparented": [],
+                   "n_edits": 0})
+        touched = sorted({*d["added"], *(x["node"] for x in d["restated"]),
+                          *(x["node"] for x in d["reparented"])})
+        svgs.append('<div class="step" data-i="%d">%s</div>'
+                    % (i, _raw_dot_svg(to_dot(sk, res, title="", annot=annot))))
+        meta.append({"label": step.get("label", "step %d" % i),
+                     "note": step.get("note", ""), "nodes": nodes, "diff": d,
+                     "touched": touched,
+                     "counts": {k: sum(1 for v in st.values() if v["status"] == k)
+                                for k in STATUS_ORDER}})
+        prev = sk
+
+    counts = meta[-1]["counts"]
     swatches = "".join(
         f'<button class="key n-{k}" data-status="{k}"><i></i>{escape(LABEL[k])}'
         f' <b>{counts[k]}</b></button>' for k in STATUS_ORDER if counts[k])
@@ -416,18 +448,32 @@ def to_html(sketch, results=(), details=None, *, title="Sketch blueprint",
         f".pill.n-{k}{{background:{v[3]};color:{v[5]};border-color:{v[4]}}}"
         for k, v in PALETTE.items()) + "}"
 
+    bar = ""
+    if len(steps) > 1:
+        chips = "".join(
+            '<button class="stepchip" data-i="{i}">{label}<span>{n} {what}</span>'
+            "</button>".format(
+                i=i, label=escape(m["label"]),
+                n=(m["diff"]["n_edits"] if i else len(m["nodes"])),
+                what=("edits" if i else "nodes"))
+            for i, m in enumerate(meta))
+        bar = ('<div class="timeline"><button class="nav" id="prev">&#8592;</button>'
+               f'<div class="chips">{chips}</div>'
+               '<button class="nav" id="next">&#8594;</button></div>')
+
     return (f"<title>{escape(title)}</title><style>{css}</style>"
             f'<div class="shell"><header><div>'
             f'<div class="eyebrow">sketch blueprint</div>'
             f"<h1>{escape(title)}</h1>"
-            f'<p class="sub">{escape(subtitle)}</p></div>'
+            f'<p class="sub" id="sub">{escape(subtitle)}</p></div>'
             f'<div class="keys">{swatches}</div></header>'
-            f'<div class="body"><div class="canvas" id="canvas">'
-            f"{_raw_dot_svg(to_dot(sketch, results, title='', annot=annot))}</div>"
+            f"{bar}"
+            f'<div class="body"><div class="canvas" id="canvas">{"".join(svgs)}</div>'
             f'<aside id="panel"><div class="empty">Hover a node to trace its '
             f"dependencies. Click one for its statement and proof.</div></aside>"
             f'</div></div><div id="tip"></div>'
-            f"<script>const D={json.dumps(data)};{_HTML_JS}</script>")
+            f"<script>const STEPS={json.dumps(meta)};"
+            f"const SUB={json.dumps(subtitle)};{_HTML_JS}</script>")
 
 
 _HTML_CSS = """
@@ -493,13 +539,46 @@ pre{margin:0;font-family:var(--mono);font-size:11.5px;line-height:1.55;
 #tip.on{opacity:1;}
 #tip b{display:block;margin-bottom:3px;}
 #tip span{color:var(--faint);}
+.timeline{display:flex;align-items:center;gap:8px;padding:9px 20px;
+  border-bottom:1px solid var(--line);background:var(--panel);}
+.chips{display:flex;gap:6px;overflow-x:auto;flex:1;}
+.stepchip{flex:none;display:flex;flex-direction:column;gap:1px;align-items:flex-start;
+  font:inherit;font-size:11.5px;color:var(--soft);background:var(--bg);
+  border:1px solid var(--line);border-radius:5px;padding:5px 10px;cursor:pointer;
+  font-family:var(--mono);white-space:nowrap;}
+.stepchip:hover{border-color:var(--accent);}
+.stepchip.on{border-color:var(--accent);color:var(--accent);}
+.stepchip span{font-size:10px;opacity:.6;}
+.nav{font:inherit;font-size:14px;color:var(--soft);background:var(--bg);
+  border:1px solid var(--line);border-radius:5px;padding:3px 9px;cursor:pointer;}
+.nav:disabled{opacity:.3;cursor:default;}
+.step{display:none;} .step.on{display:block;}
+#canvas svg g.changed>polygon{stroke-width:3.4;stroke-dasharray:5 3;}
+.diff{border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:6px;}
+.diff h5{margin:0 0 6px;font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--faint);font-weight:650;}
+.edit{display:flex;gap:8px;font-size:12px;padding:3px 0;align-items:baseline;}
+.edit i{font-style:normal;font-family:var(--mono);font-size:10px;font-weight:700;
+  padding:1px 5px;border-radius:3px;flex:none;}
+.edit code{font-size:11.5px;overflow-wrap:anywhere;}
+.edit.add i{background:#dcefe6;color:#0f7a52;}
+.edit.rm  i{background:#f7e2df;color:#b03a30;}
+.edit.re  i{background:#f6ebd8;color:#9a6206;}
+.edit.par i{background:#e2e7fb;color:#2f4fd8;}
+@media(prefers-color-scheme:dark){
+  .edit.add i{background:#0f2b20;color:#4fc38d;}
+  .edit.rm  i{background:#2e1715;color:#e8776a;}
+  .edit.re  i{background:#2e2312;color:#d9a441;}
+  .edit.par i{background:#1b2444;color:#8ea3ff;}}
 @media(max-width:860px){.body{flex-direction:column;}
   aside{width:auto;border-left:0;border-top:1px solid var(--line);max-height:52vh;}}
 """
 
 _HTML_JS = r"""
-const g=document.querySelector('#canvas svg'),panel=document.getElementById('panel'),
-      tip=document.getElementById('tip');
+let cur=STEPS.length-1, D=STEPS[cur].nodes, g=null;
+const panel=document.getElementById('panel'), tip=document.getElementById('tip');
+const EMPTY='<div class="empty">Hover a node to trace its dependencies. '
+          +'Click one for its statement and proof.</div>';
 const up=n=>{const s=new Set(),q=[n];while(q.length){const c=q.pop();
   for(const p of D[c].parents)if(!s.has(p)){s.add(p);q.push(p);}}return s;};
 const down=n=>{const s=new Set(),q=[n];while(q.length){const c=q.pop();
@@ -556,6 +635,7 @@ function show(n){
     el(t)?.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});});
 }
 
+function bindGraph(){
 g.querySelectorAll('g.node').forEach(node=>{
   const n=(node.id||'').slice(5); if(!D[n])return;
   node.addEventListener('mouseenter',e=>{
@@ -573,6 +653,7 @@ g.querySelectorAll('g.node').forEach(node=>{
     if(!selected)restore();});
   node.addEventListener('click',ev=>{ev.stopPropagation();light(n,true);show(n);});
 });
+}
 
 document.querySelectorAll('.key').forEach(k=>k.onclick=()=>{
   const s=k.dataset.status;
@@ -580,11 +661,60 @@ document.querySelectorAll('.key').forEach(k=>k.onclick=()=>{
   k.classList.toggle('off',muted.has(s));
   selected=null;restore();});
 
+function resetPanel(){panel.innerHTML=renderDiff(STEPS[cur])+EMPTY;}
 document.getElementById('canvas').addEventListener('click',()=>{
-  selected=null;panel.innerHTML=document.querySelector('.empty')?panel.innerHTML:'';
-  panel.innerHTML='<div class="empty">Hover a node to trace its dependencies. '
-    +'Click one for its statement and proof.</div>';restore();});
-addEventListener('keydown',e=>{if(e.key==='Escape'){selected=null;
-  panel.innerHTML='<div class="empty">Hover a node to trace its dependencies. '
-    +'Click one for its statement and proof.</div>';restore();}});
+  selected=null;resetPanel();restore();});
+
+// The trajectory. What a sketch ended as, and how it got there -- parent edits
+// being the most valuable and least visible kind: one of them was a 300s
+// timeout against 1.0s, which is one line of diff and nothing in a picture.
+const KINDS=[['added','add','+'],['removed','rm','\u2212'],
+             ['restated','re','~'],['reparented','par','\u21c4']];
+function renderDiff(m){
+  if(cur===0||!m.diff) return '';
+  const rows=[];
+  for(const [key,cls,mark] of KINDS) for(const e of (m.diff[key]||[])){
+    if(key==='added'||key==='removed')
+      rows.push(`<div class="edit ${cls}"><i>${mark}</i><code>${esc(e)}</code></div>`);
+    else if(key==='restated')
+      rows.push(`<div class="edit ${cls}"><i>${mark}</i><div><code>${esc(e.node)}</code>`
+        +`<br><code style="opacity:.55">${esc(e.before)}</code>`
+        +`<br><code>${esc(e.after)}</code></div></div>`);
+    else
+      rows.push(`<div class="edit ${cls}"><i>${mark}</i><div><code>${esc(e.node)}</code>`
+        +(e.gained.length?`<br>+ <code>${esc(e.gained.join(', '))}</code>`:'')
+        +(e.lost.length?`<br>\u2212 <code>${esc(e.lost.join(', '))}</code>`:'')
+        +'</div></div>');
+  }
+  if(!rows.length) rows.push('<div class="none">no structural change</div>');
+  return `<div class="diff"><h5>edits in this step</h5>${rows.join('')}</div>`;
+}
+
+function showStep(i){
+  cur=Math.max(0,Math.min(STEPS.length-1,i));
+  const m=STEPS[cur];
+  document.querySelectorAll('.step').forEach(x=>
+    x.classList.toggle('on',+x.dataset.i===cur));
+  document.querySelectorAll('.stepchip').forEach(c=>
+    c.classList.toggle('on',+c.dataset.i===cur));
+  const pv=document.getElementById('prev'), nx=document.getElementById('next');
+  if(pv) pv.disabled=cur===0;
+  if(nx) nx.disabled=cur===STEPS.length-1;
+  const sub=document.getElementById('sub');
+  if(sub&&STEPS.length>1) sub.textContent=m.note||SUB;
+  D=m.nodes; selected=null; muted=new Set();
+  g=document.querySelector('.step.on svg');
+  bindGraph();
+  for(const name of (m.touched||[])) el(name)?.classList.add('changed');
+  resetPanel();
+}
+
+document.querySelectorAll('.stepchip').forEach(c=>c.onclick=()=>showStep(+c.dataset.i));
+document.getElementById('prev')?.addEventListener('click',()=>showStep(cur-1));
+document.getElementById('next')?.addEventListener('click',()=>showStep(cur+1));
+addEventListener('keydown',e=>{
+  if(e.key==='Escape'){selected=null;resetPanel();restore();}
+  if(e.key==='ArrowLeft')showStep(cur-1);
+  if(e.key==='ArrowRight')showStep(cur+1);});
+showStep(STEPS.length-1);
 """

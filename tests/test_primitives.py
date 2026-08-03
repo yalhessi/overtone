@@ -158,3 +158,40 @@ def test_blueprint_counts_anything_it_does_drop():
              "cpu": 0.1, "result": "Unsatisfiable"}]
     dot = blueprint.to_dot(s, rows, annot=annot)
     assert "more)" in dot, "silently dropping labels is what the rule forbids"
+
+
+# --------------------------------------------------------------- sketch diff
+
+def test_diff_reports_each_kind_of_edit():
+    from overtone.agent.dag import diff
+    a = Sketch({"p": ("a", "b", []), "gone": ("c", "d", []),
+                "x": ("f(X)", "g(X)", ["p"])})
+    b = Sketch({"p": ("a", "b", []), "new": ("e", "h", []),
+                "x": ("f(X)", "k(X)", ["p", "new"])})
+    d = diff(a, b)
+    assert d["added"] == ["new"] and d["removed"] == ["gone"]
+    assert d["restated"][0]["node"] == "x"
+    assert d["reparented"][0] == {"node": "x", "gained": ["new"], "lost": []}
+    assert d["n_edits"] == 4
+
+
+def test_diff_ignores_alpha_renaming_but_not_restatement():
+    """An alpha-rename is not an edit. A genuine restatement is -- our
+    left_moufang drifted from RNG028-7's conjecture by exactly one rewrite."""
+    from overtone.agent.dag import diff
+    a = Sketch({"n": ("f(X,Y)", "g(X)", [])})
+    same = Sketch({"n": ("f(A,B)", "g(A)", [])})
+    other = Sketch({"n": ("f(X,X)", "g(X)", [])})
+    assert diff(a, same)["restated"] == []
+    assert diff(a, other)["restated"] != []
+
+
+def test_to_html_timeline_embeds_every_step():
+    from overtone.agent import blueprint
+    a = Sketch({"p": ("a", "b", [])})
+    b = Sketch({"p": ("a", "b", []), "q": ("c", "d", ["p"])})
+    html = blueprint.to_html(b, [], timeline=[
+        {"label": "one", "sketch": a, "results": (), "note": "start"},
+        {"label": "two", "sketch": b, "results": (), "note": "added q"}])
+    assert html.count('<div class="step"') == 2
+    assert 'class="stepchip"' in html and "renderDiff" in html

@@ -26,6 +26,22 @@ from overtone.agent.pipeline import Budget, run_theory
 from prove import load_sketch
 
 
+def load_budgets(path: Path):
+    """Per-node budgets a sketch declares, if it is a module that declares any.
+
+    `right_moufang` needs 192.6s against a 60s default. Dropping this silently
+    truncated the library to 24/29 and made a reproduction run look like a
+    negative result.
+    """
+    if path.suffix == ".json":
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_sketch_budgets", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, "TIER_BUDGET", None) or None
+
+
 def read_targets(spec, sketch_path):
     """Targets from a file, a comma list, or the sketch module's TARGETS."""
     if spec and Path(spec).exists():
@@ -85,7 +101,7 @@ def main():
     print(f"library: {len(sketch.nodes)} nodes on {a.host}; "
           f"{len(targets)} targets\n", flush=True)
     out = run_theory(sketch, targets, host=a.host, outdir=outdir, budget=budget,
-                     binary=binary)
+                     budgets=load_budgets(a.sketch), binary=binary)
 
     lib = out["library"]
     print(f"\n  library      {lib['n_proved']}/{lib['n_nodes']} nodes, "

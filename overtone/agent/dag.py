@@ -419,3 +419,37 @@ def sibling_diff(sketch: Sketch, results, node, *, limit=3):
                            f"need mirroring too.")
         out.append(row)
     return out
+
+
+def diff(before: Sketch, after: Sketch):
+    """What changed between two revisions of a sketch.
+
+    Four kinds of edit, which are exactly the ones that mattered when this was
+    done by hand: a node appeared, a node went, a node's *statement* changed, or
+    its parents did. The parent edits are the ones worth the most and the
+    easiest to miss -- correcting one parent took `left_moufang_a` from a 300s
+    timeout to 1.0s, and adding one node took `assoc_add_1` from 37.9s to 2.1s.
+
+    Statements compare by `terms.eq_key`, so an alpha-rename is not an edit but
+    a genuine restatement is. That distinction is the whole point: our
+    `left_moufang` was silently restated away from RNG028-7's conjecture.
+    """
+    from overtone.terms import eq_key
+
+    a, b = before.nodes, after.nodes
+    added = [n for n in b if n not in a]
+    removed = [n for n in a if n not in b]
+    restated, reparented = [], []
+    for n in b:
+        if n not in a:
+            continue
+        if eq_key(a[n][0], a[n][1]) != eq_key(b[n][0], b[n][1]):
+            restated.append({"node": n, "before": f"{a[n][0]} = {a[n][1]}",
+                             "after": f"{b[n][0]} = {b[n][1]}"})
+        old, new = set(a[n][2]), set(b[n][2])
+        if old != new:
+            reparented.append({"node": n, "gained": sorted(new - old),
+                               "lost": sorted(old - new)})
+    return {"added": added, "removed": removed, "restated": restated,
+            "reparented": reparented,
+            "n_edits": len(added) + len(removed) + len(restated) + len(reparented)}

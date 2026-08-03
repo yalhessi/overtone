@@ -12,7 +12,9 @@ live run -- unfinished nodes simply show as pending, so the picture fills in.
 import argparse
 import importlib.util
 import json
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -91,6 +93,51 @@ def load_details(sketch, outdir: Path, results):
 ANNOT = Path(__file__).resolve().parents[1] / "data" / "lists" / "tptp_nodes.json"
 
 
+def sketch_at(rev: str, path: Path) -> Sketch:
+    """The sketch as it stood at a git revision.
+
+    Until the runner emits trajectories, git *is* the trajectory: the sketch was
+    revised in commits, and those revisions are the decisions worth reviewing.
+    """
+    # git wants a repo-relative path; the CLI default is absolute.
+    rel = Path(path).resolve().relative_to(config.ROOT)
+    src = subprocess.run(["git", "show", f"{rev}:{rel}"], capture_output=True,
+                         text=True, check=True).stdout
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False) as fh:
+        fh.write(src)
+        tmp = Path(fh.name)
+    try:
+        return load_sketch(tmp)
+    finally:
+        tmp.unlink()
+
+
+def git_timeline(path: Path, results):
+    """One step per commit that touched the sketch, oldest first.
+
+    Only the final step gets results and proof detail: earlier revisions were
+    never run in the form they had, and colouring them with today's outcomes
+    would be a lie about what was known at the time.
+    """
+    revs = subprocess.run(
+        ["git", "log", "--format=%h\t%s", "--follow", "--", str(path)],
+        capture_output=True, text=True, check=True).stdout.strip().splitlines()
+    steps = []
+    for line in reversed(revs):
+        rev, _, subject = line.partition("\t")
+        try:
+            steps.append({"label": rev, "sketch": sketch_at(rev, path),
+                          "results": (), "note": subject})
+        except Exception as e:
+            # Say so rather than swallowing it. A silently empty timeline looks
+            # exactly like a sketch that was never revised.
+            print(f"  skipping {rev}: {type(e).__name__}: {e}", flush=True)
+    if steps:
+        steps[-1] = {"label": "current", "sketch": load_sketch(path),
+                     "results": results, "note": "working tree"}
+    return steps
+
+
 def load_annot(path: Path):
     """Which nodes are TPTP problems in their own right, with ratings.
 
@@ -121,6 +168,9 @@ def main():
                     const=config.ROOT / "docs" / "img" / "rng_dag.html",
                     help="also write an interactive page: hover traces "
                          "dependencies, click opens the statement and proof")
+    ap.add_argument("--timeline", action="store_true",
+                    help="scrub through the sketch's git revisions, with the "
+                         "edits between them")
     ap.add_argument("--watch", type=int, metavar="SECONDS", nargs="?", const=60,
                     help="redraw every SECONDS while a run is in flight")
     a = ap.parse_args()
@@ -141,9 +191,10 @@ def main():
         if a.html:
             details = load_details(sketch, a.results.parent, results)
             a.html.parent.mkdir(parents=True, exist_ok=True)
+            tl = git_timeline(a.sketch, results) if a.timeline else None
             a.html.write_text(blueprint.to_html(sketch, results, details,
                                                 title=a.title, subtitle=sub,
-                                                annot=annot))
+                                                annot=annot, timeline=tl))
             print(f"{a.html}", flush=True)
         if not a.watch or done == len(sketch.nodes):
             return

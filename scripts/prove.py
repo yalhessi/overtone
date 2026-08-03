@@ -39,6 +39,22 @@ def load_sketch(path: Path) -> Sketch:
     sys.exit(f"{path} defines neither SKETCH nor DAG")
 
 
+def load_budgets(path: Path):
+    """Per-node budgets a sketch declares, if it is a module that declares any.
+
+    `right_moufang` needs 192.6s against a 60s default. Dropping this silently
+    truncated the library to 24/29 and made a reproduction run look like a
+    negative result.
+    """
+    if path.suffix == ".json":
+        return None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_sketch_budgets", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, "TIER_BUDGET", None) or None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -64,7 +80,7 @@ def main():
     print(f"{a.problem}: {len(sketch.nodes)} nodes, node budget {budget.node}s, "
           f"final {budget.final}s", flush=True)
     out = run_problem(a.problem, sketch, outdir=outdir, budget=budget,
-                      binary=binary)
+                      budgets=load_budgets(a.sketch), binary=binary)
 
     print(f"\n  nodes proved   {out['n_proved']}/{out['n_nodes']}")
     for n in out["missing"]:
