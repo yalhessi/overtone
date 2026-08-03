@@ -18,8 +18,13 @@ LOGS = Path(os.environ.get("LOG_DIR") or (ROOT / "logs"))
 RUNS = ROOT / "runs"
 LISTS = DATA / "lists"
 
-# The instrumented binary, when built, lands under this tree.
+# Locally built binaries land under these trees. The deterministic build
+# reschedules twee's maintenance on a step counter instead of CPU time, which
+# makes runs reproducible (cv 47.9% -> 0.4% on MVA006-1) and happens to be
+# faster; every experiment here uses it, and four scripts had each grown their
+# own copy of this discovery.
 _INSTRUMENTED_GLOB = "build/twee-instrumented/dist-newstyle/**/twee"
+_DETERMINISTIC_GLOB = "build/twee-deterministic/dist-newstyle/**/twee"
 
 
 def env(name: str, default: str | None = None) -> str:
@@ -56,25 +61,37 @@ def tptp_root() -> Path:
     return p
 
 
-def twee_path(instrumented: bool = False) -> str:
+def _newest_binary(glob: str, what: str, script: str) -> str:
+    # The glob also matches intermediate directories named `twee`, so filter to
+    # executable files and take the most recently built.
+    hits = [p for p in ROOT.glob(glob) if p.is_file() and os.access(p, os.X_OK)]
+    if not hits:
+        raise RuntimeError(f"no {what} twee; run {script}")
+    return str(max(hits, key=lambda p: p.stat().st_mtime))
+
+
+def twee_path(instrumented: bool = False, deterministic: bool = False) -> str:
     """Path to a twee binary.
 
     The instrumented build counts hint firings and is therefore slower; it is a
     separate binary so that stock twee stays authoritative for every timing.
-    `build_instrumented_twee.sh` writes TWEE_INSTRUMENTED_PATH into .env, but we
-    also discover the build tree so a fresh checkout works without editing .env.
+    The deterministic build reschedules maintenance on a step counter, which is
+    what makes repeated runs comparable, and is what the sketch pipelines use.
+    Both write a path into .env when built, but we also discover the build tree
+    so a fresh checkout works without editing .env.
     """
+    if instrumented and deterministic:
+        raise ValueError("pick one build")
+    if deterministic:
+        try:
+            return env("TWEE_DETERMINISTIC_PATH")
+        except RuntimeError:
+            return _newest_binary(_DETERMINISTIC_GLOB, "deterministic",
+                                  "the deterministic build step in bootstrap.sh")
     if not instrumented:
         return env("TWEE_PATH")
     try:
         return env("TWEE_INSTRUMENTED_PATH")
     except RuntimeError:
-        # The glob also matches intermediate directories named `twee`, so filter
-        # to executable files and take the most recently built.
-        hits = [p for p in ROOT.glob(_INSTRUMENTED_GLOB)
-                if p.is_file() and os.access(p, os.X_OK)]
-        if not hits:
-            raise RuntimeError(
-                "no instrumented twee; run ./scripts/build_instrumented_twee.sh"
-            ) from None
-        return str(max(hits, key=lambda p: p.stat().st_mtime))
+        return _newest_binary(_INSTRUMENTED_GLOB, "instrumented",
+                              "./scripts/build_instrumented_twee.sh")

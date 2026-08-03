@@ -123,6 +123,21 @@ class Sketch:
     def equations(self, names):
         return [(self.nodes[n][0], self.nodes[n][1]) for n in names]
 
+    def to_json(self):
+        """`{name: {lhs, rhs, parents}}` -- JSON-safe, order preserved.
+
+        A sketch used to exist only as a Python literal in a script. The runner
+        revises one across iterations and has to persist it in between, and a
+        trajectory records the sketch at every step.
+        """
+        return {n: {"lhs": l, "rhs": r, "parents": list(p)}
+                for n, (l, r, p) in self.nodes.items()}
+
+    @classmethod
+    def from_json(cls, obj):
+        return cls({n: (v["lhs"], v["rhs"], list(v.get("parents", [])))
+                    for n, v in obj.items()})
+
 
 def channel_for(names, sketch, node, override=None):
     """"axioms" or "hints" for this set of supporting lemmas.
@@ -164,9 +179,12 @@ def _job(a):
     # assoc_add_1 -- was read off exactly this kind of listing.
     suffix = "out" if r.proved else "fail.out"
     (Path(outdir) / f"{tag}.{suffix}").write_text(r.output)
+    # Full precision, not 1 dp: these rows are summed over hundreds of runs to
+    # report what a problem cost, and rounding first accumulates error. Readers
+    # that display a time format it themselves.
     return {"node": node, "direction": direction, "channel": channel,
             "n_support": len(eqs), "result": r.status, "proved": r.proved,
-            "cpu": round(r.cpu, 1)}
+            "cpu": r.cpu, "wall": r.wall}
 
 
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
@@ -284,11 +302,7 @@ def mined_parents(sketch, node, proof_text, *, include_self=False):
     not name, i.e. candidate new nodes.
     """
     from overtone import proofs
-    from overtone.terms import alpha_key
-
-    def key(lhs, rhs):
-        a, b = alpha_key(lhs), alpha_key(rhs)
-        return tuple(sorted((a, b)))
+    from overtone.terms import eq_key as key
 
     known = {}
     for name, (lhs, rhs, _) in sketch.nodes.items():
@@ -303,3 +317,105 @@ def mined_parents(sketch, node, proof_text, *, include_self=False):
         elif not hit:
             unmatched.append((n, lhs, rhs))
     return edges, unmatched
+
+
+def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
+            directions=DIRECTIONS, workers=2, label="final"):
+    """Run the problem's own file with `equations` appended as axioms.
+
+    The final phase `verify` lacks. It was written twice -- in
+    `scripts/transfer_dag._final` and in `ladder.run_ladder` -- and both did the
+    same thing: take what has been proved and attack the real conjecture with it.
+
+    The problem file is not modified. `runner.write_problem` copies it and adds
+    the equations, so what is proved is the problem as TPTP states it, not a
+    restatement of it.
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    jobs = [(problem, direc, tuple(equations), budget, str(outdir), binary, label)
+            for direc in directions]
+    with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
+        return list(pool.map(_attempt_job, jobs))
+
+
+def _attempt_job(a):
+    problem, direction, eqs, budget, outdir, binary, label = a
+    tag = f"{label}.{direction[2:]}"
+    path = runner.write_problem(problem, Path(outdir) / f"{tag}.p",
+                                extra_axioms=list(eqs), axiom_prefix="lemma")
+    r = runner.run(path, [*BASE_FLAGS, direction], budget, problem=problem,
+                   binary=binary)
+    suffix = "out" if r.proved else "fail.out"
+    (Path(outdir) / f"{tag}.{suffix}").write_text(r.output)
+    return {"node": label, "direction": direction, "channel": "axioms",
+            "n_support": len(eqs), "result": r.status, "proved": r.proved,
+            "cpu": r.cpu, "wall": r.wall}
+
+
+def cost(*row_lists):
+    """Total prover time across any number of result lists, failures included.
+
+    The number a per-problem pipeline reports. Everything spent counts: failed
+    nodes, standalone retries, both goal directions, and the final attempts --
+    not just the runs that happened to succeed.
+    """
+    rows = [r for rl in row_lists for r in (rl or ())]
+    return {"cpu": round(sum(r.get("cpu") or 0.0 for r in rows), 1),
+            "wall": round(sum(r.get("wall") or 0.0 for r in rows), 1),
+            "n_runs": len(rows),
+            "n_failed": sum(1 for r in rows if not r.get("proved"))}
+
+
+def sibling_diff(sketch: Sketch, results, node, *, limit=3):
+    """Nodes of similar shape that proved, and how their parents differ.
+
+    Every wrong-edge fault found by hand this session was found this way, by
+    comparing a failing node against one of the same shape that worked.
+    `left_moufang_a` had been given `right_moufang` -- its mirror's parent --
+    where it needed `left_moufang`, and that one substitution was a 300s timeout
+    against 1.0s.
+
+    Similarity is symbol-profile overlap on the statement, which is crude and
+    sufficient: mirrored statements share a symbol profile exactly.
+    """
+    from overtone.terms import safe_term, symbols
+
+    def profile(name):
+        lhs, rhs, _ = sketch.nodes[name]
+        out = set()
+        for side in (lhs, rhs):
+            t = safe_term(side)
+            if t is not None:
+                symbols(t, out)
+        return out
+
+    proved = {r["node"] for r in results if r.get("proved")}
+    mine, parents = profile(node), set(sketch.nodes[node][2])
+    if not mine:
+        return []
+    scored = []
+    for other in sketch.nodes:
+        if other == node or other not in proved:
+            continue
+        theirs = profile(other)
+        j = len(mine & theirs) / len(mine | theirs) if theirs else 0.0
+        if j <= 0.5:
+            continue
+        op = set(sketch.nodes[other][2])
+        scored.append((round(j, 3), other, sorted(op - parents), sorted(parents - op)))
+    scored.sort(key=lambda x: -x[0])
+    out = []
+    for j, n, add, rem in scored[:limit]:
+        row = {"node": n, "similarity": j, "they_have_you_lack": add,
+               "you_have_they_lack": rem}
+        # An empty diff against a same-shape sibling is the loudest signal there
+        # is, and the easiest to read past. It means the parents were copied from
+        # that sibling rather than mirrored -- which is exactly what happened to
+        # left_moufang_a, handed right_moufang where it needed left_moufang.
+        if j >= 0.95 and not add and not rem:
+            row["note"] = (f"identical parents to {n}, which has the same shape "
+                           f"and proved. Parents copied from a mirror usually "
+                           f"need mirroring too.")
+        out.append(row)
+    return out

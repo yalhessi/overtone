@@ -8,7 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from overtone import config
-from overtone.terms import alpha, safe_term, subtrees, symbols
+from overtone.terms import alpha, eq_key, safe_term, subtrees, symbols
 
 SPC_UEQ = re.compile(r"^%\s*SPC\s*:\s*CNF_(UNS|SAT|UNK|OPN)_\w*_UEQ\s*$")
 RATING = re.compile(r"^%\s*Rating\s*:\s*([0-9.]+)")
@@ -93,6 +93,34 @@ def problem_symbols(path: Path) -> set:
             if t is not None:
                 symbols(t, syms)
     return syms
+
+
+def axiom_equations(path: Path) -> set:
+    """`terms.eq_key` of every axiom, for comparing two problems' theories."""
+    keys = set()
+    for eq in equations(path):
+        lhs, rhs = eq.split("=", 1)
+        keys.add(eq_key(lhs.strip(), rhs.strip()))
+    return keys
+
+
+def contains_axioms(target, library) -> tuple:
+    """Does `target`'s theory contain `library`'s? -> (bool, missing keys).
+
+    A lemma proved from one axiom set is a theorem of another only when that
+    other set is at least as strong. Skipping this check is how RNG027-10 and
+    RNG029-10 were briefly claimed: their re-encodings state the same
+    conjectures but *drop* three and four axioms, so lemmas carried over from
+    the stronger theory were assumptions, not lemmas, and the proofs
+    established nothing about those problems.
+
+    Both arguments are problem names or paths. Comparison is by `eq_key`, so
+    variable naming and equation orientation do not matter.
+    """
+    t = axiom_equations(target if isinstance(target, Path) else problem_path(target))
+    l = axiom_equations(library if isinstance(library, Path) else problem_path(library))
+    missing = l - t
+    return not missing, sorted(missing)
 
 
 def axiom_sets(path: Path) -> list:

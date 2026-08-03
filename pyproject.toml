@@ -11,5 +11,13 @@ requires-python = ">=3.12"
 # works in any interpreter. Analysis extras live in environment.yml.
 dependencies = []
 
+# Test-only. The core promise -- `import overtone` works in any interpreter --
+# is what keeps `dependencies` empty; pytest is not part of it.
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [tool.setuptools]
 packages = ["overtone", "overtone.agent"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

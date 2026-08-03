@@ -22,5 +22,6 @@ dependencies:
       - stitch_core==0.1.25
       - python-dotenv
       - psutil
+      - pytest
       # gradient-boosted models for the rule-usefulness and hint-weight tasks
       - lightgbm

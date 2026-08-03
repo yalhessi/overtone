@@ -92,6 +92,20 @@ def alpha_key(s):
     return unparse(alpha(t))
 
 
+def eq_key(lhs, rhs):
+    """Identity of an equation, insensitive to variable names and orientation.
+
+    Two equations are the same fact whether twee prints `a = b` or `b = a`, and
+    whichever variable names it happened to pick -- so comparing them needs both
+    normalisations. Sorting the two alpha-keys gives that in one step.
+
+    Used for axiom containment (`problems.contains_axioms`) and for matching a
+    proof's lemmas against a sketch's nodes (`agent.dag.mined_parents`), which
+    previously carried its own private copy of this.
+    """
+    return tuple(sorted((alpha_key(lhs), alpha_key(rhs))))
+
+
 def symbols(t, out=None):
     """Function/constant symbols of a term as (name, arity); variables excluded."""
     if out is None:
