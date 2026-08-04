@@ -228,6 +228,7 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
     outdir.mkdir(parents=True, exist_ok=True)
     traj = open(outdir / "trajectory.jsonl", "a", buffering=1)
     spent, proved, history = 0.0, False, []
+    timeline_steps, results_of_last = [], []
 
     try:
         for i in range(max_iterations):
@@ -246,6 +247,11 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             (outdir / f"sketch.{i:02d}.json").write_text(
                 json.dumps(sketch.to_json(), indent=2) + "\n")
 
+            timeline_steps.append({"label": f"iter {i}", "sketch": sketch,
+                                   "results": v["results"],
+                                   "note": (f"{v['n_proved']}/{v['n_nodes']} nodes, "
+                                            f"{spent:.0f}s CPU")})
+            results_of_last = v["results"]
             actions = [] if proved else list(agent.act(state))
             rec = {"iter": i, "proved": proved, "cpu_spent": round(spent, 1),
                    "n_proved": v["n_proved"], "n_nodes": v["n_nodes"],
@@ -279,4 +285,12 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
            "iterations": len(history), "history": history,
            "final_sketch": sketch.to_json()}
     (outdir / "loop.json").write_text(json.dumps(out, indent=2) + "\n")
+    # A loop's blueprint is a trajectory: it already produced one sketch per
+    # iteration, and the edits between them are the record of what it decided.
+    blueprint.write_for_run(
+        sketch, results_of_last, outdir, run_dir=outdir / f"iter{len(history)-1:02d}",
+        timeline=timeline_steps,
+        title=f"{problem} — loop",
+        subtitle=(f"{len(history)} iteration(s) · "
+                  f"{'proved' if proved else 'not proved'} · {spent:.0f}s CPU"))
     return out

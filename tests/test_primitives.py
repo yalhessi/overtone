@@ -365,3 +365,42 @@ def test_every_script_has_a_safe_help():
                            capture_output=True, text=True, timeout=60)
         assert r.returncode == 0, f"{script.name} --help failed: {r.stderr[:200]}"
         assert "usage:" in r.stdout.lower(), f"{script.name} has no argument parser"
+
+
+# --------------------------------------------------------------- run artifacts
+
+def test_write_for_run_never_raises(tmp_path):
+    """A run that cost CPU-hours must not lose its result to a rendering error.
+    A sketch whose node names are hostile to the renderer still returns cleanly."""
+    from overtone.agent import blueprint
+    s = Sketch({'weird "name"': ("f(X)", "g(X)", [])})
+    out = blueprint.write_for_run(s, [], tmp_path, title="t", quiet=True)
+    assert isinstance(out, list)          # empty or not, it returns
+
+
+def test_write_index_lists_runs_and_names_them_by_kind(tmp_path):
+    """A theory run's `host` is the problem its library came from, not what the
+    run is about; showing it made a family run look like a single-problem run."""
+    from overtone.agent import blueprint
+    (tmp_path / "theory" / "rng_dag").mkdir(parents=True)
+    (tmp_path / "theory" / "rng_dag" / "blueprint.html").write_text("x")
+    (tmp_path / "theory" / "rng_dag" / "theory.json").write_text(json.dumps(
+        {"host": "RNG029-5", "n_proved": 12, "n_targets": 14,
+         "library": {"n_proved": 29, "n_nodes": 29, "cost": {"cpu": 2197.0}}}))
+    (tmp_path / "prove" / "RNG029-5").mkdir(parents=True)
+    (tmp_path / "prove" / "RNG029-5" / "blueprint.html").write_text("x")
+    (tmp_path / "prove" / "RNG029-5" / "problem.json").write_text(json.dumps(
+        {"problem": "RNG029-5", "proved": True, "n_proved": 29, "n_nodes": 29,
+         "cost": {"cpu": 2146.4, "n_runs": 60}}))
+
+    dest = blueprint.write_index(
+        [tmp_path / "theory", tmp_path / "prove"], tmp_path / "index.html")
+    html = dest.read_text()
+    assert "rng_dag" in html and "RNG029-5" in html
+    assert "12/14 targets" in html and "proved" in html
+
+
+def test_write_index_is_fine_with_no_runs(tmp_path):
+    from overtone.agent import blueprint
+    dest = blueprint.write_index([tmp_path / "nope"], tmp_path / "i.html")
+    assert "No runs" in dest.read_text()

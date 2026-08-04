@@ -718,3 +718,163 @@ addEventListener('keydown',e=>{
   if(e.key==='ArrowRight')showStep(cur+1);});
 showStep(STEPS.length-1);
 """
+
+
+def details_from(sketch, outdir: Path, results):
+    """Per-node goal clause and proof, read from a run directory.
+
+    Lives here rather than in the CLI because the pipelines write their own
+    blueprints now, and the interesting half of a blueprint is the proof behind
+    each node. `proofs.proof_section` is what makes it affordable: one node's run
+    file is 655 KB of search trace and 15 KB of proof.
+    """
+    from overtone import proofs
+    outdir = Path(outdir)
+    out = {}
+    for name in sketch.nodes:
+        runs = sorted((r for r in results if r["node"] == name),
+                      key=lambda r: r["direction"])
+        proof, goal = "", ""
+        best = min((r for r in runs if r.get("proved")),
+                   key=lambda r: r["cpu"] if r.get("cpu") is not None else 0,
+                   default=None)
+        if best:
+            f = outdir / f"{name}.{best['direction'][2:]}.out"
+            if f.exists():
+                text = f.read_text(errors="replace")
+                proof = proofs.proof_section(text)
+                for line in text.splitlines():
+                    if line.strip().startswith("Goal 1"):
+                        goal = line.strip()
+                        break
+        out[name] = {"runs": runs, "proof": proof, "goal": goal}
+    return out
+
+
+def write_for_run(sketch, results, dest_dir: Path, *, title, subtitle="",
+                  run_dir=None, annot=None, timeline=None, quiet=False):
+    """Write `blueprint.svg` and `blueprint.html` for a finished run.
+
+    Never raises. A run that cost CPU-hours must not lose its result because
+    graphviz is missing or a label is malformed, so a rendering failure is
+    reported and swallowed. Returns the paths written, which may be empty.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    try:
+        details = details_from(sketch, run_dir or dest_dir, results)
+        svg = render(sketch, dest_dir / "blueprint.svg", results, title=title,
+                     subtitle=subtitle, annot=annot)
+        written.append(svg)
+        html = dest_dir / "blueprint.html"
+        html.write_text(to_html(sketch, results, details, title=title,
+                                subtitle=subtitle, annot=annot,
+                                timeline=timeline))
+        written.append(html)
+        if not quiet:
+            print(f"  blueprint -> {html}", flush=True)
+    except Exception as e:                                        # noqa: BLE001
+        print(f"  blueprint skipped ({type(e).__name__}: {e})", flush=True)
+    return written
+
+
+def write_index(roots, dest: Path, *, title="Overtone runs"):
+    """One page linking every run's blueprint, newest first.
+
+    The point is to compare problems side by side: a run directory per problem
+    is only browsable if something enumerates them.
+    """
+    import datetime
+    rows = []
+    for root in roots:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for html in sorted(root.glob("*/blueprint.html")):
+            run = html.parent
+            meta = {}
+            for name in ("problem.json", "theory.json", "loop.json"):
+                f = run / name
+                if f.exists():
+                    try:
+                        meta = json.loads(f.read_text())
+                    except json.JSONDecodeError:
+                        meta = {}
+                    meta["_kind"] = name.removesuffix(".json")
+                    break
+            rows.append((html.stat().st_mtime, run, html, meta))
+    rows.sort(key=lambda r: -r[0])
+
+    def _run_name(m, run):
+        # A theory run's `host` is the problem its library was proved from, not
+        # what the run is about -- showing it makes a family run look identical
+        # to a single-problem run over the same host.
+        if m.get("_kind") == "theory":
+            return run.name
+        return m.get("problem") or run.name
+
+    def cell(m):
+        if m.get("_kind") == "theory":
+            lib = m.get("library", {})
+            return (f"{m.get('n_proved', '?')}/{m.get('n_targets', '?')} targets",
+                    f"library {lib.get('n_proved','?')}/{lib.get('n_nodes','?')}, "
+                    f"{(lib.get('cost') or {}).get('cpu', 0):.0f}s")
+        if m.get("_kind") == "loop":
+            return (("proved" if m.get("proved") else "not proved"),
+                    f"{m.get('iterations','?')} iteration(s), "
+                    f"{m.get('cpu_total',0):.0f}s")
+        c = m.get("cost") or {}
+        return (("proved" if m.get("proved") else "not proved"),
+                f"{m.get('n_proved','?')}/{m.get('n_nodes','?')} nodes, "
+                f"{c.get('cpu',0):.0f}s over {c.get('n_runs','?')} runs")
+
+    items = "".join(
+        f'<a class="run" href="{html.relative_to(Path(dest).parent) if Path(dest).parent in html.parents else html}">'
+        f'<b>{escape(_run_name(meta, run))}</b>'
+        f'<span class="k">{escape(meta.get("_kind", run.parent.name))}</span>'
+        f'<span class="s">{escape(cell(meta)[0])}</span>'
+        f'<span class="d">{escape(cell(meta)[1])}</span>'
+        f'<span class="t">{datetime.datetime.fromtimestamp(mt):%Y-%m-%d %H:%M}</span>'
+        f"</a>"
+        for mt, run, html, meta in rows)
+    if not items:
+        items = '<p class="none">No runs with blueprints yet.</p>'
+
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        f"<title>{escape(title)}</title><style>{_INDEX_CSS}</style>"
+        f'<div class="wrap"><h1>{escape(title)}</h1>'
+        f'<p class="sub">{len(rows)} run(s). Newest first.</p>'
+        f'<div class="runs">{items}</div></div>')
+    return dest
+
+
+_INDEX_CSS = """
+:root{--bg:#eef0f5;--card:#f7f8fb;--ink:#181d29;--soft:#4d566b;--faint:#7b849a;
+  --line:#cfd5e2;--accent:#2f4fd8;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1017;--card:#141924;--ink:#dde3ef;
+  --soft:#9aa4bb;--faint:#6d7690;--line:#272e3d;--accent:#8ea3ff;}}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+.wrap{max-width:920px;margin:0 auto;padding:38px 22px 60px;}
+h1{font-size:24px;font-weight:600;margin:0;}
+.sub{color:var(--faint);font-size:13px;margin:5px 0 22px;}
+.runs{display:flex;flex-direction:column;gap:7px;}
+.run{display:grid;grid-template-columns:minmax(120px,1fr) 74px 100px 1fr 120px;
+  gap:12px;align-items:baseline;padding:11px 14px;background:var(--card);
+  border:1px solid var(--line);border-radius:6px;text-decoration:none;
+  color:inherit;font-size:13px;}
+.run:hover{border-color:var(--accent);}
+.run b{font-family:var(--mono);font-size:13.5px;}
+.run .k{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--faint);font-weight:650;}
+.run .s{font-family:var(--mono);font-size:12px;}
+.run .d,.run .t{color:var(--soft);font-size:12px;font-family:var(--mono);}
+.run .t{text-align:right;color:var(--faint);}
+.none{color:var(--faint);font-size:13px;}
+@media(max-width:700px){.run{grid-template-columns:1fr;gap:3px;}
+  .run .t{text-align:left;}}
+"""

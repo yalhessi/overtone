@@ -67,7 +67,9 @@ def main():
     ap.add_argument("--host", default="RNG029-5",
                     help="problem whose axioms the library is proved from")
     ap.add_argument("--targets", help="file, comma list, or the sketch's TARGETS")
-    ap.add_argument("--node-budget", type=int, default=60)
+    ap.add_argument("--node-budget", type=int, default=60,
+                    help="default per-node budget; a sketch's own "
+                         "TIER_BUDGET overrides it per node")
     ap.add_argument("--final-budget", type=int, default=300)
     ap.add_argument("--slow", type=int, default=30)
     ap.add_argument("--workers", type=int, default=8)

@@ -26,6 +26,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from overtone import batch, problems
+from overtone.agent import blueprint
 from overtone.agent.dag import DIRECTIONS, Sketch, attempt, cost, verify
 from overtone.terms import eq_key
 
@@ -84,6 +85,12 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
            "attempt": a, "baseline": batch.screen_baseline(problem),
            "budget": asdict(budget), "sketch": sketch.to_json()}
     (outdir / "problem.json").write_text(json.dumps(out, indent=2) + "\n")
+    blueprint.write_for_run(
+        sketch, v["results"], outdir, run_dir=outdir / "nodes",
+        title=f"{problem} — per problem",
+        subtitle=(f"{v['n_proved']}/{v['n_nodes']} nodes · "
+                  f"{'proved' if out['proved'] else 'not proved'} · "
+                  f"{out['cost']['cpu']:.0f}s CPU over {out['cost']['n_runs']} runs"))
     return out
 
 
@@ -158,4 +165,10 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
            "n_targets": len(targets), "budget": asdict(budget),
            "sketch": sketch.to_json()}
     (outdir / "theory.json").write_text(json.dumps(out, indent=2) + "\n")
+    blueprint.write_for_run(
+        sketch, lib["results"], outdir, run_dir=outdir / "library",
+        title=f"{host} — theory library",
+        subtitle=(f"{lib['n_proved']}/{lib['n_nodes']} nodes · "
+                  f"{out['n_proved']}/{out['n_targets']} targets · "
+                  f"library {out['library']['cost']['cpu']:.0f}s CPU"))
     return out
