@@ -162,7 +162,11 @@ DAG["rng033_goal"] = (
 # library declares one; here it should be free, and a large number would itself
 # be the finding.
 TIER_BUDGET = dict(_rng.TIER_BUDGET)
-TIER_BUDGET.update({"rng033_goal": 900, "assoc_comm_3": 60,
+# 300s, matching iteration 1, so the only variable between iterations is the
+# four mined nodes. It was briefly 900s, which mixed two changes: a proof
+# would not have separated the nodes from the extra 600 seconds. Reuse makes
+# holding it at 300s free -- iteration 1's runs are already in the ledger.
+TIER_BUDGET.update({"rng033_goal": 300, "assoc_comm_3": 60,
                     "comm_def_add": 60, "teich_isolated": 120,
                     "assoc_comm_1": 120, "assoc_prod_comm_a": 120,
                     "assoc_prod_comm_b": 120})
