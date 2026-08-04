@@ -548,3 +548,78 @@ def test_standalone_retry_does_not_overwrite_the_parented_run(tmp_path, monkeypa
     without = [f for f in inputs if "parent" not in f.read_text()]
     assert len(with_parent) == 2 and len(without) == 2, \
         "the retry must not overwrite the parented run it is retrying"
+
+
+# --------------------------------------------------------------- loop memory
+
+def test_sketch_digest_ignores_node_order_but_not_parent_order():
+    """Node order does not reach twee -- layers() sorts -- but parent order sets
+    the order equations enter the prover, and so the search."""
+    a = Sketch({"x": ("f", "g", ["p", "q"]), "p": ("a", "b", []), "q": ("c", "d", [])})
+    b = Sketch({"p": ("a", "b", []), "q": ("c", "d", []), "x": ("f", "g", ["p", "q"])})
+    c = Sketch({"p": ("a", "b", []), "q": ("c", "d", []), "x": ("f", "g", ["q", "p"])})
+    assert a.digest() == b.digest()
+    assert a.digest() != c.digest()
+
+
+def test_loop_stops_when_an_agent_goes_in_a_circle(tmp_path, monkeypatch):
+    """An agent that adds a node one iteration and removes it the next makes two
+    states alternate forever. Each is 'new' to the node ledger, which remembers
+    invocations rather than sketches, so the loop needs its own memory."""
+    from overtone import runner
+    from overtone.agent.loop import ScriptedAgent, run_loop
+    from overtone.agent.pipeline import Budget
+
+    class Fail:
+        status, proved, cpu, wall, output = "Timeout", False, 0.1, 0.1, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: Fail())
+    s = Sketch({"p": ("a", "b", [])})
+    # add q, remove q, add q ... -> iteration 2 revisits iteration 0's sketch
+    script = [[{"op": "add_node", "name": "q", "lhs": "c", "rhs": "d"}],
+              [{"op": "remove_node", "name": "q"}],
+              [{"op": "add_node", "name": "q", "lhs": "c", "rhs": "d"}]]
+    out = run_loop("RNG029-5", s, ScriptedAgent(script), outdir=tmp_path,
+                   budget=Budget(node=1, final=1, workers=1), max_iterations=6)
+    assert "cycle" in out["stop_reason"], out["stop_reason"]
+    assert out["iterations"] == 2, "it should stop on revisiting, not run on"
+
+
+def test_loop_stops_when_edits_change_nothing(tmp_path, monkeypatch):
+    from overtone import runner
+    from overtone.agent.loop import ScriptedAgent, run_loop
+    from overtone.agent.pipeline import Budget
+
+    class Fail:
+        status, proved, cpu, wall, output = "Timeout", False, 0.1, 0.1, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: Fail())
+    s = Sketch({"p": ("a", "b", [])})
+    out = run_loop("RNG029-5", s,
+                   ScriptedAgent([[{"op": "set_parents", "name": "p", "parents": []}]]),
+                   outdir=tmp_path, budget=Budget(node=1, final=1, workers=1))
+    assert "unchanged" in out["stop_reason"]
+
+
+def test_state_carries_prior_iterations(tmp_path, monkeypatch):
+    """An agent cannot avoid repeating an edit it cannot see."""
+    from overtone import runner
+    from overtone.agent.loop import State, run_loop
+    from overtone.agent.pipeline import Budget
+
+    class Fail:
+        status, proved, cpu, wall, output = "Timeout", False, 0.1, 0.1, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: Fail())
+    seen_histories = []
+
+    class Watcher:
+        def act(self, state: State):
+            seen_histories.append(len(state.history))
+            return [{"op": "add_node", "name": f"n{state.iteration}",
+                     "lhs": "c", "rhs": "d"}]
+
+    run_loop("RNG029-5", Sketch({"p": ("a", "b", [])}), Watcher(),
+             outdir=tmp_path, budget=Budget(node=1, final=1, workers=1),
+             max_iterations=3)
+    assert seen_histories == [0, 1, 2], seen_histories

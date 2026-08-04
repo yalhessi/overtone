@@ -134,6 +134,20 @@ class Sketch:
         return {n: {"lhs": l, "rhs": r, "parents": list(p)}
                 for n, (l, r, p) in self.nodes.items()}
 
+    def digest(self) -> str:
+        """Identity of this sketch, for detecting that a loop has gone in a circle.
+
+        Node order is irrelevant -- `layers()` sorts -- so the serialisation is
+        sorted by name. Parent *order* is kept, because it decides the order
+        equations enter twee and therefore the search, exactly as in the run
+        ledger. Two sketches that differ only in how a parent list is ordered are
+        different questions and must not be mistaken for a repeat.
+        """
+        import hashlib
+        canon = json.dumps({n: [l, r, list(p)] for n, (l, r, p)
+                            in sorted(self.nodes.items())}, sort_keys=False)
+        return hashlib.sha256(canon.encode()).hexdigest()[:16]
+
     @classmethod
     def from_json(cls, obj):
         return cls({n: (v["lhs"], v["rhs"], list(v.get("parents", [])))

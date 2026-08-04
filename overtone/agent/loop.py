@@ -63,6 +63,11 @@ class State:
     candidates: dict = field(default_factory=dict)
     diffs: dict = field(default_factory=dict)
     sources: tuple = ()          # retrieved references, for offline replay
+    # Every sketch already tried, with what it achieved. Without this an agent
+    # re-proposes an edit it made two iterations ago, the loop undoes it, and the
+    # two states alternate forever -- each iteration "new" at the node level
+    # because the node ledger only remembers invocations, not sketches.
+    history: tuple = ()
 
     def failing(self):
         return [n for n in self.nodes if n.status.startswith("failed")]
@@ -72,7 +77,7 @@ class State:
 
 
 def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
-             slow=30, sources=()):
+             slow=30, sources=(), history=()):
     """Classify every node, and explain the ones that need explaining.
 
     Builds on `blueprint.statuses`, which already computes
@@ -104,7 +109,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
     spent = cost(results)["cpu"]
     return State(problem=problem, iteration=iteration, cpu_spent=spent,
                  nodes=tuple(nodes), candidates=candidates, diffs=diffs,
-                 sources=tuple(sources))
+                 sources=tuple(sources), history=tuple(history))
 
 
 def _candidates(name, sketch, outdir: Path, *, proved, limit=12):
@@ -229,9 +234,20 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
     traj = open(outdir / "trajectory.jsonl", "a", buffering=1)
     spent, proved, history = 0.0, False, []
     timeline_steps, results_of_last = [], []
+    # Sketch digest -> the iteration that tried it. A loop that re-proposes a
+    # sketch it has already verified is going in a circle, and the only useful
+    # response is to stop and say so.
+    seen, stop_reason = {}, None
 
     try:
         for i in range(max_iterations):
+            digest = sketch.digest()
+            if digest in seen:
+                stop_reason = (f"cycle: this sketch was already verified at "
+                               f"iteration {seen[digest]}")
+                print(f"iter {i}: {stop_reason}", flush=True)
+                break
+            seen[digest] = i
             v = verify(problem, sketch, outdir=outdir / f"iter{i:02d}",
                        budget=budget.node, budgets=budgets, workers=budget.workers,
                        binary=binary, directions=directions)
@@ -243,7 +259,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             proved = any(r["proved"] for r in a)
 
             state = state_of(problem, sketch, v["results"],
-                             outdir / f"iter{i:02d}", iteration=i, slow=budget.slow)
+                             outdir / f"iter{i:02d}", iteration=i,
+                             slow=budget.slow, history=history)
             (outdir / f"sketch.{i:02d}.json").write_text(
                 json.dumps(sketch.to_json(), indent=2) + "\n")
 
@@ -253,7 +270,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                                             f"{spent:.0f}s CPU")})
             results_of_last = v["results"]
             actions = [] if proved else list(agent.act(state))
-            rec = {"iter": i, "proved": proved, "cpu_spent": round(spent, 1),
+            rec = {"iter": i, "digest": digest, "proved": proved,
+                   "cpu_spent": round(spent, 1),
                    "n_proved": v["n_proved"], "n_nodes": v["n_nodes"],
                    "missing": v["missing"],
                    "slow": [n.name for n in state.slow()],
@@ -266,7 +284,10 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                   f"{'PROVED' if proved else 'not proved'}, "
                   f"{spent:.1f}s CPU, {len(actions)} action(s)", flush=True)
 
-            if proved or not actions:
+            if proved:
+                break
+            if not actions:
+                stop_reason = "the agent proposed no further edits"
                 break
             if total_cpu and spent >= total_cpu:
                 print(f"  stopping: {spent:.1f}s >= total_cpu {total_cpu}", flush=True)
@@ -275,6 +296,10 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             for act in actions:
                 sketch = apply(sketch, act, annot=annot)
             d = diff(before, sketch)
+            if not d["n_edits"]:
+                stop_reason = "the agent's edits left the sketch unchanged"
+                print(f"  {stop_reason}", flush=True)
+                break
             print(f"  applied {d['n_edits']} edit(s): +{len(d['added'])} "
                   f"-{len(d['removed'])} ~{len(d['restated'])} "
                   f"parents:{len(d['reparented'])}", flush=True)
@@ -283,7 +308,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
 
     out = {"problem": problem, "proved": proved, "cpu_total": round(spent, 1),
            "iterations": len(history), "history": history,
-           "final_sketch": sketch.to_json()}
+           "stop_reason": stop_reason or ("proved" if proved else "budget"),
+           "sketches_tried": seen, "final_sketch": sketch.to_json()}
     (outdir / "loop.json").write_text(json.dumps(out, indent=2) + "\n")
     # A loop's blueprint is a trajectory: it already produced one sketch per
     # iteration, and the edits between them are the record of what it decided.

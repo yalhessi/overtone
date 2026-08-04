@@ -86,6 +86,50 @@ SESSION_EDITS = [
 ]
 
 
+A33, M33, I33, C33 = ("associator", "multiply", "additive_inverse",
+                      "commutator")
+
+# RNG033-8, iteration 2: the four nodes added after mining 6,777 universal rules
+# out of iteration 1's failed searches. The mining said the search builds the
+# goal's left side prolifically (699 + 629 rules) and its right side almost never
+# (86, all sign shuffling), so these aim at making that shape available.
+RNG033_EDITS = [
+    [{"op": "add_node", "name": "teich_isolated",
+      "lhs": f"{M33}({A33}(X,Y,Z),W)",
+      "rhs": f"add(add({A33}({M33}(X,Y),Z,W),{A33}(X,Y,{M33}(Z,W))),"
+             f"{I33}(add({A33}(X,{M33}(Y,Z),W),{M33}(X,{A33}(Y,Z,W)))))",
+      "parents": ["teichmuller", "neg_add", "neg_mult_r"]},
+     {"op": "add_node", "name": "assoc_comm_1",
+      "lhs": f"add({A33}({M33}(X,Y),Z,W),{A33}({C33}(X,Y),Z,W))",
+      "rhs": f"{A33}({M33}(Y,X),Z,W)",
+      "parents": ["assoc_add_1", "comm_def_add", "neg_add", "neg_mult_r"]},
+     {"op": "add_node", "name": "assoc_prod_comm_a",
+      "lhs": f"{A33}({M33}(X,Y),Z,{M33}(Y,X))",
+      "rhs": f"{A33}({C33}(Y,X),Z,{M33}(X,Y))",
+      "parents": ["assoc_comm_1", "assoc_cyclic", "alt12_additive"]},
+     {"op": "add_node", "name": "assoc_prod_comm_b",
+      "lhs": f"{A33}({M33}(X,Y),{M33}(Y,X),Z)",
+      "rhs": f"{A33}({C33}(X,Y),Z,{M33}(X,Y))",
+      "parents": ["assoc_comm_1", "assoc_cyclic", "alt23_additive"]},
+     {"op": "set_parents", "name": "rng033_goal",
+      "parents": ["teichmuller", "teich_isolated", "assoc_comm_3",
+                  "assoc_comm_1", "assoc_prod_comm_a", "assoc_prod_comm_b",
+                  "assoc_cyclic", "alt12_additive", "alt23_additive",
+                  "flexible"]}],
+]
+
+
+def rewind_rng033(sketch: Sketch) -> Sketch:
+    """The RNG033-8 sketch as iteration 1 had it, before the mined refinement."""
+    nodes = {n: v for n, v in sketch.nodes.items()
+             if n not in ("teich_isolated", "assoc_comm_1",
+                          "assoc_prod_comm_a", "assoc_prod_comm_b")}
+    nodes["rng033_goal"] = (*nodes["rng033_goal"][:2],
+                            ["teichmuller", "assoc_comm_3", "assoc_cyclic",
+                             "alt12_additive", "alt23_additive", "flexible"])
+    return Sketch(nodes)
+
+
 def rewind(sketch: Sketch) -> Sketch:
     """The sketch as it stood before the scripted edits, so replaying them means
     something. Reversing each edit is more honest than shipping a second copy of
@@ -113,12 +157,17 @@ def rewind(sketch: Sketch) -> Sketch:
     return Sketch(nodes)
 
 
+SCRIPTS = {"rng029": SESSION_EDITS, "rng033": RNG033_EDITS}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("problem")
     ap.add_argument("--sketch", type=Path,
                     default=config.ROOT / "scripts" / "rng_dag.py")
+    ap.add_argument("--script", choices=("rng029", "rng033"), default="rng029",
+                    help="which recorded edit sequence the scripted agent replays")
     ap.add_argument("--agent", choices=("scripted", "anthropic", "openai"),
                     default="scripted")
     ap.add_argument("--model", help="default: claude-opus-5 for anthropic; "
@@ -144,13 +193,18 @@ def main():
 
     sketch = load_sketch(a.sketch)
     target = sketch
-    if not a.no_rewind:
+    edits = SCRIPTS[a.script]
+    if a.script == "rng029" and not a.no_rewind:
         sketch = rewind(sketch)
+    elif a.script == "rng033":
+        # RNG033-8's iteration 1 sketch is the committed one minus the four
+        # nodes iteration 2 added; the edits below re-add them.
+        sketch = rewind_rng033(sketch)
 
     if a.dry_run:
         print(f"start: {len(sketch.nodes)} nodes")
         s = sketch
-        for i, batch_ in enumerate(SESSION_EDITS):
+        for i, batch_ in enumerate(edits):
             for act in batch_:
                 s = apply(s, act)
             print(f"  iter {i}: {len(batch_)} action(s) -> {len(s.nodes)} nodes")
@@ -171,7 +225,7 @@ def main():
     budget = Budget(node=a.node_budget, slow=a.slow, final=a.final_budget,
                     workers=a.workers)
     if a.agent == "scripted":
-        agent = ScriptedAgent(SESSION_EDITS)
+        agent = ScriptedAgent(edits)
     else:
         from overtone.agent.llm import LLMAgent
         agent = LLMAgent(a.agent, a.model, temperature=a.temperature,
