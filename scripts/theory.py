@@ -74,6 +74,9 @@ def main():
     ap.add_argument("--slow", type=int, default=30)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--outdir", type=Path)
+    ap.add_argument("--rerun", action="store_true",
+                    help="ignore the ledger and re-run every "
+                         "invocation, even ones already recorded")
     ap.add_argument("--binary")
     ap.add_argument("--check-only", action="store_true",
                     help="audit axiom containment per target and stop")
@@ -106,7 +109,8 @@ def main():
     print(f"library: {len(sketch.nodes)} nodes on {a.host}; "
           f"{len(targets)} targets\n", flush=True)
     out = run_theory(sketch, targets, host=a.host, outdir=outdir, budget=budget,
-                     budgets=load_budgets(a.sketch), binary=binary)
+                     budgets=load_budgets(a.sketch), binary=binary,
+                     reuse=not a.rerun)
 
     lib = out["library"]
     print(f"\n  library      {lib['n_proved']}/{lib['n_nodes']} nodes, "

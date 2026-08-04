@@ -43,6 +43,7 @@ from pathlib import Path
 
 from overtone import runner
 from overtone.agent import hints as hintlib
+from overtone.agent import ledger as ledgerlib
 from overtone.runner import BASE_FLAGS
 
 # Both goal directions, always. Three trilinearity lemmas prove under
@@ -157,7 +158,8 @@ def channel_for(names, sketch, node, override=None):
 
 def _job(a):
     """Module-level so it pickles into a process pool."""
-    problem, node, lhs, rhs, eqs, channel, direction, budget, outdir, binary = a
+    (problem, node, lhs, rhs, eqs, channel, direction, budget, outdir, binary,
+     reuse, ledger) = a
     tag = f"{node}.{direction[2:]}"
     kw, flags = {}, [*BASE_FLAGS, direction]
     if channel == "axioms":
@@ -172,6 +174,18 @@ def _job(a):
     path = runner.write_problem(problem, Path(outdir) / f"{tag}.p",
                                 goal=(lhs, rhs), goal_prefix="sk_dag_",
                                 axiom_prefix="parent", **kw)
+    # Ask the ledger before asking the prover. Identity is the bytes of `path`
+    # plus the exact invocation, so a reordered axiom list -- which twee would
+    # search differently -- is never mistaken for a repeat.
+    key = ledgerlib.key_for(path, flags, binary)
+    if reuse:
+        prior = ledgerlib.lookup(key, budget, ledger=ledger)
+        if prior is not None:
+            return {"node": node, "direction": direction, "channel": channel,
+                    "n_support": len(eqs), "result": prior.get("result"),
+                    "proved": bool(prior.get("proved")),
+                    "cpu": prior.get("cpu") or 0.0,
+                    "wall": prior.get("wall") or 0.0, "reused": True}
     r = runner.run(path, flags, budget, problem=problem, binary=binary)
     # Keep the output either way. A failed run is the more informative one: with
     # --all-lemmas it still lists everything derived before the budget ran out,
@@ -182,15 +196,31 @@ def _job(a):
     # Full precision, not 1 dp: these rows are summed over hundreds of runs to
     # report what a problem cost, and rounding first accumulates error. Readers
     # that display a time format it themselves.
-    return {"node": node, "direction": direction, "channel": channel,
-            "n_support": len(eqs), "result": r.status, "proved": r.proved,
-            "cpu": r.cpu, "wall": r.wall}
+    row = {"node": node, "direction": direction, "channel": channel,
+           "n_support": len(eqs), "result": r.status, "proved": r.proved,
+           "cpu": r.cpu, "wall": r.wall}
+    ledgerlib.record(key, row, budget, ledger=ledger)
+    return row
+
+
+def _map(jobs, workers):
+    """Run jobs, inline at workers=1.
+
+    Inline is not just an optimisation: a ProcessPoolExecutor puts the work
+    behind a pickling boundary, so no test can substitute `runner.run` and a
+    changed `_job` signature surfaces only as an unpickling error in a live run.
+    That is exactly how a stale 10-tuple job site reached a real invocation.
+    """
+    if workers <= 1 or len(jobs) == 1:
+        return [_job(j) for j in jobs]
+    with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
+        return list(pool.map(_job, jobs))
 
 
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
            scope="parents", channel=None, directions=DIRECTIONS, workers=8,
            binary: str | None = None, known=(), prior_results=(),
-           retry_standalone=True):
+           retry_standalone=True, reuse=True, ledger=None):
     """Prove every node, in topological order, each in the scope its edges imply.
 
     A node whose parents did not prove is skipped rather than attempted without
@@ -208,7 +238,14 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
 
     `known` names nodes already proved by an earlier run, so a resumed run
     re-verifies nothing; pass that run's `results` as `prior_results` so the
-    merged record stays complete. `budgets` overrides `budget` per node. `channel` forces
+    merged record stays complete.
+
+    `reuse` consults `agent/ledger.py` before every invocation, so an identical
+    question already asked is answered from the record rather than re-run --
+    `rng033_goal` was verified standalone at 300s, failed, and then re-run
+    identically at 900s. Identity is over the input bytes and the exact
+    invocation, never over meaning, because twee searches a reordered axiom list
+    differently. Pass `reuse=False` to force everything. `budgets` overrides `budget` per node. `channel` forces
     a channel; leaving it None applies `channel_for`, which is the point of the
     DAG.
     """
@@ -237,11 +274,11 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
             lhs, rhs, _ = sketch.nodes[n]
             for d in directions:
                 jobs.append((problem, n, lhs, rhs, sketch.equations(names), ch,
-                             d, budgets.get(n, budget), str(outdir), binary))
+                             d, budgets.get(n, budget), str(outdir), binary,
+                             reuse, ledger))
         if not jobs:
             continue
-        with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
-            res = list(pool.map(_job, jobs))
+        res = _map(jobs, workers)
         results += res
 
         # Guard: anything that failed in scope gets one standalone attempt,
@@ -252,10 +289,9 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
         if retry:
             print(f"  retrying standalone: {retry}", flush=True)
             rjobs = [(problem, n, *sketch.nodes[n][:2], [], "axioms", d,
-                      budgets.get(n, budget), str(outdir), binary)
+                      budgets.get(n, budget), str(outdir), binary, reuse, ledger)
                      for n in retry for d in directions]
-            with ProcessPoolExecutor(max_workers=min(len(rjobs), workers)) as pool:
-                rres = list(pool.map(_job, rjobs))
+            rres = _map(rjobs, workers)
             for r in rres:
                 r["scope_retry"] = True
             results += rres
@@ -320,7 +356,8 @@ def mined_parents(sketch, node, proof_text, *, include_self=False):
 
 
 def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
-            directions=DIRECTIONS, workers=2, label="final"):
+            directions=DIRECTIONS, workers=2, label="final", reuse=True,
+            ledger=None):
     """Run the problem's own file with `equations` appended as axioms.
 
     The final phase `verify` lacks. It was written twice -- in
@@ -333,24 +370,35 @@ def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    jobs = [(problem, direc, tuple(equations), budget, str(outdir), binary, label)
-            for direc in directions]
+    jobs = [(problem, direc, tuple(equations), budget, str(outdir), binary,
+             label, reuse, ledger) for direc in directions]
     with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
         return list(pool.map(_attempt_job, jobs))
 
 
 def _attempt_job(a):
-    problem, direction, eqs, budget, outdir, binary, label = a
+    problem, direction, eqs, budget, outdir, binary, label, reuse, ledger = a
     tag = f"{label}.{direction[2:]}"
     path = runner.write_problem(problem, Path(outdir) / f"{tag}.p",
                                 extra_axioms=list(eqs), axiom_prefix="lemma")
-    r = runner.run(path, [*BASE_FLAGS, direction], budget, problem=problem,
-                   binary=binary)
+    flags = [*BASE_FLAGS, direction]
+    key = ledgerlib.key_for(path, flags, binary)
+    if reuse:
+        prior = ledgerlib.lookup(key, budget, ledger=ledger)
+        if prior is not None:
+            return {"node": label, "direction": direction, "channel": "axioms",
+                    "n_support": len(eqs), "result": prior.get("result"),
+                    "proved": bool(prior.get("proved")),
+                    "cpu": prior.get("cpu") or 0.0,
+                    "wall": prior.get("wall") or 0.0, "reused": True}
+    r = runner.run(path, flags, budget, problem=problem, binary=binary)
     suffix = "out" if r.proved else "fail.out"
     (Path(outdir) / f"{tag}.{suffix}").write_text(r.output)
-    return {"node": label, "direction": direction, "channel": "axioms",
-            "n_support": len(eqs), "result": r.status, "proved": r.proved,
-            "cpu": r.cpu, "wall": r.wall}
+    row = {"node": label, "direction": direction, "channel": "axioms",
+           "n_support": len(eqs), "result": r.status, "proved": r.proved,
+           "cpu": r.cpu, "wall": r.wall}
+    ledgerlib.record(key, row, budget, ledger=ledger)
+    return row
 
 
 def cost(*row_lists):

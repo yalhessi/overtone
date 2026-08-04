@@ -67,6 +67,9 @@ def main():
     ap.add_argument("--slow", type=int, default=30)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--outdir", type=Path)
+    ap.add_argument("--rerun", action="store_true",
+                    help="ignore the ledger and re-run every "
+                         "invocation, even ones already recorded")
     ap.add_argument("--binary", help="default: the deterministic build")
     a = ap.parse_args()
 
@@ -82,7 +85,8 @@ def main():
     print(f"{a.problem}: {len(sketch.nodes)} nodes, node budget {budget.node}s, "
           f"final {budget.final}s", flush=True)
     out = run_problem(a.problem, sketch, outdir=outdir, budget=budget,
-                      budgets=load_budgets(a.sketch), binary=binary)
+                      budgets=load_budgets(a.sketch), binary=binary,
+                      reuse=not a.rerun)
 
     print(f"\n  nodes proved   {out['n_proved']}/{out['n_nodes']}")
     for n in out["missing"]:

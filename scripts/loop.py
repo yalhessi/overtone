@@ -133,6 +133,9 @@ def main():
     ap.add_argument("--max-iterations", type=int, default=6)
     ap.add_argument("--total-cpu", type=float)
     ap.add_argument("--outdir", type=Path)
+    ap.add_argument("--rerun", action="store_true",
+                    help="ignore the ledger and re-run every "
+                         "invocation, even ones already recorded")
     ap.add_argument("--binary")
     ap.add_argument("--dry-run", action="store_true",
                     help="apply the edits without running twee, and report the "

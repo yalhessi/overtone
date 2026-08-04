@@ -404,3 +404,116 @@ def test_write_index_is_fine_with_no_runs(tmp_path):
     from overtone.agent import blueprint
     dest = blueprint.write_index([tmp_path / "nope"], tmp_path / "i.html")
     assert "No runs" in dest.read_text()
+
+
+# --------------------------------------------------------------- the ledger
+
+def _write(tmp, text):
+    p = tmp / "in.p"
+    p.write_text(text)
+    return p
+
+
+def test_ledger_key_is_over_bytes_flags_and_build(tmp_path, monkeypatch):
+    """Identity must be the exact question asked, not its meaning."""
+    from overtone.agent import ledger
+    monkeypatch.setattr("overtone.config.tptp_root", lambda: Path("/tptp"))
+    a = _write(tmp_path, "cnf(x,axiom,f(A)=g(A)).\n")
+    k = ledger.key_for(a, ["--flatten-goal"], "/bin/twee")
+    assert k == ledger.key_for(a, ["--flatten-goal"], "/bin/twee")
+    assert k != ledger.key_for(a, ["--no-flatten-goal"], "/bin/twee")
+    assert k != ledger.key_for(a, ["--flatten-goal"], "/other/twee")
+    monkeypatch.setenv("TWEE_STEPS_PER_SECOND", "999")
+    assert k != ledger.key_for(a, ["--flatten-goal"], "/bin/twee")
+
+
+def test_ledger_treats_reordered_axioms_as_a_different_run(tmp_path, monkeypatch):
+    """twee's search depends on the order rules enter the system, so a reordered
+    axiom list is a different search and may have a different outcome. Any
+    semantic key would collapse these and skip a run that could have succeeded."""
+    from overtone.agent import ledger
+    monkeypatch.setattr("overtone.config.tptp_root", lambda: Path("/tptp"))
+    one = tmp_path / "a.p"
+    two = tmp_path / "b.p"
+    one.write_text("cnf(p,axiom,f(A)=g(A)).\ncnf(q,axiom,h(A)=k(A)).\n")
+    two.write_text("cnf(q,axiom,h(A)=k(A)).\ncnf(p,axiom,f(A)=g(A)).\n")
+    assert (ledger.key_for(one, ["-d"], "/t")
+            != ledger.key_for(two, ["-d"], "/t")), "reordering must not be reused"
+
+
+def test_ledger_reuse_is_monotone_in_budget(tmp_path):
+    """A proof carries to any larger budget; a timeout only answers questions at
+    or below the budget that produced it."""
+    from overtone.agent import ledger
+    led = tmp_path / "l.jsonl"
+    ledger.record("K", {"result": "Timeout", "proved": False, "cpu": 300.0}, 300,
+                  ledger=led)
+    assert ledger.lookup("K", 300, ledger=led) is not None   # same budget: answered
+    assert ledger.lookup("K", 200, ledger=led) is not None   # less: answered
+    assert ledger.lookup("K", 900, ledger=led) is None       # more: unanswered
+    ledger.record("K", {"result": "Unsatisfiable", "proved": True, "cpu": 12.0},
+                  300, ledger=led)
+    assert ledger.lookup("K", 9999, ledger=led)["proved"]    # a proof always carries
+
+
+def test_ledger_survives_a_torn_line(tmp_path):
+    from overtone.agent import ledger
+    led = tmp_path / "l.jsonl"
+    ledger.record("K", {"result": "Unsatisfiable", "proved": True}, 60, ledger=led)
+    with open(led, "a") as fh:
+        fh.write('{"key": "trunc"')          # a killed writer
+    assert ledger.load(led)["K"]["proved"]
+
+
+def test_verify_runs_a_node_end_to_end_with_a_stubbed_prover(tmp_path, monkeypatch):
+    """A stale job tuple reached a live run because every job went through a
+    process pool, where no stub can follow it. At workers=1 the work is inline,
+    so this exercises the real _job signature."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    calls = []
+
+    class FakeResult:
+        status, proved, cpu, wall, output = "Unsatisfiable", True, 1.5, 1.6, "ok"
+
+    def fake_run(path, flags, budget, **kw):
+        calls.append((Path(path).name, tuple(flags), budget))
+        return FakeResult()
+
+    monkeypatch.setattr(runner, "run", fake_run)
+    s = Sketch({"a": ("f(X)", "g(X)", []), "b": ("h(X)", "k(X)", ["a"])})
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=7, workers=1,
+                     ledger=tmp_path / "l.jsonl")
+    assert out["n_proved"] == 2, out["missing"]
+    assert {r["node"] for r in out["results"]} == {"a", "b"}
+    assert all(r["cpu"] == 1.5 and r["wall"] == 1.6 for r in out["results"])
+    assert len(calls) == 4, "two nodes x two directions"
+
+
+def test_verify_reuses_a_recorded_run_instead_of_repeating_it(tmp_path, monkeypatch):
+    """rng033_goal was verified standalone at 300s, failed, and the next
+    iteration re-ran the identical configuration at 900s."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    n = [0]
+
+    class FakeResult:
+        status, proved, cpu, wall, output = "Unsatisfiable", True, 2.0, 2.1, "ok"
+
+    def fake_run(path, flags, budget, **kw):
+        n[0] += 1
+        return FakeResult()
+
+    monkeypatch.setattr(runner, "run", fake_run)
+    led = tmp_path / "l.jsonl"
+    s = Sketch({"a": ("f(X)", "g(X)", [])})
+    dag.verify("RNG029-5", s, outdir=tmp_path, budget=7, workers=1, ledger=led)
+    first = n[0]
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=7, workers=1, ledger=led)
+    assert n[0] == first, "an identical question must not reach the prover twice"
+    assert all(r.get("reused") for r in out["results"])
+    dag.verify("RNG029-5", s, outdir=tmp_path, budget=7, workers=1, ledger=led,
+               reuse=False)
+    assert n[0] > first, "--rerun must force the prover"

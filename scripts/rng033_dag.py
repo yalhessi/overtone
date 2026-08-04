@@ -184,6 +184,18 @@ TIER_BUDGET = {n: b for n, b in TIER_BUDGET.items() if n in _keep}
 SKETCH = Sketch(DAG)
 
 if __name__ == "__main__":
-    print(f"{len(DAG)} nodes, {len(SKETCH.layers())} layers")
-    for i, layer in enumerate(SKETCH.layers(), 1):
-        print(f"  {i}: {layer}")
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="Sketch definition for RNG033-8. Run it through "
+                    "./scripts/prove.py --sketch scripts/rng033_dag.py; "
+                    "executing this file only prints the topology.")
+    ap.add_argument("--json", action="store_true", help="emit the sketch as JSON")
+    a = ap.parse_args()
+    if a.json:
+        import json as _json
+        print(_json.dumps(SKETCH.to_json(), indent=1))
+    else:
+        print(f"{len(DAG)} nodes, {len(SKETCH.layers())} layers")
+        for i, layer in enumerate(SKETCH.layers(), 1):
+            print(f"  {i}: {layer}")

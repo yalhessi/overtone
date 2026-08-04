@@ -52,7 +52,8 @@ class Budget:
 
 
 def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
-                budgets=None, binary=None, directions=DIRECTIONS):
+                budgets=None, binary=None, directions=DIRECTIONS,
+                reuse=True, ledger=None):
     """Pipeline A: one problem, one honest cost.
 
     Four rules, each enforced here rather than by convention:
@@ -71,17 +72,19 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
     outdir.mkdir(parents=True, exist_ok=True)
     v = verify(problem, sketch, outdir=outdir / "nodes", budget=budget.node,
                budgets=budgets, directions=directions, workers=budget.workers,
-               binary=binary)
+               binary=binary, reuse=reuse, ledger=ledger)
     proved = [n for n in sketch.nodes if n in v["proved"]]
     a = attempt(problem, sketch.equations(proved), outdir=outdir / "attempt",
-                budget=budget.final, binary=binary, directions=directions)
+                budget=budget.final, binary=binary, directions=directions,
+                reuse=reuse, ledger=ledger)
 
+    reused = sum(1 for r in v["results"] + a if r.get("reused"))
     slow = {n: c for n, c in v["proved"].items() if c and c >= budget.slow}
     out = {"pipeline": "problem", "problem": problem,
            "proved": any(r["proved"] for r in a),
            "cost": cost(v["results"], a),
            "n_nodes": v["n_nodes"], "n_proved": v["n_proved"],
-           "missing": v["missing"], "slow": slow,
+           "missing": v["missing"], "slow": slow, "n_reused": reused,
            "attempt": a, "baseline": batch.screen_baseline(problem),
            "budget": asdict(budget), "sketch": sketch.to_json()}
     (outdir / "problem.json").write_text(json.dumps(out, indent=2) + "\n")
@@ -105,7 +108,7 @@ def _states(sketch: Sketch, node, target):
 
 def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
                budgets=None, binary=None, directions=DIRECTIONS,
-               on_missing="skip"):
+               on_missing="skip", reuse=True, ledger=None):
     """Pipeline B: a library once, a marginal cost per target.
 
     Reports **two** numbers and never adds them: what the library cost to derive,
@@ -122,7 +125,7 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
     outdir.mkdir(parents=True, exist_ok=True)
     lib = verify(host, sketch, outdir=outdir / "library", budget=budget.node,
                  budgets=budgets, directions=directions, workers=budget.workers,
-                 binary=binary)
+                 binary=binary, reuse=reuse, ledger=ledger)
     proved = [n for n in sketch.nodes if n in lib["proved"]]
 
     rows = {}
@@ -145,7 +148,7 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
         dropped = [n for n in proved if n not in supply]
         a = attempt(t, sketch.equations(supply), outdir=outdir / "targets",
                     budget=budget.final, binary=binary, directions=directions,
-                    label=t)
+                    label=t, reuse=reuse, ledger=ledger)
         best = min((r for r in a if r["proved"]), key=lambda r: r["cpu"],
                    default=None)
         rows[t] = {"contained": True, "missing_axioms": [],
