@@ -517,3 +517,31 @@ def test_verify_reuses_a_recorded_run_instead_of_repeating_it(tmp_path, monkeypa
     dag.verify("RNG029-5", s, outdir=tmp_path, budget=7, workers=1, ledger=led,
                reuse=False)
     assert n[0] > first, "--rerun must force the prover"
+
+
+def test_standalone_retry_does_not_overwrite_the_parented_run(tmp_path, monkeypatch):
+    """The retry wrote the same {node}.{direction} tag, so it destroyed the
+    parented run's input and output -- the artifact a diagnosis needs. Both
+    RNG033-8 iterations lost it, and a comparison of the two searches silently
+    compared two copies of the standalone run instead."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    class R:
+        def __init__(self, ok):
+            self.proved = ok
+            self.status = "Unsatisfiable" if ok else "Timeout"
+            self.cpu = self.wall = 1.0
+            self.output = "x"
+
+    # the parent must succeed, or the child is blocked and never runs at all
+    monkeypatch.setattr(runner, "run",
+                        lambda path, *a, **k: R(Path(path).name.startswith("p.")))
+    s = Sketch({"p": ("a", "b", []), "n": ("f(X)", "g(X)", ["p"])})
+    dag.verify("RNG029-5", s, outdir=tmp_path, budget=1, workers=1,
+               ledger=tmp_path / "l.jsonl")
+    names = {f.name for f in tmp_path.glob("n.*")}
+    assert any("standalone" in x for x in names), names
+    assert any(x.startswith("n.flatten") or x.startswith("n.no-flatten")
+               for x in names if "standalone" not in x), \
+        "the parented run's artifact must survive the retry"

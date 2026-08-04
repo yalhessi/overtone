@@ -156,11 +156,23 @@ def channel_for(names, sketch, node, override=None):
     return "axioms" if set(names) == set(sketch.nodes[node][2]) else "hints"
 
 
-def _job(a):
-    """Module-level so it pickles into a process pool."""
-    (problem, node, lhs, rhs, eqs, channel, direction, budget, outdir, binary,
-     reuse, ledger) = a
-    tag = f"{node}.{direction[2:]}"
+def _job(j):
+    """One prover invocation. Module-level so it pickles into a process pool.
+
+    Takes a dict, not a tuple. A positional job tuple silently half-applied a
+    signature change twice -- once reaching a live run as an unpickling error --
+    because adding a field means editing every construction site and missing one
+    is invisible until something executes.
+    """
+    problem, node = j["problem"], j["node"]
+    lhs, rhs, eqs = j["lhs"], j["rhs"], j["eqs"]
+    channel, direction, budget = j["channel"], j["direction"], j["budget"]
+    outdir, binary = j["outdir"], j.get("binary")
+    reuse, ledger = j.get("reuse", True), j.get("ledger")
+    # The standalone retry must not write over the parented run it is retrying:
+    # the parented artifact is the one a diagnosis needs, and it was being
+    # destroyed by the run that followed it.
+    tag = f"{node}{j.get('suffix', '')}.{direction[2:]}"
     kw, flags = {}, [*BASE_FLAGS, direction]
     if channel == "axioms":
         kw["extra_axioms"] = eqs
@@ -273,9 +285,12 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
             ch = channel_for(names, sketch, n, channel)
             lhs, rhs, _ = sketch.nodes[n]
             for d in directions:
-                jobs.append((problem, n, lhs, rhs, sketch.equations(names), ch,
-                             d, budgets.get(n, budget), str(outdir), binary,
-                             reuse, ledger))
+                jobs.append({"problem": problem, "node": n, "lhs": lhs,
+                             "rhs": rhs, "eqs": sketch.equations(names),
+                             "channel": ch, "direction": d,
+                             "budget": budgets.get(n, budget),
+                             "outdir": str(outdir), "binary": binary,
+                             "reuse": reuse, "ledger": ledger})
         if not jobs:
             continue
         res = _map(jobs, workers)
@@ -288,8 +303,12 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
                  and retry_standalone and sketch.nodes[n][2]]
         if retry:
             print(f"  retrying standalone: {retry}", flush=True)
-            rjobs = [(problem, n, *sketch.nodes[n][:2], [], "axioms", d,
-                      budgets.get(n, budget), str(outdir), binary, reuse, ledger)
+            rjobs = [{"problem": problem, "node": n,
+                      "lhs": sketch.nodes[n][0], "rhs": sketch.nodes[n][1],
+                      "eqs": [], "channel": "axioms", "direction": d,
+                      "budget": budgets.get(n, budget), "outdir": str(outdir),
+                      "binary": binary, "reuse": reuse, "ledger": ledger,
+                      "suffix": ".standalone"}
                      for n in retry for d in directions]
             rres = _map(rjobs, workers)
             for r in rres:
