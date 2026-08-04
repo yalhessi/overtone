@@ -162,6 +162,26 @@ def contains_axioms(target, library) -> tuple:
     return not missing, sorted(missing)
 
 
+def goal_set(path: Path) -> set:
+    """Alpha-normalised subtrees of the conjecture, for goal-relatedness.
+
+    The conjecture, not the axioms. Two problems can share every axiom and prove
+    unrelated things -- which is exactly why axiom similarity picked donors that
+    carried nothing for GRP, LAT and COL. Goal constants are normalised to
+    variables first, or a Skolemised conjecture shares no structure with a
+    lemma stating the same fact.
+    """
+    c = conjecture(path)
+    if c is None:
+        return set()
+    out = set()
+    for side in c:
+        t = safe_term(side)
+        if t is not None:
+            subtrees(alpha(t), out)
+    return out
+
+
 def axiom_sets(path: Path) -> list:
     """Per-axiom sets of alpha-normalised subtrees, for `terms.similarity`."""
     sets = []

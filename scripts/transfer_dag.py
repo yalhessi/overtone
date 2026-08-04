@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from overtone import config
+from overtone import config, problems
 from overtone.agent.dag import attempt, sketch_from_proof, verify
 from overtone.agent.donors import find_donor
 
@@ -43,6 +43,13 @@ def main():
     ap.add_argument("--domain", help="default: the target's 3-letter prefix")
     ap.add_argument("--donor", help="skip donor selection")
     ap.add_argument("--proofs-dir", type=Path)
+    ap.add_argument("--rank-by", choices=("axioms", "goal", "both"),
+                    default="axioms",
+                    help="axioms: is the donor's theory the target's theory. "
+                         "goal: is the donor's conjecture a fact the target "
+                         "needs -- what actually decided the RNG result. "
+                         "both: demand each, and the safer default for transfer, "
+                         "since goal alone will happily pick a weaker theory.")
     ap.add_argument("--node-budget", type=int, default=60)
     ap.add_argument("--final-budget", type=int, default=300)
     ap.add_argument("--top", type=int, default=8, help="deepest N survivors to supply")
@@ -56,12 +63,20 @@ def main():
     binary = config.twee_path(deterministic=True)
 
     sim, donor, path = find_donor(a.target, domain, exclude=(a.target,),
-                                  proofs_dir=a.proofs_dir)
+                                  proofs_dir=a.proofs_dir, rank_by=a.rank_by)
     if a.donor:
         donor = a.donor
     if not donor or not path:
         sys.exit(f"no donor with a saved proof for {a.target} in {domain}")
-    print(f"{a.target}: donor {donor} (similarity {sim:.3f})", flush=True)
+    print(f"{a.target}: donor {donor} ({a.rank_by} score {sim:.3f})", flush=True)
+    ok, missing = problems.contains_axioms(a.target, donor)
+    if not ok:
+        # Not fatal: every donor lemma is verified against the target's own
+        # axioms below, so anything unsound is dropped rather than assumed. Say
+        # so, because a weaker donor theory is exactly what goal ranking will
+        # cheerfully select.
+        print(f"  note: {a.target} lacks {len(missing)} of {donor}'s axioms; "
+              f"lemmas that do not re-verify here will be dropped", flush=True)
 
     sketch, d = sketch_from_proof(path.read_text(errors="replace"),
                                   max_nodes=a.max_nodes)

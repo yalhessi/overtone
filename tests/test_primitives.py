@@ -322,3 +322,31 @@ def test_system_prompt_carries_the_measured_rules():
     for phrase in ("DIAGNOSTIC", "never ask for more time", "WRONG PARENTS",
                    "restate(from_problem", "SIBLING"):
         assert phrase in SYSTEM
+
+
+# --------------------------------------------------------------- donor ranking
+
+def test_goal_similarity_is_exact_for_the_same_theorem():
+    """LAT141-1 states LAT138-1's conjecture verbatim over different axioms.
+    Axiom ranking picks LAT139-1, a different theorem whose lemmas all
+    transferred and none of which helped."""
+    from overtone.agent.donors import goal_similarity
+    assert goal_similarity("LAT138-1", "LAT141-1") == 1.0
+    assert goal_similarity("LAT138-1", "LAT139-1") < 1.0
+
+
+def test_ranking_modes_are_distinct_and_validated():
+    from overtone.agent.donors import RANKINGS, rank_donors
+    with pytest.raises(ValueError, match="rank_by"):
+        rank_donors("RNG029-5", "RNG", rank_by="vibes")
+    assert set(RANKINGS) == {"axioms", "goal", "both"}
+
+
+def test_goal_ranking_alone_can_pick_an_unsound_donor():
+    """Goal relatedness says nothing about soundness. For RNG029-5 it puts
+    RNG027-10 first -- a withdrawn problem whose axiom set is weaker -- so
+    containment still has to gate the transfer."""
+    from overtone.agent.donors import goal_similarity
+    assert goal_similarity("RNG029-5", "RNG027-10") > 0
+    ok, missing = problems.contains_axioms("RNG029-5", "RNG027-10")
+    assert not ok and missing, "the sound-looking goal match is not sound"
