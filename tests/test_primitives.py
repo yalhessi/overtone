@@ -732,3 +732,28 @@ def test_a_cancelled_run_is_never_recorded(tmp_path, monkeypatch):
               "budget": 60, "outdir": str(tmp_path), "binary": "/bin/true",
               "reuse": False, "ledger": str(led)})
     assert ledger.load(led) == {}, "a cancelled run must leave no record"
+
+
+def test_reuse_never_hands_on_a_stale_artifact_path(tmp_path, monkeypatch):
+    """A reused verdict is sound -- the key is over input bytes -- but a path
+    recorded before artifacts were identity-addressed can name a file a later
+    run overwrote. 6 of 42 rows in the real ledger point at files that are gone."""
+    from overtone import runner
+    from overtone.agent import dag, ledger
+
+    class R:
+        status, proved, cpu, wall, output = "Unsatisfiable", True, 1.0, 1.0, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: R())
+    led = tmp_path / "l.jsonl"
+    job = {"problem": "RNG029-5", "node": "n", "lhs": "f(X)", "rhs": "g(X)",
+           "eqs": [], "channel": "axioms", "direction": "--flatten-goal",
+           "budget": 60, "outdir": str(tmp_path), "binary": "/bin/true",
+           "reuse": True, "ledger": str(led)}
+    first = dag._job(job)
+    assert Path(first["output"]).exists()
+
+    Path(first["output"]).unlink()               # the artifact goes away
+    again = dag._job(job)
+    assert again["reused"] and again["proved"], again
+    assert again["output"] is None and again["artifact_missing"], again

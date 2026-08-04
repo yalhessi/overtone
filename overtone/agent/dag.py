@@ -222,7 +222,7 @@ def _job(j):
                     "cpu": prior.get("cpu") or 0.0,
                     "wall": prior.get("wall") or 0.0, "reused": True,
                     "key": key, "input": str(path),
-                    "output": prior.get("output")}
+                    **_prior_artifact(prior)}
     r = runner.run(path, flags, budget, problem=problem, binary=binary,
                    cancel=cancel)
     # Keep the output either way. A failed run is the more informative one: with
@@ -257,6 +257,22 @@ def _map(jobs, workers):
         return [_job(j) for j in jobs]
     with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
         return list(pool.map(_job, jobs))
+
+
+def _prior_artifact(prior):
+    """The recorded artifact for a reused row, only if it is still there.
+
+    A reused verdict is sound -- the ledger key is over the exact bytes handed to
+    twee. The recorded *path* is not: rows written before artifacts were
+    identity-addressed can name a file that a later run overwrote, which is the
+    confusion that made two different searches look identical. A missing or
+    unverifiable artifact is reported as absent rather than handed on as though
+    it were this run's own.
+    """
+    out = prior.get("output")
+    if out and Path(out).exists():
+        return {"output": out}
+    return {"output": None, "artifact_missing": True}
 
 
 def _direction_worker(j, direction, cancel, q):
@@ -535,7 +551,7 @@ def _attempt_job(j):
                     "cpu": prior.get("cpu") or 0.0,
                     "wall": prior.get("wall") or 0.0, "reused": True,
                     "key": key, "input": str(path),
-                    "output": prior.get("output")}
+                    **_prior_artifact(prior)}
     r = runner.run(path, flags, budget, problem=problem, binary=binary)
     out_path = Path(outdir) / f"{tag}.{'out' if r.proved else 'fail.out'}"
     out_path.write_text(r.output)

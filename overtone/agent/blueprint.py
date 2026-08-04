@@ -739,12 +739,14 @@ def details_from(sketch, outdir: Path, results):
                    key=lambda r: r["cpu"] if r.get("cpu") is not None else 0,
                    default=None)
         if best:
-            # The row carries its artifact path. Reconstructing a filename from
-            # node and direction is what let a retry's output be mistaken for the
-            # parented run's, and identity-addressed names cannot be guessed.
-            f = Path(best.get("output") or
-                     outdir / f"{name}.{best['direction'][2:]}.out")
-            if f.exists():
+            # The row carries its artifact path, and a reused row whose artifact
+            # is gone reports None rather than a guess. Reconstructing a filename
+            # from node and direction is what let a retry's output be mistaken
+            # for the parented run's, and identity-addressed names cannot be
+            # reconstructed at all -- so an absent path means no proof to show,
+            # not a path to invent.
+            f = Path(best["output"]) if best.get("output") else None
+            if f is not None and f.exists():
                 text = f.read_text(errors="replace")
                 proof = proofs.proof_section(text)
                 for line in text.splitlines():
