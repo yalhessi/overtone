@@ -21,6 +21,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# also this directory: these CLIs import a sibling script, which only
+# resolves implicitly when run directly, not when imported.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from overtone import config, problems
 from overtone.agent.pipeline import Budget, run_theory
 from prove import load_sketch

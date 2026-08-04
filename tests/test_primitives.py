@@ -223,3 +223,54 @@ def test_library_never_supplies_a_target_its_own_conjecture():
     assert [n for n in s.nodes if _states(s, n, "RNG027-8")] == ["right_moufang_a"]
     # A target the library does not state keeps everything.
     assert [n for n in s.nodes if _states(s, n, "RNG029-6")] == []
+
+
+# --------------------------------------------------------------- the loop
+
+def test_apply_is_pure_and_rejects_unknown_ops():
+    from overtone.agent.loop import apply
+    s = Sketch({"a": ("f(X)", "g(X)", []), "b": ("h(X)", "k(X)", ["a"])})
+    s2 = apply(s, {"op": "add_node", "name": "c", "lhs": "p", "rhs": "q",
+                   "parents": ["a"]})
+    assert sorted(s.nodes) == ["a", "b"], "the input sketch must not mutate"
+    assert sorted(s2.nodes) == ["a", "b", "c"]
+    with pytest.raises(ValueError, match="unknown op"):
+        apply(s, {"op": "delete_everything"})
+
+
+def test_remove_node_also_drops_the_edges_into_it():
+    from overtone.agent.loop import apply
+    s = Sketch({"a": ("f", "g", []), "b": ("h", "k", ["a"])})
+    s2 = apply(s, {"op": "remove_node", "name": "a"})
+    assert s2.nodes["b"][2] == [], "a dangling parent would fail validation"
+
+
+def test_restate_refuses_to_author_a_tptp_node_statement():
+    """Our left_moufang states ((xy)x)z where RNG028-7 states (x(yx))z. Under
+    this guard that drift cannot be expressed, only copied."""
+    from overtone.agent.loop import apply
+    s = Sketch({"n": ("f(X)", "g(X)", [])})
+    annot = {"n": {"tptp": ["RNG028-7"]}}
+    with pytest.raises(ValueError, match="from_problem"):
+        apply(s, {"op": "restate", "name": "n", "lhs": "a", "rhs": "b"},
+              annot=annot)
+    out = apply(s, {"op": "restate", "name": "n", "from_problem": "RNG028-7"},
+                annot=annot)
+    assert out.nodes["n"][0] != "f(X)", "the statement must come from the problem"
+
+
+def test_scripted_replay_reaches_the_committed_sketch():
+    """If the loop cannot reproduce a trajectory a human already walked, it will
+    not find a new one. Four edits, 25 nodes to 29."""
+    import importlib.util
+    from overtone.agent.loop import apply
+    spec = importlib.util.spec_from_file_location("_loop", "scripts/loop.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    target = mod.load_sketch(Path("scripts/rng_dag.py"))
+    s = mod.rewind(target)
+    assert len(s.nodes) == 25
+    for step in mod.SESSION_EDITS:
+        for act in step:
+            s = apply(s, act)
+    assert s.nodes == target.nodes
