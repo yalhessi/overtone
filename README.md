@@ -64,8 +64,16 @@ overtone/             this project's python package
   proofs.py           parsing twee output
   batch.py            resumable parallel sweeps + the results.jsonl format
   otter.py            Otter/EQP equations -> twee $hint terms
-  agent/              the sketch loop -- isolated and deletable; core never
-                      imports it (deletion contract in agent/__init__.py)
+  agent/              the sketch loop -- isolated; core never imports it
+    dag.py            a sketch as a DAG: verify in parent scope, attempt, cost,
+                      diff, sibling_diff, sketch_from_proof
+    pipeline.py       run_problem (one problem, one cost) and run_theory
+                      (a library once, a marginal cost per target)
+    loop.py           draft -> verify -> diagnose -> revise; typed state, a
+                      closed action set, ScriptedAgent
+    llm.py            Anthropic and OpenAI behind one action schema, stdlib-only
+    blueprint.py      SVG / DOT / interactive page with a trajectory scrubber
+    donors.py hints.py sketch.py    donor selection, the $hint channel, v0
 scripts/              thin CLIs over the package
   make_ueq_list.py    enumerate TPTP UEQ problems from the local distribution
   fetch_external.py   ETP, Robbins/Otter, Veroff, TSTP corpora
@@ -74,20 +82,66 @@ scripts/              thin CLIs over the package
   start_screen.sh     launch the screen in a detached tmux session
   variance.py         run-to-run reproducibility of twee timings
   rule_usefulness.py  derived-vs-used rule statistics over saved proofs
-  sketch_transfer.py  donor-proof hints for resisted problems      [agent]
-  ladder.py           run a sketch as a ladder of goals            [agent]
+  prove.py            Pipeline A: one problem, one honest cost        [agent]
+  theory.py           Pipeline B: a library, then a family            [agent]
+  loop.py             the revise loop; --dry-run needs no prover      [agent]
+  blueprint.py        render a sketch; --timeline scrubs its history  [agent]
+  transfer_dag.py     donor proof -> DAG -> target                    [agent]
+  rng_dag.py          the alternative-ring sketch (data, plus a CLI)  [agent]
+  sketch_transfer.py  donor-proof hints for resisted problems         [agent]
   build_instrumented_twee.sh   twee patched to count hint firings
-examples/sketch_loop/ tracked sketch bundles; also the regression harness
+tests/                pytest; every test is a bug that cost a real result
+examples/sketch_loop/ tracked sketch bundles; also a regression harness
 data/                 TPTP + external corpora (gitignored)
 logs/                 sweep output (gitignored; grows to GBs)
 runs/                 per-run twee directories (gitignored)
 docs/FINDINGS.md      measured results and pitfalls -- read before designing runs
 docs/EXPECTATIONS.md  what neural guidance can realistically deliver here
 docs/SKETCH_LOOP.md   design for transferring proof sketches into hints
+docs/SKETCHES.md      every sketch attempted, and how each was refined
+docs/PIPELINES.md     why per-problem and per-theory are separate pipelines
+docs/PLAN.md          direction: draft from informal sources, donors when strong
 docs/RUNS.md          live tracker for the screen; also its pre-registration
 ```
 
-Regenerating `examples/sketch_loop/` is the repo's regression test: it exercises
+## The two pipelines
+
+They answer different questions and their numbers are never added.
+
+```bash
+# A: one problem, one honest cost -- failures included, nothing shared
+./scripts/prove.py RNG029-5 --sketch scripts/rng_dag.py
+
+# B: derive a library once, then a family; two costs, containment asserted
+./scripts/theory.py --sketch scripts/rng_dag.py --check-only   # audit, no proving
+./scripts/theory.py --sketch scripts/rng_dag.py --targets data/lists/rng_moufang.txt
+```
+
+`--check-only` rejects a target whose axiom set is weaker than the library's.
+Skipping that check is how two results were claimed and then withdrawn.
+
+## The loop
+
+```bash
+./scripts/loop.py RNG029-5 --dry-run                 # replay, no prover
+./scripts/loop.py RNG029-5 --agent scripted
+./scripts/loop.py RNG029-5 --agent anthropic         # needs ANTHROPIC_API_KEY
+./scripts/loop.py RNG029-5 --agent openai --model ...
+```
+
+The scripted agent replays the four edits this project actually made and is
+asserted to reach the committed sketch exactly. Attach a model only after that
+passes: otherwise a failure is the model's or the harness's and you cannot tell.
+
+```bash
+pip install -e '.[dev]' && pytest        # 27 tests, seconds, no prover needed
+```
+
+Every test corresponds to an incident that cost a real result: the two withdrawn
+proofs, three stale-artifact reads, a truncation that hid a caveat, and matchers
+that silently matched nothing.
+
+Regenerating `examples/sketch_loop/` is a second regression test: it exercises
 env resolution, problem lookup, include handling, term parsing, similarity, hint
 adaptation and input building in one command.
 
