@@ -120,7 +120,11 @@ def main():
     ap.add_argument("problem")
     ap.add_argument("--sketch", type=Path,
                     default=config.ROOT / "scripts" / "rng_dag.py")
-    ap.add_argument("--agent", choices=("scripted",), default="scripted")
+    ap.add_argument("--agent", choices=("scripted", "anthropic", "openai"),
+                    default="scripted")
+    ap.add_argument("--model", help="default: claude-opus-5 for anthropic; "
+                                    "required (or $OPENAI_MODEL) for openai")
+    ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--no-rewind", action="store_true",
                     help="start from the sketch as it is, not as it was")
     ap.add_argument("--node-budget", type=int, default=60)
@@ -161,9 +165,18 @@ def main():
         return 0 if same else 1
 
     outdir = a.outdir or (config.LOGS / "loop" / a.problem)
+    outdir.mkdir(parents=True, exist_ok=True)
     budget = Budget(node=a.node_budget, slow=a.slow, final=a.final_budget,
                     workers=a.workers)
-    out = run_loop(a.problem, sketch, ScriptedAgent(SESSION_EDITS),
+    if a.agent == "scripted":
+        agent = ScriptedAgent(SESSION_EDITS)
+    else:
+        from overtone.agent.llm import LLMAgent
+        agent = LLMAgent(a.agent, a.model, temperature=a.temperature,
+                         transcript_dir=outdir)
+        print(f"agent: {a.agent} {agent.model}", flush=True)
+
+    out = run_loop(a.problem, sketch, agent,
                    outdir=outdir, budget=budget,
                    budgets=load_budgets(a.sketch),
                    binary=a.binary or config.twee_path(deterministic=True),

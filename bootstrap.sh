@@ -138,11 +138,35 @@ fi
 ok "$(find "$TPTP_ROOT/Problems" -name '*.p' | wc -l | tr -d ' ') problems"
 
 say "5/6  .env"
+# Only these three keys are managed here. Anything else in an existing .env --
+# API keys above all -- is carried over: this script is re-run routinely, and
+# silently destroying a secret is a bad way to find that out.
+MANAGED="TPTP_ROOT LOG_DIR TWEE_PATH"
+CARRIED=""
+if [[ -f "$ROOT/.env" ]]; then
+  while IFS= read -r line; do
+    key="${line%%=*}"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    case " $MANAGED " in *" $key "*) continue;; esac
+    CARRIED+="$line"$'\n'
+  done < "$ROOT/.env"
+fi
 cat > "$ROOT/.env" <<EOF
 TPTP_ROOT=$TPTP_ROOT
 LOG_DIR=$LOG_DIR
 TWEE_PATH=$TWEE_PATH
 EOF
+if [[ -n "$CARRIED" ]]; then
+  printf '%s' "$CARRIED" >> "$ROOT/.env"
+  ok "carried over $(printf '%s' "$CARRIED" | grep -c .) existing setting(s)"
+else
+  cat >> "$ROOT/.env" <<'EOF'
+# Optional, for ./scripts/loop.py --agent anthropic|openai:
+# ANTHROPIC_API_KEY=
+# OPENAI_API_KEY=
+# OPENAI_MODEL=
+EOF
+fi
 mkdir -p "$LOG_DIR"
 ok "wrote $ROOT/.env"
 

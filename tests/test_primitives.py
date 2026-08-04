@@ -274,3 +274,51 @@ def test_scripted_replay_reaches_the_committed_sketch():
         for act in step:
             s = apply(s, act)
     assert s.nodes == target.nodes
+
+
+# --------------------------------------------------------------- llm adapters
+
+def test_both_providers_expose_the_same_action_set():
+    from overtone.agent.llm import tool_schemas
+    from overtone.agent.loop import ACTIONS
+    a = {t["name"] for t in tool_schemas("anthropic")}
+    o = {t["function"]["name"] for t in tool_schemas("openai")}
+    assert a == o, "a model must see the same actions whichever provider it is"
+    assert a <= set(ACTIONS), "the schema must not offer an op apply() rejects"
+
+
+def test_parses_tool_calls_from_either_wire_format():
+    """The parse path is where a provider difference silently drops actions."""
+    from overtone.agent.llm import LLMAgent
+    an = LLMAgent.__new__(LLMAgent)
+    an.provider = "anthropic"
+    got = an._parse({"content": [
+        {"type": "text", "text": "ignore me"},
+        {"type": "tool_use", "name": "set_parents",
+         "input": {"name": "n", "parents": ["p"]}}]})
+    assert got == [{"op": "set_parents", "name": "n", "parents": ["p"]}]
+
+    oa = LLMAgent.__new__(LLMAgent)
+    oa.provider = "openai"
+    got = oa._parse({"choices": [{"message": {"tool_calls": [
+        {"function": {"name": "set_parents",
+                      "arguments": '{"name": "n", "parents": ["p"]}'}}]}}]})
+    assert got == [{"op": "set_parents", "name": "n", "parents": ["p"]}]
+
+
+def test_unknown_and_malformed_tool_calls_do_not_crash_the_loop():
+    from overtone.agent.llm import LLMAgent
+    a = LLMAgent.__new__(LLMAgent)
+    a.provider = "openai"
+    assert a._parse({"choices": [{"message": {"tool_calls": [
+        {"function": {"name": "drop_database", "arguments": "{}"}},
+        {"function": {"name": "add_node", "arguments": "not json"}}]}}]}) == []
+
+
+def test_system_prompt_carries_the_measured_rules():
+    """A model's priors here are wrong in specific, paid-for ways: it would add
+    lemmas when a node is slow and raise budgets instead of subdividing."""
+    from overtone.agent.llm import SYSTEM
+    for phrase in ("DIAGNOSTIC", "never ask for more time", "WRONG PARENTS",
+                   "restate(from_problem", "SIBLING"):
+        assert phrase in SYSTEM
