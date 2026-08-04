@@ -986,7 +986,9 @@ Four readings:
   precision: **5 exact logical parents -> axioms; 20 loosely related lemmas
   (19 supplied against a 179-lemma closure) -> hints.**
   `agent/ladder.py`'s unconditional `promote="hints"` default was set from the
-  MVA005-1 measurement alone and is wrong for the small-precise case.
+  MVA005-1 measurement alone and was wrong for the small-precise case; the rule
+  now lives in `agent/dag.channel_for`, which reads the sketch's structure
+  instead of applying one global default.
 - **Two separable causes.** `alt23` standalone needs 415.4s and `alt12` 592.5s,
   both above the 300s verification budget used overnight. So the "6 of 19 failed"
   result was partly under-budgeting and partly scope; the `none` control arms are

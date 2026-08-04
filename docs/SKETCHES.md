@@ -355,8 +355,8 @@ The prediction held at ~3000–4000x. Three consequences beyond it:
    the ancestor closure. That is the queued context-scope question, answered.
 2. **Axioms beat hints here, inverting MVA005-1.** The promotion rule is
    size-and-precision dependent: a small exact parent set wants axioms, a large
-   approximate set wants hints. `agent/ladder.py`'s unconditional
-   `promote="hints"` is wrong for the first case.
+   approximate set wants hints. This is now `agent/dag.channel_for`, which
+   decides from the sketch's edges rather than from a global default.
 3. **Budget was a second, separable cause** — both lemmas need 415–593s
    standalone, above the 300s used overnight. The `none` control arms are the
    only reason this is not misattributed entirely to scope.
@@ -478,9 +478,9 @@ None of these has been run here at any budget. That is the gap.
 ## Order to run
 
 1. ~~R1~~ **done** — the classical decomposition is right; scope was the fault.
-   Follow-on code change, not yet made: `agent/ladder.py` needs a
-   `verify="parents"` scope and a promotion rule keyed on set size, since its
-   current unconditional `promote="hints"` is wrong for small exact parent sets.
+   The follow-on code change is also done: `agent/dag.py` verifies in
+   `scope="parents"` and `channel_for` picks the channel from the sketch's edges.
+   `agent/ladder.py` was deleted (see FINDINGS for the commit it last lived at).
 2. R2 absorption rungs, 300s — cheap, and expected to verify.
 3. R3 Teichmüller, 300s — expected to verify; it needs no alternativity.
 4. Only then re-attempt the targets, in DAG order, with the enlarged library

@@ -267,12 +267,27 @@ selection makes the result unfalsifiable.
 
 ## Status
 
-`overtone/agent/sketch.py` implements **v0: one iteration, no LLM.** The
-sketch is the proof of the most axiom-similar solved sibling, and the hints are
-that proof's intermediate rewrite-chain terms — Twitch's extraction, applied to
-the resisted set. It exists to exercise the bridge, executor and evaluation
-protocol on real targets before any model is added, and to establish what
-donor-proof transfer alone achieves.
+This document is the **design** and is kept for its analysis of the hint channel,
+which still holds: waypoints and accelerants do different jobs, twee's hint cost
+is inverted with respect to informativeness, and nothing steers the search
+*toward* a waypoint. What changed is the conclusion drawn from it.
 
-Examples in `examples/sketch_loop/`, deliberately disjoint from the 19 problems
-Twitch already solved (`data/lists/twitch19.txt`).
+The hint channel is no longer the mechanism. A sketch is a DAG whose nodes are
+verified with their **direct parents supplied as axioms** — worth ~3000x over
+standalone verification, where the same lemmas as hints were worth nothing and
+234 mined lemmas in the hint channel flipped no target at all. See
+`docs/SKETCHES.md` for every sketch attempted and `docs/FINDINGS.md` for the
+measurements.
+
+Current implementation:
+
+- `agent/dag.py` — the DAG, topological verification, the final attempt.
+- `agent/pipeline.py` — per-problem and per-theory runs, separately accounted.
+- `agent/loop.py` — draft → verify → diagnose → revise, with a scripted agent.
+- `agent/llm.py` — Anthropic and OpenAI behind one action schema.
+- `agent/sketch.py` — v0 donor-chain hints, retained for the ablation whose
+  result this document analyses, and for the tracked bundles in
+  `examples/sketch_loop/` (disjoint from `data/lists/twitch19.txt`).
+
+The drafting half is still unproven: everything measured so far was drafted by a
+human or mined from a donor proof. `docs/PLAN.md` sets the direction.

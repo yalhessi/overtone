@@ -21,14 +21,16 @@ never imported by core, so `import overtone` must not pull it in.
 """
 from overtone.config import (DATA, LISTS, LOGS, ROOT, RUNS, env, tptp_root,
                              twee_path)
-from overtone.problems import (axiom_sets, equations, problem_path,
-                               problem_symbols, ueq_scan)
+from overtone.problems import (axiom_sets, conjecture, contains_axioms,
+                               equations, problem_path, problem_symbols,
+                               ueq_scan)
 from overtone.proofs import (PROVED, SATURATED, chain_terms, derived_rules,
                              hint_firings, lemmas, parse_status,
-                             used_lemma_refs)
+                             proof_section, used_lemma_refs)
 from overtone.runner import (ALWAYS, BASE_FLAGS, Twee, TweeResult, as_cnf_hint,
                              run, skolemise, summarise, write_problem)
-from overtone.terms import (alpha, alpha_key, safe_term, similarity, symbols,
+from overtone.terms import (alpha, alpha_key, eq_key, safe_term, similarity,
+                            symbols,
                             term, unparse)
 
 __all__ = [

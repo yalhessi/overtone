@@ -36,7 +36,6 @@ import json
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -160,13 +159,7 @@ TIER_BUDGET = {"right_moufang": 400, "left_moufang": 300,
 SLOW = 30          # over this, a node is suspect even when it proves
 
 
-def _binary():
-    hits = [p for p in config.ROOT.glob(
-        "build/twee-deterministic/dist-newstyle/**/twee")
-        if p.is_file() and os.access(p, os.X_OK)]
-    if not hits:
-        raise RuntimeError("no deterministic twee; see the build script")
-    return str(max(hits, key=lambda p: p.stat().st_mtime))
+
 
 
 SKETCH = Sketch(DAG)
@@ -196,7 +189,7 @@ def main():
     t0 = time.time()
     out = verify("RNG029-5", SKETCH, outdir=OUT, budget=DEFAULT_BUDGET,
                  budgets=TIER_BUDGET, scope=a.scope, channel=a.channel,
-                 workers=a.workers, binary=_binary(), known=known,
+                 workers=a.workers, binary=config.twee_path(deterministic=True), known=known,
                  prior_results=prior_results,
                  retry_standalone=not a.no_retry)
     print(f"\n{out['n_proved']}/{out['n_nodes']} nodes proved")

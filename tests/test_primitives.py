@@ -350,3 +350,18 @@ def test_goal_ranking_alone_can_pick_an_unsound_donor():
     assert goal_similarity("RNG029-5", "RNG027-10") > 0
     ok, missing = problems.contains_axioms("RNG029-5", "RNG027-10")
     assert not ok and missing, "the sound-looking goal match is not sound"
+
+
+# --------------------------------------------------------------- CLI hygiene
+
+def test_every_script_has_a_safe_help():
+    """`open_rng_baseline.py --help` started a 16-job, 4000-second sweep, because
+    the script had no argument parsing at all. A CLI whose only mode is to burn
+    CPU-hours must be able to say so without doing it."""
+    import subprocess
+    import sys
+    for script in sorted(Path("scripts").glob("*.py")):
+        r = subprocess.run([sys.executable, str(script), "--help"],
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, f"{script.name} --help failed: {r.stderr[:200]}"
+        assert "usage:" in r.stdout.lower(), f"{script.name} has no argument parser"

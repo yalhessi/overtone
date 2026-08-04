@@ -27,6 +27,7 @@ A `Satisfiable` result would be as publishable as a proof -- it would settle the
 problem the other way -- so both outcomes are recorded and the full output kept.
 Any non-timeout result here needs independent verification before it is claimed.
 """
+import argparse
 import json
 import os
 import sys
@@ -46,23 +47,14 @@ PROBLEMS = ["RNG010-5", "RNG010-6", "RNG010-7",
             "RNG036-7"]
 
 
-def _binary():
-    hits = [p for p in config.ROOT.glob(
-        "build/twee-deterministic/dist-newstyle/**/twee")
-        if p.is_file() and os.access(p, os.X_OK)]
-    if not hits:
-        raise RuntimeError("no deterministic twee; see the build script")
-    return str(max(hits, key=lambda p: p.stat().st_mtime))
-
-
-BIN = _binary()
+BIN = config.twee_path(deterministic=True)
 
 
 def job(a):
-    prob, direc = a
+    prob, direc, budget = a
     tag = f"{prob}.{direc[2:]}"
     p = runner.write_problem(prob, OUT / f"{tag}.p")
-    r = runner.run(p, [*runner.BASE_FLAGS, direc], BUDGET, problem=prob,
+    r = runner.run(p, [*runner.BASE_FLAGS, direc], budget, problem=prob,
                    binary=BIN)
     if r.status != "Timeout":
         (OUT / f"{tag}.out").write_text(r.output)
@@ -71,18 +63,37 @@ def job(a):
 
 
 def main():
+    # This script had no argument parsing, so any invocation -- `--help`
+    # included -- immediately started a 16-job, 4000-second sweep. A script whose
+    # only mode is "burn a CPU-hour" should at least say so first.
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--budget", type=int, default=BUDGET)
+    ap.add_argument("--workers", type=int, default=len(PROBLEMS) * len(DIRS))
+    ap.add_argument("--problems", nargs="*", default=PROBLEMS)
+    ap.add_argument("--list", action="store_true",
+                    help="print the targets and exit without proving")
+    a = ap.parse_args()
+    if a.list:
+        for p in a.problems:
+            print(f"  {p}")
+        print(f"\n  {len(a.problems)} problems x {len(DIRS)} directions "
+              f"at {a.budget}s = up to "
+              f"{len(a.problems) * len(DIRS) * a.budget / 3600:.1f} CPU-hours")
+        return
+
     OUT.mkdir(parents=True, exist_ok=True)
-    jobs = [(p, d) for p in PROBLEMS for d in DIRS]
-    print(f"{len(jobs)} jobs, {BUDGET}s, deterministic build, no hints",
+    jobs = [(p, d, a.budget) for p in a.problems for d in DIRS]
+    print(f"{len(jobs)} jobs, {a.budget}s, deterministic build, no hints",
           flush=True)
     t0 = time.time()
-    with ProcessPoolExecutor(max_workers=len(jobs)) as pool:
+    with ProcessPoolExecutor(max_workers=min(len(jobs), a.workers)) as pool:
         res = list(pool.map(job, jobs))
     for r in sorted(res, key=lambda x: (x["problem"], x["direction"])):
         print(f"  {r['problem']:<10} {r['direction']:<18} "
               f"{r['result']:<14} {r['cpu']:>8.1f}s", flush=True)
     settled = sorted({r["problem"] for r in res if r["result"] != "Timeout"})
-    print(f"\n  NON-TIMEOUT: {len(settled)}/{len(PROBLEMS)}  {settled}",
+    print(f"\n  NON-TIMEOUT: {len(settled)}/{len(a.problems)}  {settled}",
           flush=True)
     if settled:
         print("  -> verify independently before claiming anything", flush=True)

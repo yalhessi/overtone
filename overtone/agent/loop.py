@@ -22,7 +22,7 @@ problem. Under this rule that drift is unrepresentable rather than merely
 detectable, which is the difference between a guard and a hope.
 """
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
