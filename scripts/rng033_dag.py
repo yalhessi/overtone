@@ -39,6 +39,37 @@ stated expectation.
                                          through the commutator. Needs
                                          assoc_add_3 and comm_def_add; without
                                          comm_def_add I expect it to fail.
+ITERATION 2 predictions (after the goal failed at 600s with parents and
+standalone). The refinement is driven by mining 6,777 universal rules out of the
+eight failed runs, not by guessing:
+
+  teich_isolated         <5s      Teichmuller solved for the multiplied term.
+                                  Follows from teichmuller by rearrangement, so
+                                  it should be near-free; if it is slow, my
+                                  rearrangement is wrong.
+  assoc_comm_1           <10s     mirror of assoc_comm_3, which took 0.0s.
+  assoc_prod_comm_a/b    <30s     mined verbatim from the failed runs, so twee
+                                  has already derived them -- they are theorems
+                                  and must verify. If either FAILS, the mining is
+                                  producing rules that do not hold standalone,
+                                  which would invalidate the whole approach and
+                                  is the most valuable thing this run could tell
+                                  me.
+  rng033_goal            unknown  I will not put a number on it. The evidence
+                                  says the search never builds the goal's RHS
+                                  shape; these four nodes are an attempt to make
+                                  it available. Whether that is sufficient is
+                                  exactly what is unknown.
+
+ITERATION 1 predictions and outcomes -- 4 of 5 correct, and the miss was the one
+flagged as least confident:
+
+  library tiers 1-5      <=2s     ACTUAL 0.0-1.8s      correct
+  teichmuller            ~3s      ACTUAL 3.6s          correct
+  comm_def_add           <1s      ACTUAL 0.0s          correct
+  assoc_comm_3           <10s     ACTUAL 0.0s          correct
+  rng033_goal            30-300s  ACTUAL unproven      WRONG
+
   rng033_goal            30-300s         LEAST CONFIDENT. This is the real test.
                                          My hand derivation of the step from
                                          Teichmuller to the goal did not close --
@@ -80,18 +111,61 @@ DAG["assoc_comm_3"] = (
     f"add({A}(X,Y,{M}(W,Z)),{I}({A}(X,Y,{M}(Z,W))))",
     ["assoc_add_3", "comm_def_add", "neg_add", "neg_mult_r"])
 
+# -- iteration 2: refinement driven by the failed search ---------------------
+# 6,777 universal rules were mined from the 8 failed runs. Of them, 699 build the
+# goal's LHS shape (associator of a product) and 629 the commutator term -- but
+# only 86 contain an associator *multiplied* by anything, which is the goal's
+# entire RHS, and on inspection those are sign shuffling and degenerate cases.
+# The search never constructs the right-hand side.
+#
+# The mechanism: teichmuller is the only source of `x(y,z,w)` and `(x,y,z)w`, and
+# it carries them on its heavier side, so twee orients it to eliminate exactly
+# what the goal needs. That is the assoc_def_add fault -- an identity oriented
+# against the direction the sketch requires -- which was worth 18x, and which
+# assoc_def_246/247 fixed for Moufang.
+
+# Teichmuller solved for the multiplied term, so the goal's RHS shape has a rule
+# that yields it rather than only rules that consume it.
+DAG["teich_isolated"] = (
+    f"{M}({A}(X,Y,Z),W)",
+    f"add(add({A}({M}(X,Y),Z,W),{A}(X,Y,{M}(Z,W))),"
+    f"{I}(add({A}(X,{M}(Y,Z),W),{M}(X,{A}(Y,Z,W)))))",
+    ["teichmuller", "neg_add", "neg_mult_r"])
+
+# Trilinearity in argument 1 through the commutator -- the mirror of
+# assoc_comm_3, which verified at 0.0s. The goal has a product in argument 1 and
+# a commutator in argument 3, so both directions are plausibly needed.
+DAG["assoc_comm_1"] = (
+    f"add({A}({M}(X,Y),Z,W),{A}({C}(X,Y),Z,W))",
+    f"{A}({M}(Y,X),Z,W)",
+    ["assoc_add_1", "comm_def_add", "neg_add", "neg_mult_r"])
+
+# Mined verbatim from the failed runs: twee derived these, so they are theorems
+# and will verify by construction. They bridge the goal's two LHS terms, relating
+# an associator of a product to an associator of a commutator.
+DAG["assoc_prod_comm_a"] = (
+    f"{A}({M}(X,Y),Z,{M}(Y,X))", f"{A}({C}(Y,X),Z,{M}(X,Y))",
+    ["assoc_comm_1", "assoc_cyclic", "alt12_additive"])
+DAG["assoc_prod_comm_b"] = (
+    f"{A}({M}(X,Y),{M}(Y,X),Z)", f"{A}({C}(X,Y),Z,{M}(X,Y))",
+    ["assoc_comm_1", "assoc_cyclic", "alt23_additive"])
+
 # -- the target --------------------------------------------------------------
 DAG["rng033_goal"] = (
     f"add({A}({M}(X,Y),Z,W),{A}(X,Y,{C}(Z,W)))",
     f"add({M}(X,{A}(Y,Z,W)),{M}({A}(X,Z,W),Y))",
-    ["teichmuller", "assoc_comm_3", "assoc_cyclic", "alt12_additive",
-     "alt23_additive", "flexible"])
+    ["teichmuller", "teich_isolated", "assoc_comm_3", "assoc_comm_1",
+     "assoc_prod_comm_a", "assoc_prod_comm_b", "assoc_cyclic",
+     "alt12_additive", "alt23_additive", "flexible"])
 
 # Budget is a diagnostic. right_moufang keeps a large budget only because the
 # library declares one; here it should be free, and a large number would itself
 # be the finding.
 TIER_BUDGET = dict(_rng.TIER_BUDGET)
-TIER_BUDGET.update({"rng033_goal": 300, "assoc_comm_3": 60, "comm_def_add": 60})
+TIER_BUDGET.update({"rng033_goal": 900, "assoc_comm_3": 60,
+                    "comm_def_add": 60, "teich_isolated": 120,
+                    "assoc_comm_1": 120, "assoc_prod_comm_a": 120,
+                    "assoc_prod_comm_b": 120})
 
 TARGETS = ["RNG033-8"]
 
