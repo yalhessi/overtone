@@ -95,6 +95,45 @@ def problem_symbols(path: Path) -> set:
     return syms
 
 
+def conjecture(path: Path, as_variables: bool = True):
+    """(lhs, rhs) of the problem's negated conjecture, or None.
+
+    Needed to tell whether a lemma library already contains the thing it is
+    being used to prove, and to copy a statement from a problem rather than
+    author one -- which is how the `left_moufang` encoding drifted.
+
+    TPTP states these with the goal's variables already Skolemised to lowercase
+    constants (`cx`, `x`), while a sketch node states the same fact with
+    variables. `as_variables` renames those constants back so the two compare
+    equal under `terms.eq_key`; without it every comparison silently finds
+    nothing, which is how the same mistake was first made when matching nodes
+    to TPTP problems.
+    """
+    text = read_with_includes(path)
+    for role, body in cnf_clauses(text):
+        if role != "negated_conjecture" or "!=" not in body:
+            continue
+        body = re.sub(r"\s+", "", body)
+        while body.startswith("(") and body.endswith(")"):
+            body = body[1:-1]
+        lhs, rhs = body.split("!=", 1)
+        if not as_variables:
+            return lhs, rhs
+        # A lowercase atom is a goal constant unless it is applied to arguments
+        # somewhere, or occurs as a nullary constant in the axioms.
+        applied = set(re.findall(r"([a-z_][A-Za-z0-9_]*)\(", text))
+        axioms = "\n".join(equations(path))
+        nullary = set(re.findall(r"\b([a-z_][A-Za-z0-9_]*)\b(?!\()", axioms))
+
+        def norm(side):
+            return re.sub(r"\b[a-z_][A-Za-z0-9_]*\b(?!\()",
+                          lambda m: (m.group(0) if m.group(0) in applied
+                                     or m.group(0) in nullary
+                                     else "V" + m.group(0).upper()), side)
+        return norm(lhs), norm(rhs)
+    return None
+
+
 def axiom_equations(path: Path) -> set:
     """`terms.eq_key` of every axiom, for comparing two problems' theories."""
     keys = set()

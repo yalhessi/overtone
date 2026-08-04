@@ -27,6 +27,7 @@ from pathlib import Path
 
 from overtone import batch, problems
 from overtone.agent.dag import DIRECTIONS, Sketch, attempt, cost, verify
+from overtone.terms import eq_key
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,15 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
     return out
 
 
+def _states(sketch: Sketch, node, target):
+    """Is this node the target's own conjecture?"""
+    c = problems.conjecture(problems.problem_path(target))
+    if c is None:
+        return False
+    lhs, rhs, _ = sketch.nodes[node]
+    return eq_key(lhs, rhs) == eq_key(*c)
+
+
 def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
                budgets=None, binary=None, directions=DIRECTIONS,
                on_missing="skip"):
@@ -107,7 +117,6 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
                  budgets=budgets, directions=directions, workers=budget.workers,
                  binary=binary)
     proved = [n for n in sketch.nodes if n in lib["proved"]]
-    eqs = sketch.equations(proved)
 
     rows = {}
     for t in targets:
@@ -119,16 +128,27 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
                                f"these lemmas are assumptions there, not lemmas")}
             print(f"  {t:<12} SKIPPED -- missing {len(missing)} axioms", flush=True)
             continue
-        a = attempt(t, eqs, outdir=outdir / "targets", budget=budget.final,
-                    binary=binary, directions=directions, label=t)
+        # A library must not contain the theorem it is being used to prove.
+        # This sketch has nodes that *are* target conjectures -- middle_moufang
+        # is RNG029-5 -- and handing a problem its own statement proves it in
+        # 0.0s while saying nothing. It is sound (the node was verified from the
+        # host's axioms) and it is vacuous, so the marginal cost would be a
+        # fiction. Dropping it puts the work back where it happened.
+        supply = [n for n in proved if not _states(sketch, n, t)]
+        dropped = [n for n in proved if n not in supply]
+        a = attempt(t, sketch.equations(supply), outdir=outdir / "targets",
+                    budget=budget.final, binary=binary, directions=directions,
+                    label=t)
         best = min((r for r in a if r["proved"]), key=lambda r: r["cpu"],
                    default=None)
         rows[t] = {"contained": True, "missing_axioms": [],
                    "proved": bool(best), "marginal": cost(a),
+                   "n_supplied": len(supply), "excluded_as_target": dropped,
                    "cpu": best["cpu"] if best else None,
                    "direction": best["direction"] if best else None}
         mark = f"PROVED {best['cpu']:.1f}s" if best else "unproved"
-        print(f"  {t:<12} {mark}", flush=True)
+        drop = f"  (excluding {', '.join(dropped)})" if dropped else ""
+        print(f"  {t:<12} {mark}{drop}", flush=True)
 
     out = {"pipeline": "theory", "host": host,
            "library": {"cost": cost(lib["results"]), "n_nodes": lib["n_nodes"],

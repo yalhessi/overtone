@@ -195,3 +195,31 @@ def test_to_html_timeline_embeds_every_step():
         {"label": "two", "sketch": b, "results": (), "note": "added q"}])
     assert html.count('<div class="step"') == 2
     assert 'class="stepchip"' in html and "renderDiff" in html
+
+
+# --------------------------------------------------------------- self-proof guard
+
+def test_conjecture_normalises_skolem_constants():
+    """TPTP states goals with lowercase constants where a sketch uses variables.
+    Comparing them raw finds nothing -- silently -- which is how the TPTP matcher
+    first returned 0 of 29 hits."""
+    lhs, rhs = problems.conjecture(problems.problem_path("RNG025-5"))
+    assert "VX" in lhs or "VY" in lhs or "VZ" in lhs, "goal constants must become variables"
+    raw = problems.conjecture(problems.problem_path("RNG025-5"), as_variables=False)
+    assert eq_key(lhs, rhs) != eq_key(*raw)
+
+
+def test_library_never_supplies_a_target_its_own_conjecture():
+    """The sketch contains nodes that ARE target conjectures -- middle_moufang is
+    RNG029-5. Handing a problem its own statement proves it in 0.0s and says
+    nothing; the work belongs to the library phase."""
+    import importlib.util
+    from overtone.agent.pipeline import _states
+    spec = importlib.util.spec_from_file_location("_rd", "scripts/rng_dag.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    s = mod.SKETCH
+    assert [n for n in s.nodes if _states(s, n, "RNG029-5")] == ["middle_moufang"]
+    assert [n for n in s.nodes if _states(s, n, "RNG027-8")] == ["right_moufang_a"]
+    # A target the library does not state keeps everything.
+    assert [n for n in s.nodes if _states(s, n, "RNG029-6")] == []
