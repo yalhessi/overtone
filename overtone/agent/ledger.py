@@ -58,6 +58,18 @@ def key_for(input_path, flags, binary, *, tptp_root=None) -> str:
     return h.hexdigest()
 
 
+def short(key: str, n: int = 10) -> str:
+    """A filename-safe prefix of a run key.
+
+    Artifacts are named with it so that two invocations differing in ANY way the
+    key captures -- supplied equations, their order, flags, build -- land in
+    different files. Naming artifacts by node and direction alone let a
+    standalone retry overwrite the parented run it was retrying, and a later
+    comparison of two searches silently compared two copies of the same one.
+    """
+    return key[:n]
+
+
 def path(ledger=None) -> Path:
     return Path(ledger) if ledger else (config.LOGS / LEDGER)
 
@@ -111,7 +123,7 @@ def record(key, row, budget, ledger=None):
     rec = {"key": key, "budget": budget,
            **{k: row.get(k) for k in ("node", "direction", "channel",
                                       "n_support", "result", "proved", "cpu",
-                                      "wall")}}
+                                      "wall", "input", "output")}}
     with open(p, "a") as fh:
         fh.write(json.dumps(rec) + "\n")
     return rec

@@ -169,10 +169,14 @@ def _job(j):
     channel, direction, budget = j["channel"], j["direction"], j["budget"]
     outdir, binary = j["outdir"], j.get("binary")
     reuse, ledger = j.get("reuse", True), j.get("ledger")
-    # The standalone retry must not write over the parented run it is retrying:
-    # the parented artifact is the one a diagnosis needs, and it was being
-    # destroyed by the run that followed it.
-    tag = f"{node}{j.get('suffix', '')}.{direction[2:]}"
+    # Artifacts are addressed by the run's own identity, computed below, so two
+    # invocations differing in anything that identity captures -- which equations
+    # were supplied, in what order, under which flags and build -- cannot land in
+    # the same file. Naming by node and direction alone let a standalone retry
+    # destroy the parented run it was retrying, in both RNG033-8 iterations, and
+    # made a later comparison of the two searches silently compare two copies of
+    # the same one.
+    stem = f"{node}.{direction[2:]}"
     kw, flags = {}, [*BASE_FLAGS, direction]
     if channel == "axioms":
         kw["extra_axioms"] = eqs
@@ -183,13 +187,16 @@ def _job(j):
         kw["hints"] = terms
         if terms:
             flags = [*BASE_FLAGS, *hintlib.HINT_FLAGS, direction]
-    path = runner.write_problem(problem, Path(outdir) / f"{tag}.p",
-                                goal=(lhs, rhs), goal_prefix="sk_dag_",
-                                axiom_prefix="parent", **kw)
-    # Ask the ledger before asking the prover. Identity is the bytes of `path`
-    # plus the exact invocation, so a reordered axiom list -- which twee would
-    # search differently -- is never mistaken for a repeat.
-    key = ledgerlib.key_for(path, flags, binary)
+    # Write first, key the bytes, then name the artifact by that key: identity
+    # is over what was actually handed to twee and cannot drift from the
+    # arguments that produced it.
+    tmp = Path(outdir) / f".{stem}.building.p"
+    runner.write_problem(problem, tmp, goal=(lhs, rhs), goal_prefix="sk_dag_",
+                         axiom_prefix="parent", **kw)
+    key = ledgerlib.key_for(tmp, flags, binary)
+    tag = f"{stem}.{ledgerlib.short(key)}"
+    path = Path(outdir) / f"{tag}.p"
+    tmp.replace(path)
     if reuse:
         prior = ledgerlib.lookup(key, budget, ledger=ledger)
         if prior is not None:
@@ -197,20 +204,23 @@ def _job(j):
                     "n_support": len(eqs), "result": prior.get("result"),
                     "proved": bool(prior.get("proved")),
                     "cpu": prior.get("cpu") or 0.0,
-                    "wall": prior.get("wall") or 0.0, "reused": True}
+                    "wall": prior.get("wall") or 0.0, "reused": True,
+                    "key": key, "input": str(path),
+                    "output": prior.get("output")}
     r = runner.run(path, flags, budget, problem=problem, binary=binary)
     # Keep the output either way. A failed run is the more informative one: with
     # --all-lemmas it still lists everything derived before the budget ran out,
     # and those are the candidate missing nodes. `assoc_def_add` -- worth 18x on
     # assoc_add_1 -- was read off exactly this kind of listing.
-    suffix = "out" if r.proved else "fail.out"
-    (Path(outdir) / f"{tag}.{suffix}").write_text(r.output)
+    out_path = Path(outdir) / f"{tag}.{'out' if r.proved else 'fail.out'}"
+    out_path.write_text(r.output)
     # Full precision, not 1 dp: these rows are summed over hundreds of runs to
     # report what a problem cost, and rounding first accumulates error. Readers
     # that display a time format it themselves.
     row = {"node": node, "direction": direction, "channel": channel,
            "n_support": len(eqs), "result": r.status, "proved": r.proved,
-           "cpu": r.cpu, "wall": r.wall}
+           "cpu": r.cpu, "wall": r.wall, "key": key,
+           "input": str(path), "output": str(out_path)}
     ledgerlib.record(key, row, budget, ledger=ledger)
     return row
 
@@ -389,19 +399,30 @@ def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    jobs = [(problem, direc, tuple(equations), budget, str(outdir), binary,
-             label, reuse, ledger) for direc in directions]
+    jobs = [{"problem": problem, "direction": direc, "eqs": tuple(equations),
+             "budget": budget, "outdir": str(outdir), "binary": binary,
+             "label": label, "reuse": reuse, "ledger": ledger}
+            for direc in directions]
     with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
         return list(pool.map(_attempt_job, jobs))
 
 
-def _attempt_job(a):
-    problem, direction, eqs, budget, outdir, binary, label, reuse, ledger = a
-    tag = f"{label}.{direction[2:]}"
-    path = runner.write_problem(problem, Path(outdir) / f"{tag}.p",
-                                extra_axioms=list(eqs), axiom_prefix="lemma")
+def _attempt_job(j):
+    """The final attempt, on the problem's own file. Dict-shaped, like `_job`."""
+    problem, direction, eqs = j["problem"], j["direction"], j["eqs"]
+    budget, outdir, binary = j["budget"], j["outdir"], j.get("binary")
+    label, reuse, ledger = j["label"], j.get("reuse", True), j.get("ledger")
+    stem = f"{label}.{direction[2:]}"
     flags = [*BASE_FLAGS, direction]
-    key = ledgerlib.key_for(path, flags, binary)
+    # Same identity-addressed naming as `_job`: an attempt with 18 lemmas and one
+    # with 22 are different questions and must not share a filename.
+    tmp = Path(outdir) / f".{stem}.building.p"
+    runner.write_problem(problem, tmp, extra_axioms=list(eqs),
+                         axiom_prefix="lemma")
+    key = ledgerlib.key_for(tmp, flags, binary)
+    tag = f"{stem}.{ledgerlib.short(key)}"
+    path = Path(outdir) / f"{tag}.p"
+    tmp.replace(path)
     if reuse:
         prior = ledgerlib.lookup(key, budget, ledger=ledger)
         if prior is not None:
@@ -409,13 +430,16 @@ def _attempt_job(a):
                     "n_support": len(eqs), "result": prior.get("result"),
                     "proved": bool(prior.get("proved")),
                     "cpu": prior.get("cpu") or 0.0,
-                    "wall": prior.get("wall") or 0.0, "reused": True}
+                    "wall": prior.get("wall") or 0.0, "reused": True,
+                    "key": key, "input": str(path),
+                    "output": prior.get("output")}
     r = runner.run(path, flags, budget, problem=problem, binary=binary)
-    suffix = "out" if r.proved else "fail.out"
-    (Path(outdir) / f"{tag}.{suffix}").write_text(r.output)
+    out_path = Path(outdir) / f"{tag}.{'out' if r.proved else 'fail.out'}"
+    out_path.write_text(r.output)
     row = {"node": label, "direction": direction, "channel": "axioms",
            "n_support": len(eqs), "result": r.status, "proved": r.proved,
-           "cpu": r.cpu, "wall": r.wall}
+           "cpu": r.cpu, "wall": r.wall, "key": key,
+           "input": str(path), "output": str(out_path)}
     ledgerlib.record(key, row, budget, ledger=ledger)
     return row
 

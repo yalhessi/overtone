@@ -739,7 +739,11 @@ def details_from(sketch, outdir: Path, results):
                    key=lambda r: r["cpu"] if r.get("cpu") is not None else 0,
                    default=None)
         if best:
-            f = outdir / f"{name}.{best['direction'][2:]}.out"
+            # The row carries its artifact path. Reconstructing a filename from
+            # node and direction is what let a retry's output be mistaken for the
+            # parented run's, and identity-addressed names cannot be guessed.
+            f = Path(best.get("output") or
+                     outdir / f"{name}.{best['direction'][2:]}.out")
             if f.exists():
                 text = f.read_text(errors="replace")
                 proof = proofs.proof_section(text)

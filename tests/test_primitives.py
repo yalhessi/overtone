@@ -540,8 +540,11 @@ def test_standalone_retry_does_not_overwrite_the_parented_run(tmp_path, monkeypa
     s = Sketch({"p": ("a", "b", []), "n": ("f(X)", "g(X)", ["p"])})
     dag.verify("RNG029-5", s, outdir=tmp_path, budget=1, workers=1,
                ledger=tmp_path / "l.jsonl")
-    names = {f.name for f in tmp_path.glob("n.*")}
-    assert any("standalone" in x for x in names), names
-    assert any(x.startswith("n.flatten") or x.startswith("n.no-flatten")
-               for x in names if "standalone" not in x), \
-        "the parented run's artifact must survive the retry"
+    inputs = sorted(tmp_path.glob("n.*.p"))
+    # The parented run (one supplied lemma) and the standalone retry (none) are
+    # different questions, so they must be different files and both must survive.
+    assert len(inputs) == 4, [f.name for f in inputs]   # 2 directions x 2 scopes
+    with_parent = [f for f in inputs if "parent" in f.read_text()]
+    without = [f for f in inputs if "parent" not in f.read_text()]
+    assert len(with_parent) == 2 and len(without) == 2, \
+        "the retry must not overwrite the parented run it is retrying"
