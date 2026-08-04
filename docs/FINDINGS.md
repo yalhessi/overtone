@@ -1074,6 +1074,59 @@ verifies donor lemmas against the target before using them and would have caught
 this; the fixed-library script did not check containment. Any transfer must
 assert `donor_axioms <= target_axioms` or re-verify.
 
+### RNG029-5 through the per-problem pipeline: 2146.4s, everything counted
+
+The first honest per-problem number. `scripts/prove.py`, nothing shared with any
+other problem, every lemma verified against RNG029-5's own axioms in this run,
+and the cost is everything spent -- failures, both goal directions, the runs that
+lost:
+
+| | |
+|---|---|
+| nodes proved | 29/29 |
+| result | **proved** |
+| total | **2146.4s CPU over 60 runs, 8 failed** |
+| baseline | Timeout at 1000s and 4000s, both directions |
+
+Against a baseline that spent ~8000s not solving it. This is what reachability
+costs when it is not amortised across a family, and it is the number an
+evaluation should quote for a single problem.
+
+Three nodes still trip the diagnostic threshold -- `right_moufang` 192.1s,
+`middle_moufang` 112.5s, `left_moufang` 33.3s -- so by the rule that held
+everywhere else, nodes are still missing beneath them and this figure should come
+down.
+
+### Goal-ranked donor selection does not rescue cross-theory transfer
+
+`find_donor` ranking by axiom similarity was the obvious suspect for the GRP/LAT/
+COL failures: it cannot see whether a donor's *goal* is a fact the target needs,
+which is what decided RNG. Ranking by goal relatedness instead picks a different
+donor for LAT138-1 -- LAT141-1, whose conjecture is LAT138-1's **verbatim**,
+goal score 1.000, against the axiom-ranked pick of LAT139-1, a different theorem.
+
+That is the best case the new ranking can produce, and it still fails:
+
+| | |
+|---|---|
+| donor | LAT141-1, same conjecture, different axiomatization |
+| lemmas holding in the target's theory | 13/16 |
+| final attempt | Timeout, both directions, 300s |
+
+So the hypothesis is falsified: cross-theory transfer was not failing because
+donor selection optimised the wrong quantity. The likely reason goal relatedness
+carries so little signal here is that **a different axiomatization usually means a
+different proof route** -- LAT138-1 lacks one of LAT141-1's axioms, and a theory
+that has to reach the same statement by another path has different machinery to
+lend. Sharing a goal is not sharing a proof.
+
+Both rankings are kept, because they answer different questions and each is right
+somewhere, and because goal ranking is still the honest answer for GRP: nothing
+scores above zero, so it declines rather than naming a donor at 0.817 that
+carries nothing. But note it must not be used alone -- for RNG029-5 it ranks
+RNG027-10 first, a withdrawn problem whose axiom set is weaker. Containment
+gates the transfer regardless.
+
 ### Cross-theory transfer fails, in three distinguishable ways
 
 `scripts/transfer_dag.py` runs the whole method as one command: pick the most
