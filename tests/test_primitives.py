@@ -488,7 +488,9 @@ def test_verify_runs_a_node_end_to_end_with_a_stubbed_prover(tmp_path, monkeypat
     assert out["n_proved"] == 2, out["missing"]
     assert {r["node"] for r in out["results"]} == {"a", "b"}
     assert all(r["cpu"] == 1.5 and r["wall"] == 1.6 for r in out["results"])
-    assert len(calls) == 4, "two nodes x two directions"
+    # Two nodes, ONE direction each: a node needs one direction to prove, and
+    # running the other costs its whole budget while the layer waits on it.
+    assert len(calls) == 2, calls
 
 
 def test_verify_reuses_a_recorded_run_instead_of_repeating_it(tmp_path, monkeypatch):
@@ -623,3 +625,110 @@ def test_state_carries_prior_iterations(tmp_path, monkeypatch):
              outdir=tmp_path, budget=Budget(node=1, final=1, workers=1),
              max_iterations=3)
     assert seen_histories == [0, 1, 2], seen_histories
+
+
+def test_a_proved_node_does_not_pay_for_the_other_direction(tmp_path, monkeypatch):
+    """The losing arm sets a layer's wall time. right_moufang_a reported 0.5s
+    while its layer waited 300.3s on the direction that could not prove it."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    seen = []
+
+    class R:
+        def __init__(s, ok):
+            s.proved = ok
+            s.status = "Unsatisfiable" if ok else "Timeout"
+            s.cpu = s.wall = 0.1 if ok else 300.0
+            s.output = "x"
+
+    def fake(path, flags, budget, **kw):
+        seen.append(flags[-1])
+        return R(flags[-1] == "--flatten-goal")     # only one direction works
+
+    monkeypatch.setattr(runner, "run", fake)
+    s = Sketch({"n": ("f(X)", "g(X)", [])})
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=300, workers=1,
+                     ledger=tmp_path / "l.jsonl",
+                     prefer={"n": "--flatten-goal"})
+    assert seen == ["--flatten-goal"], seen
+    assert out["n_proved"] == 1
+    assert sum(r["cpu"] for r in out["results"]) == 0.1, "no losing-arm cost"
+
+
+def test_a_failing_node_still_tries_both_directions(tmp_path, monkeypatch):
+    """Short-circuiting must not hide a direction that would have worked."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    seen = []
+
+    class Fail:
+        status, proved, cpu, wall, output = "Timeout", False, 1.0, 1.0, "x"
+
+    def fake(path, flags, budget, **kw):
+        seen.append(flags[-1])
+        return Fail()
+
+    monkeypatch.setattr(runner, "run", fake)
+    dag.verify("RNG029-5", Sketch({"n": ("f(X)", "g(X)", [])}), outdir=tmp_path,
+               budget=1, workers=1, ledger=tmp_path / "l.jsonl")
+    assert set(seen) == {"--flatten-goal", "--no-flatten-goal"}, seen
+
+
+def test_racing_directions_cancels_the_loser(tmp_path, monkeypatch):
+    """Both directions start together and the loser is stopped the moment the
+    winner proves, so a layer waits on the winner rather than on the arm that
+    could never succeed. Asserted on returned rows, which survive the fork that
+    a shared counter would not."""
+    import time as _time
+    from overtone import runner
+    from overtone.agent import dag
+
+    class R:
+        def __init__(s, ok, cpu):
+            s.proved, s.cpu, s.wall, s.output = ok, cpu, cpu, "x"
+            s.status = "Unsatisfiable" if ok else "Timeout"
+
+    def fake(path, flags, budget, cancel=None, **kw):
+        if flags[-1] == "--flatten-goal":
+            return R(True, 0.1)                       # the winner, immediately
+        for _ in range(200):                          # the loser, watching cancel
+            if cancel is not None and cancel.is_set():
+                r = R(False, 0.5)
+                r.status = "Cancelled"
+                return r
+            _time.sleep(0.01)
+        return R(False, float(budget))
+
+    monkeypatch.setattr(runner, "run", fake)
+    j = {"problem": "RNG029-5", "node": "n", "lhs": "f(X)", "rhs": "g(X)",
+         "eqs": [], "channel": "axioms",
+         "directions": ["--no-flatten-goal", "--flatten-goal"],
+         "budget": 300, "outdir": str(tmp_path), "binary": "/bin/true",
+         "reuse": False, "ledger": str(tmp_path / "l.jsonl")}
+    started = _time.monotonic()
+    rows = dag._node_job(j)
+    elapsed = _time.monotonic() - started
+
+    assert any(r["proved"] for r in rows), rows
+    assert not any(r.get("result") == "Cancelled" for r in rows), \
+        "a cancelled run answered nothing and is not a result"
+    assert elapsed < 2.0, f"the layer waited on the loser ({elapsed:.1f}s)"
+
+
+def test_a_cancelled_run_is_never_recorded(tmp_path, monkeypatch):
+    """Recording one would let reuse skip a question that was never resolved."""
+    from overtone import runner
+    from overtone.agent import dag, ledger
+
+    class Cancelled:
+        status, proved, cpu, wall, output = "Cancelled", False, 0.4, 0.4, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: Cancelled())
+    led = tmp_path / "l.jsonl"
+    dag._job({"problem": "RNG029-5", "node": "n", "lhs": "f(X)", "rhs": "g(X)",
+              "eqs": [], "channel": "axioms", "direction": "--flatten-goal",
+              "budget": 60, "outdir": str(tmp_path), "binary": "/bin/true",
+              "reuse": False, "ledger": str(led)})
+    assert ledger.load(led) == {}, "a cancelled run must leave no record"

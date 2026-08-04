@@ -38,6 +38,7 @@ relevant sign lemmas as axioms. Same screen, build, budget and direction:
 RNG025-4 proves in 371.9s, RNG025-5 times out, and still times out at 4000s.
 """
 import json
+import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
@@ -183,6 +184,7 @@ def _job(j):
     channel, direction, budget = j["channel"], j["direction"], j["budget"]
     outdir, binary = j["outdir"], j.get("binary")
     reuse, ledger = j.get("reuse", True), j.get("ledger")
+    cancel = j.get("cancel")
     # Artifacts are addressed by the run's own identity, computed below, so two
     # invocations differing in anything that identity captures -- which equations
     # were supplied, in what order, under which flags and build -- cannot land in
@@ -221,7 +223,8 @@ def _job(j):
                     "wall": prior.get("wall") or 0.0, "reused": True,
                     "key": key, "input": str(path),
                     "output": prior.get("output")}
-    r = runner.run(path, flags, budget, problem=problem, binary=binary)
+    r = runner.run(path, flags, budget, problem=problem, binary=binary,
+                   cancel=cancel)
     # Keep the output either way. A failed run is the more informative one: with
     # --all-lemmas it still lists everything derived before the budget ran out,
     # and those are the candidate missing nodes. `assoc_def_add` -- worth 18x on
@@ -253,10 +256,85 @@ def _map(jobs, workers):
         return list(pool.map(_job, jobs))
 
 
+def _direction_worker(j, direction, cancel, q):
+    """One direction, in its own process, reporting through `q`."""
+    try:
+        q.put(_job({**j, "direction": direction, "cancel": cancel}))
+    except Exception as e:                                        # noqa: BLE001
+        q.put({"node": j["node"], "direction": direction, "channel": j["channel"],
+               "n_support": len(j["eqs"]), "result": f"Error: {e}",
+               "proved": False, "cpu": 0.0, "wall": 0.0})
+
+
+def _node_job(j):
+    """Race a node's goal directions, and stop the loser the moment one proves.
+
+    A node needs only one direction to succeed, and the other then burns its
+    whole budget for nothing -- and it is the *losing* arm the layer waits on.
+    `right_moufang_a` reported 0.5s while its layer waited 300.3s, and across one
+    RNG029-5 run the reported times summed to 346.5s against 1799.7s waited.
+
+    Each direction gets its own process, not a thread: `runner.run` measures CPU
+    as a RUSAGE_CHILDREN delta, which is process-wide, so two twee children in
+    one process would each be charged the other's time. Cancellation is
+    cooperative through a shared event, which needs no signals and cannot orphan
+    a grandchild.
+    """
+    directions = j["directions"]
+    if len(directions) == 1:
+        return [_job({**j, "direction": directions[0]})]
+
+    if not j.get("race", True):
+        # Inline: same verdict, sequentially, so a substituted runner stays
+        # observable in-process. `_map_nodes` picks this at workers<=1; it costs
+        # the loser's budget when the first guess is wrong, which is why it is
+        # not the production path.
+        rows = []
+        for d in directions:
+            rows.append(_job({**j, "direction": d}))
+            if rows[-1].get("proved"):
+                break
+        return rows
+
+    ctx = mp.get_context("fork")
+    cancel, q = ctx.Event(), ctx.Queue()
+    procs = [ctx.Process(target=_direction_worker, args=(j, d, cancel, q),
+                         daemon=True) for d in directions]
+    for p in procs:
+        p.start()
+    rows = []
+    try:
+        for _ in directions:
+            row = q.get()
+            rows.append(row)
+            if row.get("proved"):
+                cancel.set()          # the others stop; their rows still arrive
+    finally:
+        for p in procs:
+            p.join(timeout=30)
+            if p.is_alive():
+                p.terminate()
+    # A cancelled run answered nothing, so it is not a result -- only the rows
+    # that reached a verdict are reported.
+    return [r for r in rows if r.get("result") != "Cancelled"] or rows
+
+
+def _map_nodes(jobs, workers):
+    """Run per-node jobs, inline at workers=1 so a test can substitute the runner."""
+    if workers <= 1:
+        out = [_node_job({**j, "race": False}) for j in jobs]
+    elif len(jobs) == 1:
+        out = [_node_job(jobs[0])]
+    else:
+        with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
+            out = list(pool.map(_node_job, jobs))
+    return [row for rows in out for row in rows]
+
+
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
            scope="parents", channel=None, directions=DIRECTIONS, workers=8,
            binary: str | None = None, known=(), prior_results=(),
-           retry_standalone=True, reuse=True, ledger=None):
+           retry_standalone=True, reuse=True, ledger=None, prefer=None):
     """Prove every node, in topological order, each in the scope its edges imply.
 
     A node whose parents did not prove is skipped rather than attempted without
@@ -308,16 +386,24 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
             names = sketch.scope(n, scope)
             ch = channel_for(names, sketch, n, channel)
             lhs, rhs, _ = sketch.nodes[n]
-            for d in directions:
-                jobs.append({"problem": problem, "node": n, "lhs": lhs,
-                             "rhs": rhs, "eqs": sketch.equations(names),
-                             "channel": ch, "direction": d,
-                             "budget": budgets.get(n, budget),
-                             "outdir": str(outdir), "binary": binary,
-                             "reuse": reuse, "ledger": ledger})
+            # Try the direction that worked for this node before, when anything
+            # knows. Direction is strongly node-dependent -- trilinearity proves
+            # only under --flatten-goal and the alternating laws only under the
+            # other -- so no global order is right, and a wrong first guess costs
+            # a whole budget.
+            order = list(directions)
+            pref = (prefer or {}).get(n)
+            if pref in order:
+                order.remove(pref)
+                order.insert(0, pref)
+            jobs.append({"problem": problem, "node": n, "lhs": lhs, "rhs": rhs,
+                         "eqs": sketch.equations(names), "channel": ch,
+                         "directions": order, "budget": budgets.get(n, budget),
+                         "outdir": str(outdir), "binary": binary,
+                         "reuse": reuse, "ledger": ledger})
         if not jobs:
             continue
-        res = _map(jobs, workers)
+        res = _map_nodes(jobs, workers)
         results += res
 
         # Guard: anything that failed in scope gets one standalone attempt,
@@ -329,12 +415,12 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
             print(f"  retrying standalone: {retry}", flush=True)
             rjobs = [{"problem": problem, "node": n,
                       "lhs": sketch.nodes[n][0], "rhs": sketch.nodes[n][1],
-                      "eqs": [], "channel": "axioms", "direction": d,
+                      "eqs": [], "channel": "axioms",
+                      "directions": list(directions),
                       "budget": budgets.get(n, budget), "outdir": str(outdir),
-                      "binary": binary, "reuse": reuse, "ledger": ledger,
-                      "suffix": ".standalone"}
-                     for n in retry for d in directions]
-            rres = _map(rjobs, workers)
+                      "binary": binary, "reuse": reuse, "ledger": ledger}
+                     for n in retry]
+            rres = _map_nodes(rjobs, workers)
             for r in rres:
                 r["scope_retry"] = True
             results += rres

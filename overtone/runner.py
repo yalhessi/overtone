@@ -30,6 +30,7 @@ import re
 import resource
 import statistics
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, asdict, field, fields, replace
 from datetime import datetime, timezone
@@ -236,7 +237,7 @@ def summarise(rs: list[TweeResult]) -> dict:
 
 def run(path: Path, flags=(), budget: int = 1000, *, binary: str | None = None,
         tptp_root: Path | None = None, use_max_time: bool = False,
-        problem: str | None = None, n_hints: int = 0) -> TweeResult:
+        problem: str | None = None, n_hints: int = 0, cancel=None) -> TweeResult:
     """Run twee on a prepared file. Owns no directory; `output` is in memory.
 
     `use_max_time` passes twee's own `--max-time` instead of killing the process
@@ -244,6 +245,16 @@ def run(path: Path, flags=(), budget: int = 1000, *, binary: str | None = None,
     records -- the 592 screen results and the Twitch replication timings were all
     produced with an external timeout and no such flag. The instrumented build
     needs it True, since it reports hint stats only on the normal exit path.
+
+    `cancel` is anything with `.is_set()`. When it becomes set the child is
+    killed and the result is reported as "Cancelled" -- distinct from a timeout,
+    because a cancelled run answered nothing and must never be recorded as
+    though it had. It exists so a node's two goal directions can race and the
+    loser can be stopped the moment the winner proves.
+
+    CPU is a RUSAGE_CHILDREN delta, which is process-wide, so this stays correct
+    only while one twee child runs per process. Race the directions in separate
+    processes, not threads.
     """
     binary = binary or config.twee_path()
     tptp_root = Path(tptp_root or config.tptp_root())
@@ -258,19 +269,40 @@ def run(path: Path, flags=(), budget: int = 1000, *, binary: str | None = None,
     stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True)
-    try:
-        proc_timeout = budget + 30 if use_max_time else budget
-        out, _ = proc.communicate(timeout=proc_timeout)
-        killed = False
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        out, _ = proc.communicate()
-        killed = True
+    proc_timeout = budget + 30 if use_max_time else budget
+    killed = cancelled = False
+    if cancel is None:
+        try:
+            out, _ = proc.communicate(timeout=proc_timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            out, _ = proc.communicate()
+            killed = True
+    else:
+        # Drain on a thread while polling `cancel`. twee writes megabytes, so
+        # polling without draining fills the pipe buffer and deadlocks the child.
+        box = {}
+        drain = threading.Thread(target=lambda: box.update(o=proc.communicate()[0]),
+                                 daemon=True)
+        drain.start()
+        deadline = time.monotonic() + proc_timeout
+        while drain.is_alive():
+            if cancel.is_set():
+                proc.kill()
+                cancelled = True
+                break
+            if time.monotonic() >= deadline:
+                proc.kill()
+                killed = True
+                break
+            drain.join(0.1)
+        drain.join()
+        out = box.get("o", "")
     after = resource.getrusage(resource.RUSAGE_CHILDREN)
 
     return TweeResult(
         problem=problem or Path(path).stem,
-        status=proofs.parse_status(out, killed),
+        status="Cancelled" if cancelled else proofs.parse_status(out, killed),
         cpu=round((after.ru_utime - before.ru_utime)
                   + (after.ru_stime - before.ru_stime), 3),
         wall=round(time.monotonic() - started, 3),
