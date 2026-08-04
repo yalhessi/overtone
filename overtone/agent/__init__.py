@@ -1,19 +1,35 @@
-"""Sketch-loop work: donor selection, hint extraction, ladder execution.
+"""Sketch-loop work: decomposition, verification, transfer, and rendering.
 
-ISOLATED ON PURPOSE. This is the exploratory half of the project
-(docs/SKETCH_LOOP.md) and may be abandoned; the core must not depend on it.
+ISOLATED FROM CORE. Nothing under `overtone/` outside this directory imports it,
+and importing `overtone` must not import `overtone.agent`. Enforced by:
 
-Deletion contract
------------------
-Removing this package requires deleting `scripts/sketch_transfer.py` and
-`scripts/ladder.py`, and nothing else. No module under `overtone/` outside this
-directory may import from it, and importing `overtone` must not import
-`overtone.agent`. Enforced by:
+    grep -rnE "^(from|import) overtone\.agent" overtone/*.py     # must be empty
 
-    grep -rnE "^(from|import) overtone\.agent|from overtone import .*agent" \
-         overtone/*.py                    # must be empty
+The boundary is about churn, not value -- this is where the experiments live and
+where they change fastest. It is no longer plausibly deletable: `dag.py` and
+`pipeline.py` carry the results in docs/FINDINGS.md.
 
-The boundary is about churn, not value: the v0 pipeline here has no LLM in it
-and produced the project's clearest positive result so far -- the MVA005-1
-axiom-vs-hint comparison in docs/FINDINGS.md.
+    dag.py        A sketch as a DAG. `Sketch`, topological `verify` with parents
+                  supplied as axioms, `attempt` for the final run against the
+                  real problem, `cost`, `diff`, `sibling_diff`, and
+                  `sketch_from_proof` for reading a donor's proof as a DAG.
+    pipeline.py   `run_problem` (one problem, one honest cost, nothing shared)
+                  and `run_theory` (a library once, a marginal cost per target,
+                  containment asserted). The two answer different questions and
+                  their numbers are never added.
+    blueprint.py  Rendering: SVG, DOT, and an interactive page with a trajectory
+                  scrubber. Consumes `verify()["results"]` directly.
+    donors.py     Choosing a solved sibling to transfer from. Ranks by axiom
+                  similarity, which is measurably the wrong criterion -- what
+                  decided the RNG result was the donor's *goal* being a lemma the
+                  target needed, and nothing here measures that yet.
+    hints.py      The `$hint` channel: extraction, adaptation, cap policy. Kept
+                  because `HINT_FLAGS` and the specific/generic split are still
+                  cited, not because hints beat axioms -- they do not, at any
+                  quantity we have tried.
+    sketch.py     v0 donor-chain transfer. Retained for `ablate`, whose
+                  specific-vs-generic result is in FINDINGS, and `make_example`,
+                  which regenerates the tracked bundles under `examples/`.
+
+Consumers: `scripts/{prove,theory,blueprint,transfer_dag,sketch_transfer}.py`.
 """

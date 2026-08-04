@@ -453,3 +453,59 @@ def diff(before: Sketch, after: Sketch):
     return {"added": added, "removed": removed, "restated": restated,
             "reparented": reparented,
             "n_edits": len(added) + len(removed) + len(restated) + len(reparented)}
+
+
+def sketch_from_proof(proof_text, *, max_nodes=260, prefix="L"):
+    """(Sketch, depth per node) from a twee proof's own lemma structure.
+
+    The only proof -> DAG constructor there is, and it lived in a script. A
+    proof states its dependencies: `Lemma N:` lines are nodes and `by lemma N`
+    citations are edges, so this is a *recorded* structure rather than a guessed
+    one -- which matters, since hand-drafted edges were wrong three times out of
+    four, at costs from 18x to a blocked subtree.
+
+    Depth is the proxy for "near the goal": on RNG027-5 the donor's proof ran
+    234 lemmas deep and its goal cited exactly four, and those four flipped ten
+    problems while all 234 in the hint channel flipped none.
+    """
+    from overtone import proofs
+
+    section = proofs.proof_section(proof_text)
+    stmt, cites, cur, buf = {}, {}, None, []
+
+    def flush():
+        if cur is not None:
+            cites[cur] = {int(x) for x in proofs.USED_REF_RE.findall("\n".join(buf))}
+
+    for line in section.splitlines():
+        m = proofs.LEMMA_RE.match(line.strip())
+        g = line.startswith("Goal ")
+        if m or g:
+            flush()
+            cur = int(m.group(1)) if m else "GOAL"
+            if m:
+                stmt[cur] = (m.group(2).strip(), m.group(3).strip())
+            buf = [line]
+        else:
+            buf.append(line)
+    flush()
+
+    depth = {}
+
+    def go(n, seen=()):
+        if n in depth:
+            return depth[n]
+        if n in seen:
+            return 0                       # a cycle cannot happen in a proof
+        ps = [p for p in cites.get(n, ()) if p in stmt]
+        depth[n] = 1 + max([go(p, seen + (n,)) for p in ps] or [-1])
+        return depth[n]
+
+    for n in stmt:
+        go(n)
+    keep = sorted(stmt, key=lambda n: depth[n])[:max_nodes]
+    nodes = {f"{prefix}{n}": (stmt[n][0], stmt[n][1],
+                              [f"{prefix}{p}" for p in cites.get(n, ())
+                               if p in keep and p != n])
+             for n in keep}
+    return Sketch(nodes), {f"{prefix}{n}": depth[n] for n in keep}

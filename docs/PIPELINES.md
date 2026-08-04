@@ -58,8 +58,18 @@ And keep the containment check that the fixed-library path lacked: assert
 against that target before use. This is not optional -- it is the exact hole that
 produced the two withdrawn results.
 
-The RNG result is a Pipeline B result and should be labelled as one: library
-1122s, marginal 0.0-197.3s, ten problems.
+The RNG result is a Pipeline B result and is now labelled as one. Reproduced
+through `scripts/theory.py`: **library 29/29 nodes at 2197.0s CPU over 58 runs;
+marginal 0.1-313.1s per target; 12 of 12 eligible proved**, with RNG027-10 and
+RNG029-10 rejected on containment before any proving.
+
+One rule the first implementation lacked: **a library may not supply a target its
+own conjecture.** This sketch contains nodes that *are* target conjectures --
+`middle_moufang` is RNG029-5 -- and handing a problem its own statement proved
+all twelve in 0.0s. Sound, and vacuous. Excluding the literal conjecture puts the
+work back where it happened (RNG029-5: 0.0s -> 12.9s). Anything beyond the
+literal conjecture stays supplied, because deriving one formulation from another
+is exactly what a library is for.
 
 ### Which pipeline answers which question
 
@@ -144,7 +154,7 @@ training data the loop exists to produce.
 ## Evaluation
 
 Pre-register targets and the selection rule before running, as
-`scripts/overnight_rng.py` did. That discipline is why the RNG result reads
+`scripts/overnight_rng.py` did (removed at 8712094; its pre-registered target list is now `data/lists/rng_moufang.txt` and its job is `scripts/theory.py`). That discipline is why the RNG result reads
 10/10 on a rule fixed in advance, while the four problems added afterwards
 produced both withdrawn claims.
 

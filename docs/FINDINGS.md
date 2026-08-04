@@ -724,7 +724,7 @@ obvious control for over-general hints and is untested here.
 ### MVA005-1 as a ladder
 
 Waypoints as sequential *goals* rather than simultaneous hints
-(`scripts/ladder.py`). 22 separate twee runs: rungs 1..21 each have one donor
+(`scripts/ladder.py`, removed at 8712094; superseded by `agent/dag.py`, whose `scope="none"` is standalone rung verification and whose `attempt` is the final phase). 22 separate twee runs: rungs 1..21 each have one donor
 lemma as their goal, with the theory axioms plus previously proven rungs as
 axioms; the final run has the original conjecture with every proven rung
 available.

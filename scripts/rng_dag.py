@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The alternative-ring sketch as a dependency DAG, verified in parent scope.
 
-Supersedes the flat 19-lemma list in `overnight_rng.py`. Two changes, both
-forced by measurement:
+Supersedes the flat 19-lemma list in `overnight_rng.py` (removed at 8712094).
+Two changes, both forced by measurement:
 
 **Nodes carry their parents.** R1 (`logs/r1_scope/`): `alt12_additive` timed out
 at 300s verified standalone and proves in 0.2s given its five direct parents as
