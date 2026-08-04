@@ -238,7 +238,10 @@ def _job(j):
            "n_support": len(eqs), "result": r.status, "proved": r.proved,
            "cpu": r.cpu, "wall": r.wall, "key": key,
            "input": str(path), "output": str(out_path)}
-    ledgerlib.record(key, row, budget, ledger=ledger)
+    # A cancelled run answered nothing. Recording it would let reuse skip a
+    # question that was never resolved.
+    if r.status != "Cancelled":
+        ledgerlib.record(key, row, budget, ledger=ledger)
     return row
 
 
@@ -540,7 +543,10 @@ def _attempt_job(j):
            "n_support": len(eqs), "result": r.status, "proved": r.proved,
            "cpu": r.cpu, "wall": r.wall, "key": key,
            "input": str(path), "output": str(out_path)}
-    ledgerlib.record(key, row, budget, ledger=ledger)
+    # A cancelled run answered nothing. Recording it would let reuse skip a
+    # question that was never resolved.
+    if r.status != "Cancelled":
+        ledgerlib.record(key, row, budget, ledger=ledger)
     return row
 
 
