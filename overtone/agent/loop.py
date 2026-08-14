@@ -843,7 +843,7 @@ def _draft(problem, sketch: Sketch, agent, traj, annot):
 def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
              budget=Budget(), budgets=None, binary=None, max_iterations=6,
              total_cpu=None, directions=DIRECTIONS, annot=None, draft=True,
-             ledger=None):
+             ledger=None, sources=()):
     """draft -> verify -> attempt -> diagnose -> act -> repeat.
 
     `draft` asks the agent for an initial decomposition from the problem
@@ -989,7 +989,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                              findings=findings, stalled=stalled,
                              approach=approach, approaches_tried=tried,
                              iterations_on_approach=i - approach_started,
-                             attempts=a, prev_target=prev_target, spent=spent)
+                             attempts=a, prev_target=prev_target, spent=spent,
+                             sources=sources)
 
             # Progress is the probe the agent declared coming true, not a node
             # newly proved. Proving nodes was the only thing this loop counted,
@@ -1072,7 +1073,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                                  approach=approach, approaches_tried=tried,
                                  iterations_on_approach=i - approach_started,
                                  attempts=prev_attempts_before,
-                                 prev_target=None, outcome=outcome, spent=spent)
+                                 prev_target=None, outcome=outcome, spent=spent,
+                                 sources=sources)
                 state = replace(state, outcome=outcome, stalled=stalled)
 
             proposed = [] if proved else list(agent.act(state))

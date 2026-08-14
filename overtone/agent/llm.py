@@ -403,6 +403,10 @@ def render_state(state: State, *, max_candidates=8):
             "slow": [n.name for n in state.slow()],
             "failing": [n.name for n in state.failing()],
         },
+        # Where the starting sketch came from, when it was derived rather than
+        # drafted. A node whose provenance says "polarization of an axiom, using
+        # these lemmas" is one the model can reason about instead of re-deriving.
+        "derived_from": list(state.sources),
         "candidates_from_their_own_runs": {
             k: v[:max_candidates] for k, v in state.candidates.items()},
         "same_shape_siblings_that_proved": state.diffs,

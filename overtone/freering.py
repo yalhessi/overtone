@@ -385,19 +385,28 @@ def consequences(identities, target_vars, max_degree, limit=4000):
 
 
 def monomials(var_names, d):
-    """Every product of `d` variables, all bracketings, as normal forms."""
+    """Every product of `d` variables, all bracketings.
+
+    `[(label, element, twee term)]`. The twee term travels with the element
+    because a generated node has to be *written down*: the normal form is a bag
+    of monomials, and `to_twee` on the expansion of `alt12` produces a
+    twelve-summand term where `add(associator(X,Y,Z),associator(Y,X,Z))` is what
+    the sketch wants. Reconstructing the syntax afterwards would mean guessing
+    which bracketing produced which monomial; carrying it costs nothing.
+    """
     if d == 1:
-        return [(v, V(v)) for v in sorted(var_names)]
+        return [(v, V(v), v) for v in sorted(var_names)]
     out = []
     for k in range(1, d):
-        for la, a in monomials(var_names, k):
-            for lb, b in monomials(var_names, d - k):
-                out.append((f"({la}{lb})" if d > 2 else f"{la}{lb}", mul(a, b)))
+        for la, a, ta in monomials(var_names, k):
+            for lb, b, tb in monomials(var_names, d - k):
+                label = f"({la}{lb})" if d > 2 else f"{la}{lb}"
+                out.append((label, mul(a, b), f"multiply({ta},{tb})"))
     return out
 
 
-def associator_basis(var_names, d):
-    """Degree-`d` expressions built from ONE associator, as `[(label, elem)]`.
+def associator_terms(var_names, d):
+    """Degree-`d` expressions built from ONE associator: `[(label, elem, twee)]`.
 
     Universal by construction -- these are just terms, true of any ring -- so a
     decomposition over them assumes nothing about the theory. That is what makes
@@ -410,27 +419,62 @@ def associator_basis(var_names, d):
             cdeg = d - a - b
             if cdeg < 1:
                 continue
-            for la, ea in monomials(var_names, a):
-                for lb, eb in monomials(var_names, b):
-                    for lc, ec in monomials(var_names, cdeg):
-                        out.append((f"({la},{lb},{lc})", assoc(ea, eb, ec)))
+            for la, ea, ta in monomials(var_names, a):
+                for lb, eb, tb in monomials(var_names, b):
+                    for lc, ec, tc in monomials(var_names, cdeg):
+                        out.append((f"({la},{lb},{lc})", assoc(ea, eb, ec),
+                                    f"associator({ta},{tb},{tc})"))
     # ... and an associator of single variables, multiplied by a monomial
-    for lt, et in (monomials(var_names, d - 3) if d > 3 else []):
+    for lt, et, tt in (monomials(var_names, d - 3) if d > 3 else []):
         for x in sorted(var_names):
             for y in sorted(var_names):
                 for z in sorted(var_names):
-                    A = assoc(V(x), V(y), V(z))
-                    out.append((f"{lt}*({x},{y},{z})", mul(et, A)))
-                    out.append((f"({x},{y},{z})*{lt}", mul(A, et)))
+                    A, tA = assoc(V(x), V(y), V(z)), f"associator({x},{y},{z})"
+                    out.append((f"{lt}*({x},{y},{z})", mul(et, A),
+                                f"multiply({tt},{tA})"))
+                    out.append((f"({x},{y},{z})*{lt}", mul(A, et),
+                                f"multiply({tA},{tt})"))
     seen, uniq = set(), []
-    for label, p in out:
+    for label, p, twee in out:
         if not p:
             continue
         key = tuple(sorted((str(k), v) for k, v in p.items()))
         if key not in seen:
             seen.add(key)
-            uniq.append((label, p))
+            uniq.append((label, p, twee))
     return uniq
+
+
+def associator_basis(var_names, d):
+    """`associator_terms` without the syntax, for callers that only solve."""
+    return [(l, p) for l, p, _ in associator_terms(var_names, d)]
+
+
+def render_compact(p, var_names=None):
+    """`p` written as a short sum of associator terms, or None.
+
+    `to_twee` renders the expansion, which for `alt12` is twelve summands of
+    products; this renders `add(associator(X,Y,Z),associator(Y,X,Z))`. That
+    difference decides whether a generated node is readable, and whether the
+    nodes a model is shown look like the ones a person would write.
+    """
+    if not p:
+        return "additive_identity"
+    names = sorted(var_names or variables(p))
+    terms = associator_terms(names, degree(p))
+    cert = certificate(p, [(l, e) for l, e, _ in terms])
+    if not cert.get("coefficients"):
+        return None
+    twee = {l: t for l, _, t in terms}
+    pieces = []
+    for label, coeff in sorted(cert["coefficients"].items()):
+        for _ in range(abs(coeff)):
+            pieces.append(twee[label] if coeff > 0
+                          else f"additive_inverse({twee[label]})")
+    out = pieces[0]
+    for t in pieces[1:]:
+        out = f"add({out},{t})"
+    return out
 
 
 def decompose(lhs, rhs, extra=()):

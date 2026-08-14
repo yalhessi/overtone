@@ -3153,3 +3153,112 @@ def test_the_alternating_laws_reach_twice_the_moufang_residual():
     twice = F.certificate(F.add(target, target), cons)
     assert twice["coefficients"] and twice["integral"], \
         "twice the residual IS an integer combination"
+
+
+# ------------------------------------------------- deriving the whole sketch
+
+def test_the_derived_sketch_names_the_parents_each_derivation_uses():
+    """The point of deriving rather than drafting.
+
+    `alt12` is unproven at 60s standalone and proves in 0.02s given the three
+    lemmas its polarization actually uses -- the linearised axiom instance and
+    additivity in the two argument positions the repeated variable occupies.
+    Eight agent runs never found that parent set. The derivation knows it
+    because it used it.
+    """
+    from overtone.agent.derive import derive_sketch
+
+    s, notes = derive_sketch("RNG029-5")
+    left = s.nodes["left_alternative_polar"]
+    assert left[0] == "add(associator(X,Z,Y),associator(Z,X,Y))"
+    assert set(left[2]) == {"lin_left_alternative",
+                            "associator_add_1", "associator_add_2"}
+    # right-alternativity repeats its variable in arguments 2 and 3, so it
+    # keys on the other two additivity lemmas
+    right = s.nodes["right_alternative_polar"]
+    assert set(right[2]) == {"lin_right_alternative",
+                             "associator_add_2", "associator_add_3"}
+    assert notes, "provenance must travel with the sketch"
+
+
+def test_the_derived_sketch_reduces_the_goal_to_one_obligation():
+    """The goal's only parent is the bridge, and the bridge is the goal's own
+    residual over universal associator terms. Supplying it takes RNG029-5 from a
+    4000s timeout in both directions to 6.7s."""
+    from overtone import freering as F
+    from overtone.agent.derive import derive_sketch
+
+    s, _ = derive_sketch("RNG029-5")
+    goal = "rng029-5_goal"
+    assert s.nodes[goal][2] == ["bridge"]
+
+    # the bridge is exactly equivalent to the conjecture, checked by expansion
+    bl, br, _ = s.nodes["bridge"]
+    gl, gr, _ = s.nodes[goal]
+    assert F.expand(F.parse(bl), F.parse(br)) == \
+        F.expand(F.parse(gl), F.parse(gr))
+
+
+def test_the_bridge_is_not_given_every_derived_lemma():
+    """Handing it all eleven claims is the loose-bag-as-axioms configuration
+    measured here as ruinous. Two mechanical filters: the `lin_*` instances are
+    scaffolding for the polarizations, and a lemma about an operator the bridge
+    never mentions cannot be on its derivation."""
+    from overtone.agent.dag import channel_for
+    from overtone.agent.derive import derive_sketch
+
+    s, _ = derive_sketch("RNG029-5")
+    parents = s.nodes["bridge"][2]
+    assert not any(p.startswith("lin_") for p in parents), parents
+    assert not any("commutator" in p for p in parents), \
+        "the bridge has no commutator in it"
+    assert len(parents) < len(s.claims()) - 1
+    assert channel_for(parents, s, "bridge") == "axioms", \
+        "a small exact parent set goes through the axiom channel"
+
+
+def test_derivation_reads_only_the_problem_file():
+    """No donor, no stored sketch, no `scripts/rng_dag.py`. The axioms are
+    stated in `multiply` form, so the polarizations are read off the associator
+    rendering rather than the axiom as written."""
+    from overtone.agent.derive import derive_sketch
+
+    named = problems.named_axioms(problems.problem_path("RNG029-5"))
+    assert named["left_alternative"] == (
+        "multiply(multiply(X,X),Y)", "multiply(X,multiply(X,Y))"), \
+        "the fixture must keep the multiply-form statement"
+
+    s, _ = derive_sketch("RNG029-5")
+    # and it still finds the repetition, via the associator form
+    assert "left_alternative_polar" in s.nodes
+    assert s.nodes["lin_left_alternative"][0].startswith("associator(add(")
+
+
+def test_derived_symmetries_carry_the_lemmas_that_certify_them():
+    """`associator_perm_120` is cyclicity, and it is derived: a two-term integer
+    certificate over the polarizations, not a fact recalled from the successful
+    sketch."""
+    from overtone.agent.derive import derive_sketch
+
+    s, _ = derive_sketch("RNG029-5")
+    perm = s.nodes["associator_perm_120"]
+    assert perm[0] == "associator(X,Y,Z)" and perm[1] == "associator(Y,Z,X)"
+    assert set(perm[2]) == {"left_alternative_polar", "right_alternative_polar"}
+
+
+def test_rewind_only_applies_to_the_committed_sketch():
+    """`--derive` and `--seed` build a different sketch, and the recorded edits
+    name the committed one's nodes. Rewinding either raised
+    `KeyError: 'teichmuller'` before a single node was verified."""
+    import importlib.util
+    from overtone import config
+    from overtone.agent.derive import derive_sketch
+
+    spec = importlib.util.spec_from_file_location(
+        "loopcli", config.ROOT / "scripts" / "loop.py")
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+
+    derived, _ = derive_sketch("RNG029-5")
+    with pytest.raises(KeyError):
+        cli.rewind(derived)          # the shape the guard exists to prevent

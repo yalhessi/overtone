@@ -257,6 +257,13 @@ def main():
     ap.add_argument("problem")
     ap.add_argument("--sketch", type=Path,
                     default=config.ROOT / "scripts" / "rng_dag.py")
+    ap.add_argument("--derive", action="store_true",
+                    help="build the starting sketch from the problem itself: "
+                         "the axioms as given nodes, their polarizations and "
+                         "the symmetries those certify, and the goal decomposed "
+                         "over universal associator terms. Ring-signature "
+                         "problems only. Implies --no-draft, since the sketch "
+                         "is already drafted.")
     ap.add_argument("--seed", action="store_true",
                     help="start from the problem itself: one node per axiom "
                          "(never proved) plus the goal. The canonical shape, so "
@@ -290,7 +297,16 @@ def main():
                          "sketch they produce")
     a = ap.parse_args()
 
-    if a.seed:
+    sources = ()
+    if a.derive:
+        from overtone.agent.derive import derive_sketch
+        sketch, notes = derive_sketch(a.problem)
+        sources = tuple(notes)
+        print(f"derived: {len(sketch.given)} axiom node(s) + "
+              f"{len(sketch.claims())} claim(s)", flush=True)
+        for n in notes:
+            print(f"   {n}", flush=True)
+    elif a.seed:
         sketch = Sketch.from_problem(a.problem, goal=f"{a.problem.lower()}_goal")
         print(f"seed: {len(sketch.given)} axiom node(s) + 1 goal", flush=True)
     else:
@@ -301,7 +317,12 @@ def main():
     # agent is not replaying anything, so rewinding would silently hand it a
     # sketch that is neither the committed one nor one it chose -- and any
     # result would be unattributable.
-    if a.agent == "scripted" and not a.no_rewind:
+    #
+    # It also only makes sense against the COMMITTED sketch: the recorded edits
+    # name its nodes. `--derive` and `--seed` build a different sketch entirely,
+    # and rewinding one raises `KeyError: 'teichmuller'` before a single node is
+    # verified.
+    if a.agent == "scripted" and not a.no_rewind and not (a.derive or a.seed):
         if a.script == "rng029":
             sketch = rewind(sketch)
         elif a.script == "rng033":
@@ -343,7 +364,7 @@ def main():
                    budgets=load_budgets(a.sketch),
                    binary=a.binary or config.twee_path(deterministic=True),
                    max_iterations=a.max_iterations, total_cpu=a.total_cpu,
-                   draft=not a.no_draft)
+                   draft=not (a.no_draft or a.derive), sources=sources)
     print(f"\n  {'PROVED' if out['proved'] else 'NOT PROVED'} after "
           f"{out['iterations']} iteration(s), {out['cpu_total']:.1f}s CPU")
     print(f"  -> {outdir}/loop.json, trajectory.jsonl")
