@@ -407,32 +407,53 @@ def review(actions, ctx, reviewers=None):
 
 
 def _split_equation(action):
-    """(action, findings). Move `lhs: "a = b"` with no `rhs` into two sides.
+    """(action, findings). Recover a node whose `lhs` holds the whole equation.
 
-    A model wrote the whole equation into `lhs` and omitted `rhs` seven times
-    across two iterations of one run, each time losing the node. `well_formed`
-    caught it -- correctly, it is not a term -- but reported the case it was
-    written for, an implication between two equations, so the reason described
-    something the model had not done and it repeated the mistake.
+    A persistent model habit, and the single most common way a good node is
+    lost: `lhs: "associator(X,Y,Y) = additive_identity"`. It appeared seven
+    times across two iterations of one run and again seven times in the next,
+    every time costing the node. `well_formed` rejects it correctly -- it is not
+    a term -- so the repair has to come first.
 
-    One `=` and a missing `rhs` is unambiguous: it is the node the model meant.
-    Repair it and say so. Two `=` signs are the implication case and stay a
-    rejection, because there is no way to know which relation was intended.
+    Three recoverable shapes, and one that is not:
+
+    * `rhs` missing. The right half is the node's other side.
+    * `rhs` present and equal to the right half. The model said the same thing
+      twice; the split is *confirmed* rather than guessed. This is the common
+      case and the earlier version of this repair refused it, because it bailed
+      whenever `rhs` was set at all.
+    * `rhs` present and the right half is not a term -- a truncation like
+      `"associator(...) =?"`. The `rhs` field is the authoritative one.
+    * `rhs` present, the right half IS a term, and they differ. Two different
+      claims about the same side, and nothing here can say which was meant, so
+      it stays a rejection.
+
+    Two `=` signs are the implication case and always stay rejected.
     """
     lhs, rhs = action.get("lhs"), action.get("rhs")
-    if not lhs or rhs or lhs.count("=") != 1:
+    if not lhs or lhs.count("=") != 1:
         return action, []
     left, _, right = lhs.partition("=")
     left, right = left.strip(), right.strip()
-    if not left or not right:
+    if not left:
         return action, []
-    return ({**action, "lhs": left, "rhs": right},
+
+    if not rhs:
+        if not right:
+            return action, []
+        new, why = right, "`rhs` was missing"
+    elif right == rhs.strip():
+        new, why = rhs.strip(), "`rhs` already repeated the right half"
+    elif parse_error(right)[0] is None:
+        new, why = rhs.strip(), f"the text after `=` ({right!r}) is not a term"
+    else:
+        return action, []                 # two different claims; cannot choose
+    return ({**action, "lhs": left, "rhs": new},
             [Finding("repair", action.get("name", "?"), WARN,
-                     f"`lhs` held the whole equation and `rhs` was missing, so "
-                     f"it was split into lhs={left!r} and rhs={right!r}. A node "
-                     f"is two terms; the `=` between them is the node itself, "
-                     f"not part of either side.",
-                     {"lhs": left, "rhs": right})])
+                     f"`lhs` held the whole equation ({why}), so it was split "
+                     f"into lhs={left!r} and rhs={new!r}. A node is two terms; "
+                     f"the `=` between them is the node itself, not part of "
+                     f"either side.", {"lhs": left, "rhs": new})])
 
 
 def _close_keep(action, existing, parents_of=None):

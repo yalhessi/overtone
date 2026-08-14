@@ -1866,6 +1866,44 @@ an unmeasured mechanism. If the loop starts stalling on wrong edges, a
 *planner-requested* empty-support probe on a named node is the cheap thing to add
 back -- not an automatic one.
 
+### Blocked is worse than failed, and the loop could not tell
+
+First model run on a derived sketch (`--derive`, gpt-5.4, 10 iterations,
+2,120.2s charged / 728.6s new, no proof). The scaffold behaved: iteration 0 cost
+**0.0s of new prover time** because the ledger already held it, and the model
+opened on 11 proved nodes and one named obligation.
+
+Then it subdivided that obligation, replacing the bridge's seven **proved**
+parents with three intermediates that did not prove -- and the run went blind
+for nine iterations. `verify` schedules a node only when every parent has
+proved, so:
+
+| | iter 0 | iters 1-9 |
+|---|---|---|
+| bridge | `failed` -- ran, 60.1s, left an artifact | `blocked` -- never scheduled again |
+| goal | blocked | blocked |
+| target attempt | skipped | skipped |
+| `goal_contact` | none | none |
+
+With the target never attempted there is no contact, with no contact there is no
+`regressed` verdict, and with no regression there is no revert. **The one edit
+that mattered was invisible to every instrument the loop has.** A node that runs
+and fails is strictly better than one that cannot run: the failing one produces
+a search, candidates and a contact reading, and the blocked one produces
+nothing. The loop now reports a blocked goal every turn at reject severity and
+names the whole dead chain, nearest first.
+
+Two smaller faults from the same run. The model wrote the full equation into
+`lhs` *and* supplied the correct `rhs` seven times -- and the repair for that
+shape bailed whenever `rhs` was set at all, so `well_formed` rejected every one.
+Six were confirmable, since the right half and the supplied `rhs` agreed
+verbatim; a seventh was a `=?` truncation where `rhs` is authoritative. Only two
+genuinely different claims about the same side stay rejected.
+
+The derived scaffold itself needs no defence: it was ledger-served at zero cost
+and the model never had to invent it. What this run tests is what the loop does
+when the model damages a derived sketch, and the answer was: nothing, silently.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.

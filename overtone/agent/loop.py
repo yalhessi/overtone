@@ -634,6 +634,25 @@ def _target_node(sketch: Sketch, problem=None):
     return sinks[0] if len(sinks) == 1 else None
 
 
+def _blocking(sketch: Sketch, name, v):
+    """Ancestors of `name` that did not prove, so it is never scheduled.
+
+    Returns the names in dependency order, nearest first, or [] when `name` is
+    reachable. `verify` skips a node whose parents are unproved, so a single
+    failed ancestor removes an entire subtree from the run silently.
+    """
+    proved, seen, out = set(v.get("proved") or ()), set(), []
+    stack = list(sketch.nodes[name][2])
+    while stack:
+        n = stack.pop(0)
+        if n in seen or n in proved or n in sketch.given:
+            continue
+        seen.add(n)
+        out.append(n)
+        stack += sketch.nodes[n][2]
+    return out
+
+
 def _probe_of(actions):
     """(probe, hypothesis) declared by this batch, or ({}, "").
 
@@ -937,6 +956,28 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                     {"proved_available": proved_now}),)
                 print(f"  GOAL DISCONNECTED: {goal} has no parents; "
                       f"{len(proved_now)} proved node(s) available", flush=True)
+            elif goal is not None:
+                # A node is scheduled only when every parent has proved, so an
+                # ancestor that FAILS takes the goal out of the run entirely --
+                # it is not attempted, produces no artifact, and yields no
+                # contact, so the loop's whole veto goes quiet. One run
+                # subdivided its single obligation at iteration 0, replacing
+                # seven proved parents with three that failed, and spent the
+                # next nine iterations blind: the obligation never ran again.
+                # Blocked is worse than failed, and nothing said so.
+                dead = _blocking(sketch, goal, v)
+                if dead:
+                    findings = tuple(findings) + (reviewlib.Finding(
+                        "controller", goal, reviewlib.REJECT,
+                        f"`{goal}` is BLOCKED, not merely unproved: it is never "
+                        f"scheduled because {dead} did not prove, so the target "
+                        f"is not attempted and no goal contact is measured. A "
+                        f"node that runs and fails is strictly better than one "
+                        f"that cannot run -- repair or drop {dead}, or point "
+                        f"the goal at parents that have proved.",
+                        {"blocked_by": dead}),)
+                    print(f"  GOAL BLOCKED by {dead} -- the target cannot be "
+                          f"attempted and contact is unmeasurable", flush=True)
             if goal is None:
                 # Silently attempting with no support would look like a cheap
                 # iteration and be a measurement of nothing.

@@ -3262,3 +3262,64 @@ def test_rewind_only_applies_to_the_committed_sketch():
     derived, _ = derive_sketch("RNG029-5")
     with pytest.raises(KeyError):
         cli.rewind(derived)          # the shape the guard exists to prevent
+
+
+def test_lhs_holding_the_equation_is_recovered_when_rhs_is_also_given():
+    """The commonest way a good node is lost, and the earlier repair refused it.
+
+    A model writes `lhs: "associator(X,Y,Y) = additive_identity"` AND supplies
+    the correct `rhs` separately. The first version of this repair bailed
+    whenever `rhs` was set, so `well_formed` rejected all of them -- seven nodes
+    in one run, six of which were confirmable because the right half and the
+    supplied `rhs` agree exactly.
+    """
+    from overtone.agent import review
+
+    seed = Sketch.from_problem("RNG029-5", goal="rng029-5_goal")
+    ctx = review.context_for("RNG029-5", seed, "rng029-5_goal")
+
+    def one(lhs, rhs=None):
+        a = {"op": "add_node", "name": "n", "lhs": lhs}
+        if rhs is not None:
+            a["rhs"] = rhs
+        kept, _ = review.review([a], ctx)
+        return (kept[0]["lhs"], kept[0]["rhs"]) if kept else None
+
+    # confirmed: rhs repeats the right half (verbatim from the run)
+    assert one("associator(X,Y,Y) = additive_identity", "additive_identity") \
+        == ("associator(X,Y,Y)", "additive_identity")
+    assert one("associator(Y,multiply(Z,X),X) = associator(multiply(Z,X),X,Y)",
+               "associator(multiply(Z,X),X,Y)") \
+        == ("associator(Y,multiply(Z,X),X)", "associator(multiply(Z,X),X,Y)")
+    # a truncation: the text after `=` is not a term, so `rhs` is authoritative
+    assert one("associator(VCY,VCZ,multiply(VCZ,VCX)) =?", "additive_identity") \
+        == ("associator(VCY,VCZ,multiply(VCZ,VCX))", "additive_identity")
+    # rhs missing
+    assert one("multiply(X,Y) = multiply(Y,X)") == \
+        ("multiply(X,Y)", "multiply(Y,X)")
+    # two different claims about the same side: not recoverable
+    assert one("multiply(X,Y) = multiply(Y,X)", "associator(X,Y,Z)") is None
+
+
+def test_a_blocked_goal_is_reported_as_worse_than_a_failing_one():
+    """`verify` schedules a node only when every parent has proved, so a failed
+    ancestor removes the goal from the run entirely: no attempt, no artifact, no
+    contact, and therefore no regression verdict and no revert.
+
+    A run subdivided its single obligation at iteration 0, replacing seven
+    proved parents with three that failed, and spent the next nine iterations
+    blind -- the obligation never ran again and nothing said so.
+    """
+    from overtone.agent.loop import _blocking
+
+    s = Sketch({
+        "ok": ("multiply(multiply(X,Y),X)", "multiply(X,multiply(Y,X))", []),
+        "bad": ("associator(X,Y,Z)", "additive_identity", []),
+        "mid": ("commutator(X,Y)", "commutator(Y,X)", ["bad"]),
+        "rng029-5_goal": ("multiply(X,Y)", "multiply(Y,X)", ["mid", "ok"]),
+    })
+    v = {"proved": {"ok"}}
+    # nearest first, and the whole dead chain is named
+    assert _blocking(s, "rng029-5_goal", v) == ["mid", "bad"]
+    # once the chain proves, nothing is reported
+    assert _blocking(s, "rng029-5_goal", {"proved": {"ok", "mid", "bad"}}) == []
