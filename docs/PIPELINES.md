@@ -92,7 +92,10 @@ Derived from `agent/dag.py` and the run directory, not free text:
 
 - the sketch: nodes, statements, edges, and per-node status and time;
 - failures, classified: **slow** (proved above the diagnostic threshold),
-  **blocked** (a parent failed), **failed with parents**, **failed standalone**;
+  **blocked** (a parent failed), and **failed** carrying why -- **saturated**
+  (the search closed and the statement does not follow), **timeout**, or
+  **error**;
+- for a node that proved, the parents its certificate never cited;
 - for a slow or failed node, candidate intermediates mined from its own run --
   derived rules for a failure, `proof_section` lemmas for a slow success;
 - for a failed node, the parent-set diff against any structurally similar node

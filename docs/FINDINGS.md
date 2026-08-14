@@ -1188,9 +1188,14 @@ quantity that matters is whether the supplied lemmas lie on the derivation path,
 and *nothing in the pipeline checks that*: the prover's soundness catches a wrong
 statement, and no mechanism catches a wrong edge.
 
-Hence `agent/dag.py` now retries any failed node standalone before recording
-failure (`retry_standalone=True`). One extra run per failure is the entire cost,
-and it would have saved this branch.
+Hence `agent/dag.py` retried any failed node standalone before recording failure
+(`retry_standalone=True`). One extra run per failure was the entire cost, and it
+would have saved this branch.
+
+**That retry was removed later; see "The standalone retry cost 8620.8s and
+answered the wrong question" below.** The finding above stands -- nothing checks
+a wrong edge -- but the check it motivated was priced wrong and shaped wrong, and
+the proof certificate answers the same question for free.
 
 Note also what the DAG format buys and costs. A flat lemma list cannot record a
 wrong edge -- but it cannot record a right one either, and the right ones are
@@ -1264,6 +1269,602 @@ populated `LOG_DIR` proof outputs. Note it is a *method*, unrelated to the
 Veroff corpus above, and 18 of its 54 configs use the pathological
 `--hint-skel-factor 0`. Its similarity threshold is also the main leakage risk
 for a train/eval split: split by axiom-signature cluster, not by problem.
+
+## Counting term shapes under `--flatten-goal` measures nothing (2026-08-04)
+
+`--flatten-goal` introduces a constant for every subterm of the goal and rewrites
+any matching term to it immediately:
+
+    Axiom 18 (flattening): multiply3 = multiply(sk_dag_2, associator(sk_dag_3, sk_dag_4, sk_dag_1)).
+    17. multiply(sk_dag_2, associator2) -> multiply3
+    30. add(multiply4, multiply3) -> add3
+
+So a goal subterm **cannot appear literally** in the derived rules, and grepping
+for its shape counts the residue of the naming convention rather than the search.
+
+This cost a full iteration. RNG033-8's iteration 2 was drafted on the reading
+"the search never builds the goal's RHS", from ~10 literal matches out of 24k
+rules. Counted properly -- by resolving the flattening definitions and matching
+the constants -- the RHS is the *dominant* side, 11,565 rules against 3,033 for
+the LHS. The premise was backwards, and the four nodes added to fix it cut the
+rules mentioning both sides, the only ones that can close the goal, from **162 to
+102**. A `--precedence` experiment built on the same measurement moved it to 103.
+
+    run                  rules   LHS side  RHS side  BOTH sides
+    iter00  6-parent     24107       3033     11565         162
+    iter01 10-parent     24727       2927     11596         102
+    iter01 +precedence   25894       3058     12270         103
+
+Iteration 3 reverted those four nodes and cut the goal to three parents, adding
+the standalone (0-parent) run to the comparison:
+
+    parents   rules    lhs     rhs   both    both%
+          0   19163   3297    9322    371    1.94%
+          3   26358   2708   12839    171    0.65%
+          6   24107   3033   11565    162    0.67%
+         10   24727   2927   11596    102    0.41%
+         10   25894   3058   12270    103    0.40%   + --precedence
+
+Parent *count* is not the lever between 3 and 6 -- 171 against 162, and lower by
+rate. Ten parents is genuinely worse. **And the highest contact belongs to
+supplying nothing**, which did not prove the goal at 300s, so `both` is a veto
+rather than
+an objective: a fall is evidence an edit hurt, a rise is evidence of nothing, and
+maximising it drives a sketch toward the configuration already known to fail.
+None of 0, 3, 6 or 10 parents proves RNG033-8 at 300s.
+
+Three rules follow. Resolve `Axiom N (flattening):` lines and match twee's own
+constants, never source-level shapes; judge a decomposition by rules touching
+**both** sides of the goal rather than either one; and treat that count as a
+veto on edits, never as a quantity to maximise.
+
+## The loop's instruments were not connected (2026-08-13)
+
+Two agent runs failed, and the obvious reading -- that verified lemma count is a
+useless objective -- is true but secondary. Audited against their own artifacts,
+the primary cause is that the measurements the loop is built on were never taken,
+and its prover budget went to the one configuration this file already condemns.
+
+**`State.contact` was `None` at every iteration of the RNG029-5 run.** `_contact`
+globbed `{node}.flatten-goal.*.fail.out` for the *goal node*, which was blocked
+and so never ran. The final attempt in the same iteration left a 2.2 MB failed
+search on the real problem, and `proofs.goal_contact` reads it without
+complaint -- `{lhs: 1727, rhs: 2153, both: 22, rules: 14562}`. The veto signal was
+on disk and shown to nobody. Now computed from the attempt's own result row.
+
+**The target attempt was the budget.** It ran every iteration with every proved
+node as axioms, channel hardcoded, while `verify` chose per node via
+`channel_for`:
+
+| run | attempts | total | share |
+|---|---|---|---|
+| RNG033-8 | **6,003.7s** | 10,423.9s | 57.6% |
+| RNG029-5 | **1,201.4s** | 1,441.9s | 83.3% |
+
+That is the loose-bag-as-axioms configuration measured as a timeout on MVA005-1
+and as worse-than-nothing on `teichmuller`. The support is now the goal node's
+*declared parents* filtered to what proved, and the attempt is skipped entirely
+when that set is unchanged -- an identical input the ledger would answer for free
+and `cost` would charge 600s for again.
+
+**`cpu_spent` charged ledger reuse at full price.** Of RNG033-8's 4,420.2s of
+node verification, **2,857.0s was reused**; iteration 7 reported 601.7s of which
+100% was reuse, and RNG029-5's total rose 600.7s across an iteration whose two
+attempts were both served from the ledger. `cost` now returns `cpu` (cold cost,
+the honest per-problem figure) and `cpu_new` (what the machine spent) separately.
+
+**Artifact lookup by directory glob is contaminated in both directions.**
+`logs/loop/RNG033-8-agent/iter00/` holds `final.*.p` from **five** separate loop
+invocations, because repeated runs share an `iterNN` directory. Same class as the
+`screen.py` concurrency bug. Everything is now addressed through `row["output"]`.
+
+**A statement that is not a term reached the prover.** RNG029-5's iteration-0
+edit proposed a node whose sides were `associator(X,Y,Z) = additive_identity` and
+`multiply(multiply(X,Y),Z) = multiply(X,multiply(Y,Z))` -- an implication written
+as an equation between two equations. `=` is not a token of the term grammar, so
+`safe_term` returned `None`, `alpha_key` fell back to a stripped string, and every
+`eq_key`-based reviewer compared that string and found no match. twee rejected it
+in 0.003s x 4 and the loop recorded `failed`, which is what a hard lemma reports;
+the agent subdivided it, then removed it, and the *cycle detector* ended the run.
+Arity is the subtler half -- `associator(X,Y)` parses fine, is not a term of the
+signature, and used to crash `freering.reviewer`, which caught parse errors but
+not a known head applied to the wrong number of arguments.
+
+**The cycle detector hashed node names.** RNG033-8's two failing nodes were
+renamed `..._zeroed` and back across iterations 5-9, so nine passes round the same
+loop read as nine fresh sketches. The digest is now over `eq_key`s: a rename is
+not a new sketch, and neither is a re-orientation or a variable renaming.
+
+Two consequences for how a run is judged. Progress is now the probe an agent
+*declared before the run*, not a node newly proved -- proving a lemma nothing
+asked for is `inconclusive` and does not clear a stall. And a fall in target
+contact `regresses` the iteration, which reverts the sketch and closes that
+branch rather than ending the run, which is what RNG029-5 needed and did not have.
+
+### The rebuilt loop, replaying RNG029-5 end to end
+
+Scripted agent, deterministic build, 60s a node and 300s a final, fresh outdir.
+**Proved at iteration 3**, `stop_reason: proved`:
+
+| iter | nodes | charged | new | outcome | target |
+|---|---|---|---|---|---|
+| 0 | 20/25 | 3155.9s | 600.5s | baseline | Timeout, 1 lemma, `both` 21 |
+| 1 | 20/25 | 5591.2s | 600.5s | inconclusive | **skipped**, support unchanged |
+| 2 | 21/26 | 8001.0s | 600.5s | inconclusive | **skipped**, support unchanged |
+| 3 | 28/29 | 9994.4s | 1986.3s | **solved** | **Unsatisfiable 424.0s**, 4 lemmas as axioms |
+
+Two of the four attempts were skipped on unchanged support, and the one that
+proved was given the goal's four declared parents -- `assoc_cyclic`,
+`assoc_def_246`, `assoc_def_247`, `right_moufang` -- as axioms, not the 28 nodes
+that had proved by then. Charged 9994.4s against 1986.3s actually spent, so the
+two figures differ by 5x on a single run and the old single number was neither.
+
+**The target node had to be found by its statement.** This sketch has no node
+named `*goal` at all: the conjecture is `middle_moufang`, which *is* RNG029-5.
+Taking the support from "the goal node" under the old `name.endswith("goal")`
+rule would have supplied nothing and proved nothing. `_target_node` matches the
+problem's conjecture by `eq_key` first, falls back to the naming convention, then
+to the DAG's unique sink, and reports rather than guessing when all three fail.
+
+### A drafted run that failed, and the three separable reasons
+
+gpt-5.4 drafting RNG029-5 from scratch: 3 iterations, 2,769.5s charged / 2,045.3s
+new, no proof, `stop_reason: the agent proposed no further edits`. Worth
+recording because the causes are independent and only one is mathematical.
+
+**The sketch contained a false lemma, and it was load-bearing.** `shuffle_inner`
+states `y(zx) = (yz)x` -- full associativity, which is false in an alternative
+ring by construction, the theory being defined by not having it. `target_bridge`
+rested on it, the goal rested on `target_bridge`, so the goal's declared support
+was **empty at every iteration** and the target was attempted with nothing.
+
+**The free-ring check cannot see this, and says so.** It returns "2 monomials
+remain" for `shuffle_inner` and *the same verdict* for `flexible_law`, which is
+true and proved in 1.3s. Non-universality does not separate "needs alternativity
+and holds" from "is associativity and does not". That limit is in the module
+docstring and this is what it looks like in a real run.
+
+**The runtime signal was there and the prompt inverted it.** All three failing
+nodes were `failed_standalone` -- they failed with nothing supplied, which
+exonerates their parents. Rule 2 told the model "if a node fails WITH parents but
+its standalone retry also fails, suspect the parents before the statement",
+which is backwards and contradicts `state_of`'s own comment. The model followed
+it and re-parented the same three nodes for three iterations. The rule then
+spelled out both statuses: `failed_with_parents` means fix the edges,
+`failed_standalone` means suspect the statement.
+
+*Superseded.* Both statuses are gone with the retry that produced them. What the
+model needed here was the distinction between "the search closed and your
+statement does not follow" and "the budget ran out", and `failed_standalone`
+was only ever a proxy for it -- an expensive one, and a lossy one. `NodeState.failure`
+now carries `saturated` / `timeout` / `error` directly off the result line. See
+below.
+
+**An empty-support attempt is the bare baseline and is now skipped.** It cost
+600.5s of 2,045.3s new CPU (29%) to re-derive a timeout already recorded at
+4000s in both directions. Worse, its contact is not comparable to any later
+reading: supplying nothing scores the highest contact ever measured here (371
+against 162 for six parents), so using it as the reference makes the first real
+lemma look like a large regression -- and this loop reverts regressions, which
+would undo every genuine step. `target_of` now withholds the delta when either
+side of the comparison supplied nothing.
+
+### The second attempt: cheaper, and it retreats instead of redrafting
+
+Same model and problem with those fixes in, fresh outdir: 4 iterations,
+3,011.4s charged but **841.0s new**, still no proof. Two things worked and one
+new fault appeared.
+
+Iterations 0-2 re-verified the identical drafted sketch and cost **0.0s of new
+prover time** -- entirely ledger-served -- while the empty-support skip removed
+three 600.5s baseline attempts. Real cost fell from 2,045.3s to 841.0s. And the
+agent **redrafted at `stalled = 2`**, which the previous run never did.
+
+Then the redraft went backwards. It proposed `nodes: []`: keep the five nodes
+that had already proved, delete the rest, point the goal at `flexible_law`. The
+five are `associator(X,X,Y) = 0`, `associator(X,Y,Y) = 0`, `commutator(X,X) = 0`,
+the flexible law and `associator(X,Y,X) = 0` -- every one an **accelerant**, the
+category the first RNG029-5 write-up in this file already found "all accelerant
+and no waypoint". 5 of 6 nodes proved, and the target timed out.
+
+The loop scored that as a route change because deleting four nodes is a
+non-empty diff, so it reset the stall counter and bought four fresh iterations on
+a sketch strictly smaller than the one that had just failed. **A redraft
+proposing no new lemmas is now withheld**, with the reason stating that keeping
+what already proved is a retreat to a subset already known to be insufficient.
+
+That withholding exposed an older bug worth naming separately: the loop tested
+`if not actions` on the batch AFTER review, so a wholly withheld batch ended the
+run as "the agent proposed no further edits" -- untrue, and the same class of
+false ending as the cycle detector firing on a revert. A withheld batch now
+returns the findings and another turn.
+
+### One rejected node destroyed a whole draft
+
+The third run's severest fault, and the cheapest to fix. The draft proposed five
+nodes; `sandwich_shift` was correctly rejected for restating the conjecture; the
+other four survived review -- and `goal_parents` still named the rejected one, so
+`apply` raised `unknown parents` and **the entire redraft was discarded**.
+`_draft` caught the exception and only printed it, so the model was never told.
+The run began with a bare one-node sketch and spent four of its first five
+iterations testing nothing.
+
+`repair` had always dropped unresolvable names from a node's `parents`. It never
+touched a redraft's `goal_parents` or `keep`, which are node references by the
+same rule. Replaying that exact draft through the fixed review now yields all
+four nodes and an applicable action, and a draft that still cannot apply reaches
+the model as a finding saying so.
+
+**A rollback handed the agent the sketch it had just thrown away.** After
+restoring `prev_sketch` the loop called the agent with the *old* `state` while
+review ran against the restored sketch. The model proposed `goal_left_factor`
+because its state said the node was absent, and review rejected it as a
+duplicate because it had just been restored. The state is now rebuilt from the
+restored sketch's own results.
+
+Four smaller things the same audit turned up, all of which mislead the model
+directly: a node with **no parents** that failed was labelled
+`failed_with_parents`, pointing the agent at edges that do not exist (both
+statuses are since gone -- see the standalone-retry entry below); the
+problem's own **axioms rendered as `pending`**, 15 of 20 rows in one prompt,
+reading as work outstanding rather than assumptions; the draft prose said a
+parent **may** name an axiom while the JSON schema said **never**; and the draft
+cap asked for 5-15 lemmas when the only decomposition ever driven to a proof on
+a problem of this difficulty has **29 claims**, now 8-30.
+
+**The target attempt's own search is now mined.** It is the longest run of the
+iteration -- 600s against the real conjecture -- and its derived rules were read
+only for a contact count, then discarded. Candidates from any run are also
+filtered now: rules naming run-local constants (`sk_dag_2 -> multiply2`) cannot
+become reusable lemmas because the names die with the run, and rules the sketch
+already states or the problem already assumes are not candidates at all.
+
+### Fourth run: the drafts finally survive, and the goal comes loose instead
+
+With the draft repaired, the same model on the same problem went from 1-2 proved
+nodes to **20-24**, over four named approaches -- Bruck-Kleinfeld and Teichmüller
+waypoints, which is the actual literature route. 8 iterations, 6,453.1s charged /
+3,501.2s new, no proof. The decomposition is now real; two things stop it being
+tested.
+
+**The target was attempted once in eight iterations.** Not because it was
+skipped as a baseline by design, but because the goal node had **no parents at
+all** from iteration 3 to 6 while 24 lemmas sat proved and unused. The cause is
+the previous fix's blind spot: repair drops goal parents that name rejected
+nodes, and when it drops them *all* the goal is connected to nothing. The model
+had supplied goal parents both times; every name it chose had just been rejected
+as a duplicate. A redraft that would orphan the goal is now withheld, on the same
+rule as a carrier whose every node was rejected -- a goal with no parents is not
+a decomposition of anything.
+
+**Seven nodes were lost to one recurring malformation.** The model wrote the
+whole equation into `lhs` and omitted `rhs`:
+`"lhs": "associator(X,Y,multiply(Z,X)) = additive_identity"`. `well_formed`
+rejected it correctly, but reported the case it was written for -- an implication
+between two equations -- so the reason described something the model had not
+done, and it repeated the mistake across two iterations. One `=` with `rhs`
+missing is unambiguous and is now **split and kept**, with a warning; two `=`
+signs remain a rejection, because which relation was meant is not recoverable.
+
+The lesson generalising across all four runs: every remaining loss has been a
+*repair* that was too weak or a *message* that described the wrong error. The
+prover has not yet been the bottleneck.
+
+### Fifth run: the fix for the orphaned goal was worse than the fault
+
+Withholding a redraft that would orphan the goal put `peak_proved` back to **1**.
+The draft proposed 18 nodes; two were rejected (one restated an axiom, one
+restated the conjecture); the rejected conjecture-restatement was the only name
+in `goal_parents`; so the guard withheld the whole redraft and the run began
+with a bare goal again. 8 iterations, 2,420.0s charged / 483.7s new, and the
+first approach is recorded as `(unnamed)` because no draft ever applied.
+
+That is the same failure the `goal_parents` repair had just fixed, reintroduced
+one level up, and it is the more expensive of the two: an orphaned goal wastes
+the target attempt, a discarded draft wastes everything. Replaying that exact
+draft through the corrected review keeps **16 of 18 nodes**.
+
+So the rule is now: **repair, warn, and keep the work; never discard a
+decomposition over a reference error.** The orphaned goal is instead reported by
+the loop every turn at reject severity, naming the proved nodes available to
+wire it to -- persistent pressure that costs nothing, where withholding cost the
+entire run. Three rounds of this now say the same thing: in a loop whose
+proposals are cheap and whose verification is expensive, the correct response to
+a malformed proposal is almost never to throw it away.
+
+### Sixth run: rejecting a duplicate was injecting wrong edges
+
+18-21 nodes proved, three approaches, the target attempted every iteration with
+its three declared parents as axioms. 8 iterations, 9,244.1s charged / 2,406.0s
+new, no proof. The machinery now works end to end, and one more repair was still
+too weak.
+
+**A duplicate is a renamed lemma, not a lost one.** The model repeatedly
+proposed lemmas the sketch already held under other names. `duplicates_a_node`
+rejected them -- correctly -- and then `repair` dropped those names from every
+parent list that cited them, because the name no longer resolved. So a node that
+genuinely had a parent in the sketch lost the edge. That is the pipeline
+*creating* the wrong edges this file elsewhere records as costlier than missing
+ones, and it happened across three redrafts of one run.
+
+`duplicates_a_node` now reports *which* node states the equation, and review
+carries a proposed-name -> existing-name alias through the batch so references
+are rewired instead of deleted. Replaying that run's iteration-2 redraft:
+`assoc_y_mul_zx_x_zero -> assoc_yz_x_outer_repeat`,
+`x_assoc_yzx_zero_via_outer -> x_assoc_yzx_zero`, and nothing dropped, against
+three parent references silently lost before. The goal node is deliberately
+excluded as an alias target -- rewiring a goal restatement would make the goal
+its own parent, a cycle produced by a repair.
+
+**And the substantive result: `goal_contact.both` sat at 152 for all eight
+iterations.** Every edit scored `inconclusive` or `regressed`; none moved the one
+quantity that vetoes. The sketch churned -- 24 to 26 nodes, three approaches, two
+reverts -- while the target's support stayed the same three lemmas throughout.
+
+### Seventh run: a redraft deadlock, and where review and apply disagreed
+
+The clearest harness failure of the series, because the run did *nothing* for six
+iterations and reported no error at all: 8 iterations, one approach, `n_proved`
+frozen at 14/22 from iteration 2, and **`cpu_new` frozen at 1,444.2s** -- six
+model calls and zero prover work.
+
+Review and `apply` disagree about what a redraft's parents may name. Review
+checks against the CURRENT sketch, so a parent naming any existing node passes.
+`apply` then rebuilds the sketch from `keep` plus the proposed nodes and deletes
+everything else -- so a parent naming a real node the model did not happen to
+list in `keep` becomes an unknown parent, and the whole redraft raises.
+
+Six consecutive iterations proposed a waypoint citing
+`assoc_prod_flexible_rewrite`, a node that existed and was not kept. Every
+redraft raised, so nothing applied; the sketch never changed; the approach never
+rotated, because rotation requires an *applied* redraft; the approach-budget
+controller never fired, because the batch did contain a redraft; and the loop
+span on `retry_after_rejection` until `max_iterations`.
+
+Review now closes `keep` over what the new nodes cite, transitively -- a node
+pulled in brings its own parents, or it dangles one level down, which is exactly
+what the first version of this fix did. Replaying the run's redrafts: iterations
+2, 3, 5 and 7 all apply, with 2-3 real edits each, against raising every time.
+
+Two general lessons. **Any disagreement between what review accepts and what
+`apply` builds is a silent deadlock**, not a visible error -- three separate bugs
+in this series have been instances of it (`goal_parents`, duplicate aliasing,
+`keep` closure). And **a loop that can spin without spending prover time can
+spin invisibly**: the cost accounting is what exposed this one, since a run
+burning model calls at constant `cpu_new` is doing nothing. That is now a stop
+condition -- three consecutive iterations with no new prover time ends the run
+and names the fault, rather than exhausting the iteration budget in silence.
+
+### Eighth run: the repairs hold, and the goal keeps coming loose
+
+Four approaches rotating, 19-20 nodes proved, every repair firing as intended --
+duplicate references rewired, `keep` closed transitively. 8 iterations, 7,227.4s
+charged / 2,764.7s new, no proof. No new harness fault in the edit path, which
+is the first time in the series. Two things remain.
+
+**The target had no proved support in three of eight iterations**, and this time
+it is the sketch's fault rather than the harness's. The goal's declared parents
+were empty at iterations 0 and 5, and at iteration 7 it named two nodes of which
+*neither* proved. The `regressed` verdicts at 5 and 7 are correct. The pattern
+across the run is that the model points the goal at nodes it has not yet
+established, so the most expensive run of the iteration measures nothing.
+
+**`goal_contact.both` sat at 152 for all eight iterations again** -- the same
+value as the sixth run, with a different sketch and different approaches. Two
+independent runs now agree that this decomposition family does not move the one
+quantity that carries evidence.
+
+One reporting bug fixed: a rolled-back iteration recorded the *restored*
+sketch's target beside the *reverted* sketch's outcome, so the trajectory showed
+"the target lost all of its proved support" next to a healthy two-lemma attempt.
+The record now carries the judged sketch's target, with the post-rollback one
+alongside it when they differ.
+
+### Specialisations of a goal are accelerants: easy, and they transfer nothing
+
+The convergent ladder FINDINGS has called unimplemented since the MVA005-1 work
+-- rungs that are progressive approximations of the target rather than lateral
+facts -- finally tested, on the cheapest version of the idea: relax the goal by
+identifying its variables, walk from the fully-identified instance up to the
+conjecture. RNG029-5, its own axioms, deterministic build, 60s a rung, both
+directions:
+
+| rung | result |
+|---|---|
+| all three variables identified, `(xx)(xx) = x((xx)x)` | **0.01s** |
+| `identify_xy` | 1.33s |
+| `identify_xz` | 1.35s |
+| `identify_yz` | **Timeout 60.1s**, both directions |
+| the goal itself | Timeout |
+
+So there *is* a difficulty gradient -- 0.01s, 1.3s, timeout -- and it is useless.
+Supplying the base rung as support to its own successor gives **1.33s against
+1.33s**: the times agree to three significant figures, so the transfer is not
+small, it is absent. Supplying both proved rungs to the target leaves it at a
+60s timeout, matching the bare 60s baseline.
+
+**The reading is that a specialisation of a goal is an accelerant**, in exactly
+the sense this file already uses: cheap to prove, and no help. That is the
+accelerant/waypoint split reappearing one level up, and it disposes of the whole
+family of "walk from an easy instance to the conjecture" designs as *proof
+support*. The lattice remains useful as a diagnostic -- `identify_yz` being as
+hard as the goal while its two siblings are trivial localises which pair of
+variables carries the difficulty -- but proving an instance is never evidence
+about the general statement.
+
+Two caveats, both against the negative half. The target arm ran at 60s, under
+this file's own "screen at a realistic budget or not at all" rule, and the
+contact fall reported alongside it (7 -> 5) is on 60s runs where the veto rule
+was calibrated at 162 -> 102. So *supplying rungs hurts* is not established;
+*they do not help, and transfer nothing* is, and the zero-transfer measurement
+does not depend on the budget at all.
+
+Recorded in `logs/ledger.jsonl` under `/tmp/rng029-lattice*`,
+`/tmp/rng029-chain-transfer*` and `/tmp/rng029-baseline60*`.
+
+### A waypoint derived from the goal's syntax takes RNG029-5 from 4000s to 6.7s
+
+The first waypoint this project has *generated* rather than drafted or mined.
+`scripts/residual_probe.py`, no prover and no model: expand the conjecture's two
+sides in the free non-associative ring, and solve for the residual over a basis
+of **universal** associator expressions -- terms true of any ring, so the answer
+assumes nothing about alternativity and cannot smuggle in the axioms meant to
+discharge it.
+
+RNG029-5's residual comes back as **two terms**:
+
+    (xy)(zx) - x((yz)x)  =  (x, y, zx)  -  x * (y, z, x)
+
+so the conjecture holds exactly when
+`associator(X,Y,multiply(Z,X)) = multiply(X,associator(Y,Z,X))`. Supplying that
+one equation as an axiom:
+
+| RNG029-5 | `--no-flatten-goal` | `--flatten-goal` |
+|---|---|---|
+| baseline | Timeout 4000s | Timeout 4000s |
+| **+ the derived bridge** | **Unsatisfiable 6.7s** | Unsatisfiable 10.2s |
+
+The bridge itself does **not** prove at 60s standalone, which is the honest
+shape of the result: the decomposition is exact, so the bridge carries the whole
+difficulty. What it buys is that the difficulty is now a single structural
+obligation in the theory's own language, instead of a conjecture about products
+-- which is what "waypoint" has meant in this file all along, and what eight
+agent runs failed to invent. RNG033-8 decomposes the same way, into five terms.
+
+**The integer constraint is not a formality.** The same residual over the
+problem's *own* polarized axioms is in the rational span with coefficients of
+1/2, and dividing by 2 is valid only in a ring without 2-torsion, which the
+alternative-ring axioms do not provide. A Hermite-form solve over ℤ finds an
+honest certificate -- 52 terms, largest coefficient 100. That certificate is a
+genuine algebraic derivation of the target from the axioms, and it is **not a
+decomposition**: it proves the conjecture without suggesting anything to prove
+first. Length is what separates a route from an identity.
+
+Two pieces of machinery earned their place. Polarization turns
+`associator(X,X,Y) = 0` into `associator(X,W,Y) + associator(W,X,Y) = 0` --
+`alt12_additive`, a node of the successful sketch that models keep failing to
+prove. And the basis choice decides everything: the same target over raw
+monomials gives a 52-term identity with coefficients past 100, and over
+associator terms gives two.
+
+#### The scaffold below the waypoint is generated too
+
+The bridge is a restatement, so on its own it moves the difficulty rather than
+reducing it. What makes it a *route* is that everything beneath it is derivable
+by the same machinery, and cheap. Verified against RNG029-5's own axioms, 60s a
+node, deterministic build:
+
+| node | how it is derived | cpu |
+|---|---|---|
+| `assoc_add_1/2/3` -- the associator is additive in each argument | universal, expands to 0 | 30.2 / 29.8 / 29.8s |
+| `lin_left`, `lin_right` -- `associator(X+Y,X+Y,Z) = 0` etc. | instance of an axiom | **0.01s** |
+| `alt12`, `alt23` | polarization, given `lin_*` + the two additivity lemmas it uses | **0.02s** |
+| `assoc_cyclic` | integer certificate over `alt12`/`alt23` instances: `+1*alt12[X,Y,Z] -1*alt23[Y,X,Z]` | **0.01s** |
+| `bridge` | the associator decomposition of the goal | unproven at 60s **and at 300s**, both directions |
+| the conjecture | given `bridge` | **6.7s** |
+
+Eight nodes, ~150s of new prover time, and every one of them produced from the
+problem's own axioms and the goal's syntax -- no donor, no retrieval, nothing
+from `scripts/rng_dag.py`.
+
+Two things this pins down. **`alt12` goes from unproven at 60s to 0.02s when
+given the three lemmas its own polarization uses**, which is the ~3000x
+direct-parent effect this file records elsewhere, arrived at from the derivation
+rather than from a guess -- and the derivation *names* those parents, which is
+what the drafting model never manages. And the whole scaffold reduces RNG029-5
+to exactly one obligation, `associator(X,Y,ZX) = X*associator(Y,Z,X)`, which is
+the theorem's actual content: the analogous `right_moufang` in the hand-built
+sketch cost 193.6s and needed its own decomposition beneath it.
+
+`assoc_add_1/2/3` at ~30s each trip the diagnostic threshold, so by this file's
+own rule a node is missing under them too.
+
+#### Why the last step is hard, stated exactly: the linear route reaches 2x it
+
+Recursing the generator on the remaining obligation -- closing the *proved*
+lemmas (`alt12`, `alt23`, `assoc_cyclic`) under bounded consequence at degree 4,
+912 elements, and solving for the bridge -- returns:
+
+- **`2 x bridge` IS an integer combination** of the alternating laws (68 terms).
+- **`bridge` is not.** It sits in the rational span with a factor of 1/2, and
+  the solver reports where: `-763 is not divisible by 2`.
+
+So the linearised alternative laws give exactly twice the Moufang residual, and
+recovering the residual itself requires a ring without 2-torsion -- which
+`RNG003-0.ax` does not assume. That is a precise, mechanical account of why this
+family resists: the cheap linear route provably cannot finish, and the remaining
+step needs a genuinely non-linear argument rather than more bookkeeping.
+
+It also retires the idea that the integrality check was a formality. The same
+system over ℚ "solves" and would have produced an unsound waypoint; the
+distinction is the whole diagnostic.
+
+### The standalone retry cost 8620.8s and answered the wrong question
+
+`verify` re-attempted every failed node with all of its parents removed, at the
+same budget that had just failed, racing both directions, on the layer's critical
+path. `scripts/retry_cost.py` measures what that came to, over the 84 archived
+`dag.json` files (3,478 rows):
+
+| | rows | CPU |
+|---|---|---|
+| `scope_retry`, non-reused -- real prover time | 81 | 8,620.8s |
+| ...that proved nothing | **75** | **8,532.8s -- 99.0%** |
+| ...that proved something | 6 | 88.1s |
+
+308 `scope_retry` rows exist; the ledger served 227 of them. A ledger-side count
+of all empty-support CPU comes to 23.5% of everything ever spent, but it cannot
+separate the automatic retry from deliberate `--scope none` control arms, so the
+`dag.json` figure is the one to quote.
+
+Three things were wrong with it, and only the first is about the price.
+
+**It contradicted rule 1.** "Budget is a diagnostic, not a resource" -- and this
+was the one place the code re-spent a budget that had just failed.
+
+**It was all-or-nothing.** Dropping every parent cannot say *which* edge is
+wrong. On `teichmuller` -- five parents, three of them trilinearity and off the
+derivation path -- the useful answer is "drop those three", and the retry could
+only ever say "not these five".
+
+**It fired where scope is provably irrelevant.** Parents are proved or `given`
+lemmas, so they are already entailed by the axioms and the model class is
+identical with or without them. A saturated verdict cannot change when they are
+removed. 75 of the 81 fresh retries were re-deriving something already settled.
+
+**The certificate answers the same question for free.** twee names the supplied
+axioms it used, both in the proof's axiom listing and in each rewrite step
+(`= { by axiom 2 (parent_2) }`). Over the 154 proved parented artifacts on
+record:
+
+> **307 parents supplied, 143 cited in the certificate -- 164 (53%) never
+> cited.** 89 of 154 proved runs carried at least one. `final` proved once with
+> **0 of 21** used (91.5s); `assoc_of_sum_left` repeatedly at 39-57s with
+> **0 of 3**.
+
+What that does and does not license matters. It is exact about the certificate
+and silent about the search: `agent/ledger.py` exists because a reordered axiom
+list is a different search with its own outcome, and removing one is a larger
+change than reordering. So an uncited parent is a hypothesis, and `agent/loop.py`
+drops it **on probation** -- the next iteration re-runs the node anyway, and
+anything that came back slower or stopped proving has its parents put back
+automatically, at no prover cost. The agent is told both times.
+
+Two guards were found by writing the tests rather than the code. A drop is
+skipped when it would leave the parent with no children at all, because
+`_target_node` falls back to the unique sink and an orphaned lemma is a second
+one -- a drop can otherwise cost the run its target. And the node named by the
+current probe is never touched, or `score_outcome` credits the controller's edit
+to the agent.
+
+**What this gives up, stated plainly.** The six retries that did pay off proved
+in 2.7s, 3.1s, 8.4s, 8.6s, 8.9s and 56.4s -- and every one of them under
+`--flatten-goal`, the *second* of `DIRECTIONS`. Five of the six would fit inside
+a 15s two-direction probe. That probe was designed and then cut, because no
+leave-one-out arm has ever been run here and nothing in this file should rest on
+an unmeasured mechanism. If the loop starts stalling on wrong edges, a
+*planner-requested* empty-support probe on a named node is the cheap thing to add
+back -- not an automatic one.
 
 ## Open
 

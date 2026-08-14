@@ -38,10 +38,12 @@ relevant sign lemmas as axioms. Same screen, build, budget and direction:
 RNG025-4 proves in 371.9s, RNG025-5 times out, and still times out at 4000s.
 """
 import json
+import re
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
+from overtone import proofs
 from overtone import runner
 from overtone.agent import hints as hintlib
 from overtone.agent import ledger as ledgerlib
@@ -65,11 +67,46 @@ class Sketch:
     `nodes` maps name -> (lhs, rhs, parents). A node with no parents is a claim
     that it follows from the problem's own axioms; that is the donor-ladder case
     and reduces to standalone verification.
+
+    `given` names nodes that are the problem's OWN axioms rather than claims.
+    They are never proved -- they are true by assumption and twee already has
+    them from the problem file. They exist so the problem has one canonical
+    shape in the DAG: without them an agent invents its own encoding of the
+    axioms, and one drafted four nodes that were verbatim copies of axioms,
+    proving them in 0.0s for nothing. With them, an agent cites an axiom by name
+    instead of restating it, and a lemma's derivation records which axioms it
+    rests on.
     """
 
-    def __init__(self, nodes):
+    def __init__(self, nodes, given=()):
         self.nodes = dict(nodes)
+        self.given = frozenset(given)
         self.validate()
+
+    @classmethod
+    def from_problem(cls, problem, goal="goal"):
+        """The canonical seed: every axiom as a given node, plus the goal.
+
+        Axiom nodes keep their TPTP names, so `parents: ["commutator"]` -- which
+        is what an agent reaches for unprompted -- means exactly what it looks
+        like.
+        """
+        from overtone import problems
+        path = problems.problem_path(problem)
+        nodes, given = {}, []
+        for name, (lhs, rhs) in problems.named_axioms(path).items():
+            nodes[name] = (lhs, rhs, [])
+            given.append(name)
+        conj = problems.conjecture(path)
+        nodes[goal] = (conj[0], conj[1], [])
+        return cls(nodes, given)
+
+    def is_given(self, name):
+        return name in self.given
+
+    def claims(self):
+        """Node names that are claims -- everything that is not an axiom."""
+        return [n for n in self.nodes if n not in self.given]
 
     @classmethod
     def from_lemmas(cls, lemmas):
@@ -85,11 +122,24 @@ class Sketch:
             unknown = [p for p in parents if p not in self.nodes]
             if unknown:
                 raise ValueError(f"{name}: unknown parents {unknown}")
+            if name in self.given and parents:
+                raise ValueError(f"{name} is an axiom and cannot have parents")
+        unknown = sorted(self.given - set(self.nodes))
+        if unknown:
+            raise ValueError(f"given names no such node: {unknown}")
         self.layers()          # raises on a cycle
 
-    def layers(self):
-        """Topological layers; every node follows all of its parents."""
-        done, out, remaining = set(), [], dict(self.nodes)
+    def layers(self, with_axioms=True):
+        """Topological layers; every node follows all of its parents.
+
+        The problem's axioms form layer 0 -- a tier of their own rather than
+        being mixed in with parentless claims, which they resemble structurally
+        and differ from completely: a claim at that position is something to
+        prove, an axiom is something assumed.
+        """
+        done = set(self.given)
+        out = [sorted(self.given)] if (with_axioms and self.given) else []
+        remaining = {n: v for n, v in self.nodes.items() if n not in self.given}
         while remaining:
             ready = sorted(n for n, (_, _, ps) in remaining.items()
                            if all(p in done for p in ps))
@@ -122,8 +172,16 @@ class Sketch:
                 stack += self.nodes[n][2]
         return seen
 
-    def equations(self, names):
-        return [(self.nodes[n][0], self.nodes[n][1]) for n in names]
+    def equations(self, names, skip_given=True):
+        """(lhs, rhs) for each name. Axiom nodes are dropped by default.
+
+        An axiom is already in the problem file, so supplying it again as a
+        parent would state it twice -- changing the input bytes, and so the
+        ledger key, for a run that is semantically identical. Citing an axiom as
+        a parent is documentation of a derivation, not a request to re-supply it.
+        """
+        return [(self.nodes[n][0], self.nodes[n][1]) for n in names
+                if not (skip_given and n in self.given)]
 
     def to_json(self):
         """`{name: {lhs, rhs, parents}}` -- JSON-safe, order preserved.
@@ -132,35 +190,102 @@ class Sketch:
         revises one across iterations and has to persist it in between, and a
         trajectory records the sketch at every step.
         """
-        return {n: {"lhs": l, "rhs": r, "parents": list(p)}
+        return {n: {"lhs": l, "rhs": r, "parents": list(p),
+                    **({"given": True} if n in self.given else {})}
                 for n, (l, r, p) in self.nodes.items()}
 
     def digest(self) -> str:
         """Identity of this sketch, for detecting that a loop has gone in a circle.
 
-        Node order is irrelevant -- `layers()` sorts -- so the serialisation is
-        sorted by name. Parent *order* is kept, because it decides the order
-        equations enter twee and therefore the search, exactly as in the run
-        ledger. Two sketches that differ only in how a parent list is ordered are
-        different questions and must not be mistaken for a repeat.
+        Over *statements*, not names. A node is its equation and its parents'
+        equations; what it is called is a label the prover never sees. Hashing
+        names let one agent run circle for nine iterations: the same two nodes
+        failed at iterations 1-4, came back renamed `..._zeroed` and failed at
+        5-7, and reverted at 8-9, and every rename read as a fresh sketch.
+
+        Parent *order* is kept, because it decides the order equations enter
+        twee and therefore the search, exactly as in the run ledger. Two
+        sketches differing only in how a parent list is ordered are different
+        questions and must not be mistaken for a repeat. `eq_key` is
+        orientation- and alpha-insensitive for the same reason it is everywhere
+        else here: `a = b` and `b = a` under renamed variables are one fact.
         """
         import hashlib
-        canon = json.dumps({n: [l, r, list(p)] for n, (l, r, p)
-                            in sorted(self.nodes.items())}, sort_keys=False)
+        from overtone.terms import eq_key
+        key = {n: eq_key(l, r) for n, (l, r, _) in self.nodes.items()}
+        canon = json.dumps(sorted(
+            [list(key[n]), [list(key[p]) for p in p_], n in self.given]
+            for n, (_, _, p_) in self.nodes.items()))
         return hashlib.sha256(canon.encode()).hexdigest()[:16]
 
     @classmethod
     def from_json(cls, obj):
         return cls({n: (v["lhs"], v["rhs"], list(v.get("parents", [])))
-                    for n, v in obj.items()})
+                    for n, v in obj.items()},
+                   given=[n for n, v in obj.items() if v.get("given")])
 
 
-def channel_for(names, sketch, node, override=None):
+def grounding_errors(sketch: Sketch, problem) -> list:
+    """Ways `sketch` assumes more than `problem` does. Empty means it does not.
+
+    Every node must follow from the problem's own axioms -- a subset of them is
+    fine, more is not. Two ways a sketch can quietly stop being about the
+    problem, both of which this rejects:
+
+    **An assumption that is not an axiom.** `given` marks a node as true without
+    proof. If that node is not actually one of the problem's axioms, the sketch
+    has introduced a new one, and everything downstream is a theorem of a
+    stronger theory than the problem states. That is exactly how RNG027-10 and
+    RNG029-10 were briefly claimed and then withdrawn -- an unchecked assumption
+    turns lemmas into hypotheses without anything looking wrong.
+
+    **A symbol the problem does not have.** A node naming a function outside the
+    problem's signature is a definitional extension, not a consequence: nothing
+    in the axioms constrains it, so the node says nothing about this theory.
+
+    Checked before any prover time, because both faults produce results that
+    look perfectly good and are about the wrong theory.
+    """
+    from overtone import problems
+    from overtone.terms import eq_key, symbols_in
+
+    path = problems.problem_path(problem) if isinstance(problem, str) else problem
+    errs = []
+
+    axioms = problems.axiom_equations(path)
+    for n in sorted(sketch.given):
+        lhs, rhs, _ = sketch.nodes[n]
+        if eq_key(lhs, rhs) not in axioms:
+            errs.append(f"{n} is marked given but is not an axiom of {problem}; "
+                        f"a sketch may use a subset of the problem's axioms, "
+                        f"never a new one")
+
+    known = {name for name, _ in problems.problem_symbols(path)}
+    for n, (lhs, rhs, _) in sorted(sketch.nodes.items()):
+        new = sorted(symbols_in(f"{lhs} {rhs}") - known)
+        if new:
+            errs.append(f"{n} uses symbol(s) {new} that {problem} does not have; "
+                        f"a node outside the problem's signature is a new "
+                        f"definition, not a consequence of its axioms")
+    return errs
+
+
+def channel_for(names, sketch, node, override=None, *, on_route=False):
     """"axioms" or "hints" for this set of supporting lemmas.
 
     Axioms when the set is small and is exactly this node's recorded parents;
     hints otherwise. See the module docstring -- an axiom forms critical pairs
     with every rule, which a precise handful earns and a loose bag does not.
+
+    `on_route` says the caller already knows these names lie on the node's
+    declared route, so only the size test applies. The target attempt needs it:
+    its support is the goal's declared parents INTERSECTED with what has proved,
+    so while the sketch is incomplete that set is a strict subset and the
+    equality test sends it to the hint channel -- where FINDINGS records it is
+    worth nothing. An incomplete exact set is not a loose bag. The measured
+    distinction is precision, not completeness: five exact parents as axioms
+    were worth ~3000x over none, and the same five as hints were worth less than
+    supplying nothing.
     """
     if override:
         return override
@@ -168,6 +293,8 @@ def channel_for(names, sketch, node, override=None):
         return "axioms"                       # nothing either way; keep it simple
     if len(names) > AXIOM_MAX:
         return "hints"
+    if on_route:
+        return "axioms"
     return "axioms" if set(names) == set(sketch.nodes[node][2]) else "hints"
 
 
@@ -185,6 +312,9 @@ def _job(j):
     outdir, binary = j["outdir"], j.get("binary")
     reuse, ledger = j.get("reuse", True), j.get("ledger")
     cancel = j.get("cancel")
+    # Names for `eqs`, positionally aligned with it. See `_support_usage`: this
+    # is the post-`skip_given` list, and only it can resolve a `parent_N`.
+    support = list(j.get("support") or ())
     # Artifacts are addressed by the run's own identity, computed below, so two
     # invocations differing in anything that identity captures -- which equations
     # were supplied, in what order, under which flags and build -- cannot land in
@@ -203,6 +333,13 @@ def _job(j):
         kw["hints"] = terms
         if terms:
             flags = [*BASE_FLAGS, *hintlib.HINT_FLAGS, direction]
+    # Per-node search options -- a term ordering, say. They go last so a node can
+    # override a BASE_FLAGS default, and they are part of the ledger key below,
+    # so adding one to a single node re-runs that node and leaves every other
+    # node's recorded proof reusable. That scoping is the point: a lemma proved
+    # under one ordering is still a theorem, and it enters a downstream run as
+    # axiom text, so the ordering that found it has no bearing there.
+    flags = [*flags, *j.get("extra_flags", ())]
     # Write first, key the bytes, then name the artifact by that key: identity
     # is over what was actually handed to twee and cannot drift from the
     # arguments that produced it.
@@ -216,13 +353,19 @@ def _job(j):
     if reuse:
         prior = ledgerlib.lookup(key, budget, ledger=ledger)
         if prior is not None:
-            return {"node": node, "direction": direction, "channel": channel,
-                    "n_support": len(eqs), "result": prior.get("result"),
-                    "proved": bool(prior.get("proved")),
-                    "cpu": prior.get("cpu") or 0.0,
-                    "wall": prior.get("wall") or 0.0, "reused": True,
-                    "key": key, "input": str(path),
-                    **_prior_artifact(prior)}
+            row = {"node": node, "direction": direction, "channel": channel,
+                   "n_support": len(eqs), "result": prior.get("result"),
+                   "proved": bool(prior.get("proved")),
+                   "cpu": prior.get("cpu") or 0.0,
+                   "wall": prior.get("wall") or 0.0, "reused": True,
+                   "key": key, "input": str(path),
+                   **_prior_artifact(prior)}
+            # A reused row is attributed from the recorded artifact, which is the
+            # same search by construction. Without this a node keeps its support
+            # evidence for one iteration and loses it the moment the ledger
+            # starts answering -- which is every iteration after the first.
+            return {**row, **_support_usage(support, channel, row["proved"],
+                                            row.get("output"))}
     r = runner.run(path, flags, budget, problem=problem, binary=binary,
                    cancel=cancel)
     # Keep the output either way. A failed run is the more informative one: with
@@ -242,6 +385,10 @@ def _job(j):
     # question that was never resolved.
     if r.status != "Cancelled":
         ledgerlib.record(key, row, budget, ledger=ledger)
+    # After the ledger write, not before: the recorded fields are fixed by
+    # `ledger.record` and attribution is derived from the artifact, so it is
+    # this run's reading of the record rather than part of it.
+    row.update(_support_usage(support, channel, r.proved, out_path))
     return row
 
 
@@ -257,6 +404,53 @@ def _map(jobs, workers):
         return [_job(j) for j in jobs]
     with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
         return list(pool.map(_job, jobs))
+
+
+def _support_usage(support, channel, proved, out_path):
+    """Which of the supplied support lemmas the proof certificate names.
+
+    The index mapping is the part that breaks silently. twee's `parent_N` is a
+    1-based index into `extra_axioms`, which is what `Sketch.equations` returned
+    -- and that drops `given` nodes (an axiom is already in the problem file, so
+    re-supplying it would state it twice). So `parent_N` does NOT index a node's
+    declared parents whenever any of them is an axiom, and resolving it against
+    `sketch.nodes[n][2]` attributes usage to the wrong lemma. `support` is
+    therefore the filtered list actually handed to the prover, carried on the
+    job so the two cannot drift apart.
+
+    Attribution is reported only where it means something:
+
+      * the run proved -- a failed run prints no certificate;
+      * the axioms channel -- hints are not named in a proof at all, and a hint
+        that never fired is a different measurement (`proofs.hint_firings`);
+      * the artifact is on disk -- a reused row can name a file that is gone.
+
+    Everywhere else both keys are None, which reads as "not attributed" and must
+    not be confused with "used nothing". Nothing here is evidence that dropping
+    an unused parent is FASTER: it says only that this certificate did not cite
+    it. Removing an axiom changes the rewrite system twee searches, and
+    `agent/ledger.py` exists because that is a different search with its own
+    outcome. Treat an unused parent as a hypothesis to test, not a liability.
+    """
+    if not support:
+        return {"support": list(support), "used_support": None,
+                "unused_support": None}
+    out = {"support": list(support), "used_support": None,
+           "unused_support": None}
+    if not proved or channel != "axioms" or not out_path:
+        return out
+    try:
+        text = Path(out_path).read_text(errors="ignore")
+    except OSError:
+        return out
+    used = proofs.used_supports(text, count=len(support))
+    if used is None:
+        return out
+    out["used_support"] = [n for i, n in enumerate(support, start=1)
+                           if i in used]
+    out["unused_support"] = [n for i, n in enumerate(support, start=1)
+                             if i not in used]
+    return out
 
 
 def _prior_artifact(prior):
@@ -282,7 +476,9 @@ def _direction_worker(j, direction, cancel, q):
     except Exception as e:                                        # noqa: BLE001
         q.put({"node": j["node"], "direction": direction, "channel": j["channel"],
                "n_support": len(j["eqs"]), "result": f"Error: {e}",
-               "proved": False, "cpu": 0.0, "wall": 0.0})
+               "proved": False, "cpu": 0.0, "wall": 0.0,
+               "support": list(j.get("support") or ()),
+               "used_support": None, "unused_support": None})
 
 
 def _node_job(j):
@@ -351,23 +547,37 @@ def _map_nodes(jobs, workers):
 
 
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
-           scope="parents", channel=None, directions=DIRECTIONS, workers=8,
+           node_flags=None, scope="parents", channel=None, directions=DIRECTIONS,
+           workers=8,
            binary: str | None = None, known=(), prior_results=(),
-           retry_standalone=True, reuse=True, ledger=None, prefer=None):
+           reuse=True, ledger=None, prefer=None):
     """Prove every node, in topological order, each in the scope its edges imply.
 
     A node whose parents did not prove is skipped rather than attempted without
     them -- attempting it anyway is what produced the "6 of 19 failed" reading
     that scope later explained away.
 
-    `retry_standalone` re-attempts a failed node with nothing supplied, and it
-    is on by default because the alternative was measured and is expensive.
-    `teichmuller` was drafted with five parents, three of them (trilinearity) not
-    on its derivation path at all; it needs none of them and proves in 3.3s from
-    the bare axioms, took 358.6s given just the two sign lemmas, and timed out at
-    900s given all five. One mis-drafted edge then blocked six downstream nodes.
-    The prover's soundness catches a wrong *statement*; nothing catches a wrong
-    *edge*, so the cost of one extra run per failure buys the only check there is.
+    **A failed node is not re-attempted standalone.** It was, for a real reason:
+    the prover's soundness catches a wrong *statement* and nothing catches a
+    wrong *edge*, and `teichmuller` -- drafted with five parents, three of them
+    trilinearity and off its derivation path -- proves in 3.3s from the bare
+    axioms, takes 358.6s given two of them and times out at 900s given all five,
+    blocking six downstream nodes. But the retry answered that at the wrong
+    price and in the wrong shape. Across the 84 archived `dag.json` files it ran
+    81 fresh searches for 8620.8s of prover time, of which 8532.8s (99.0%)
+    proved nothing; and dropping *every* parent cannot say WHICH edge is wrong,
+    which is the actual question. It also contradicts this project's first rule,
+    that budget is a diagnostic and not a resource -- it re-spent the whole
+    budget that had just failed. `scripts/retry_cost.py` is that measurement,
+    kept because the `scope_retry` rows it reads exist only in the archive.
+
+    What replaces it is evidence, not another search. A proved run's certificate
+    names the support it used, so `_support_usage` reports the parents it did
+    not; the agent tests a suspected edge itself with `set_parents` and a
+    declared probe, and `agent/loop.py` puts an unused parent on probation and
+    measures the drop. Explicit `scope="none"` and naturally parentless nodes
+    are untouched: those are the experiment control arm and the donor-ladder
+    shape, not a fallback.
 
     `known` names nodes already proved by an earlier run, so a resumed run
     re-verifies nothing; pass that run's `results` as `prior_results` so the
@@ -378,13 +588,16 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
     `rng033_goal` was verified standalone at 300s, failed, and then re-run
     identically at 900s. Identity is over the input bytes and the exact
     invocation, never over meaning, because twee searches a reordered axiom list
-    differently. Pass `reuse=False` to force everything. `budgets` overrides `budget` per node. `channel` forces
-    a channel; leaving it None applies `channel_for`, which is the point of the
-    DAG.
+    differently. Pass `reuse=False` to force everything. `budgets` overrides
+    `budget` per node, and `node_flags` appends extra twee flags per node --
+    scoping a search option to the one node that needs it, so the rest of the
+    sketch keeps its recorded proofs. `channel` forces a channel; leaving it None
+    applies `channel_for`, which is the point of the DAG.
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     budgets = budgets or {}
+    node_flags = node_flags or {}
     # Carry the earlier run's rows forward. Without this a resumed run writes a
     # dag.json describing only the nodes it re-ran, and anything reading it --
     # the blueprint, for one -- reports every other node as never attempted.
@@ -393,8 +606,21 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
                   "channel": "cached"} for n in known if n in sketch.nodes}
     if proved:
         print(f"resuming: {len(proved)} node(s) already proved", flush=True)
+    # The problem's own axioms are true by assumption and twee already has them.
+    # They enter the DAG so the problem has one canonical shape and an agent can
+    # cite an axiom instead of restating it -- not so we can prove tautologies.
+    for n in sketch.given:
+        proved.setdefault(n, {"cpu": 0.0, "direction": None, "n_support": 0,
+                              "channel": "given"})
+    if sketch.given:
+        print(f"axioms: {len(sketch.given)} node(s), assumed not proved",
+              flush=True)
+    bad = grounding_errors(sketch, problem)
+    if bad:
+        raise ValueError("this sketch assumes more than the problem does:\n  "
+                         + "\n  ".join(bad))
 
-    for depth, layer in enumerate(sketch.layers(), start=1):
+    for depth, layer in enumerate(sketch.layers(with_axioms=False), start=1):
         runnable = [n for n in layer if n not in proved
                     and all(p in proved for p in sketch.nodes[n][2])]
         skipped = [n for n in layer if n not in runnable and n not in proved]
@@ -415,43 +641,35 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
             if pref in order:
                 order.remove(pref)
                 order.insert(0, pref)
+            # `equations` drops given axioms, so this is the list the prover
+            # actually receives and the only one a `parent_N` can be resolved
+            # against. Built once and carried on the job, because computing it
+            # twice is how the two would come to disagree.
+            supplied = [m for m in names if m not in sketch.given]
             jobs.append({"problem": problem, "node": n, "lhs": lhs, "rhs": rhs,
-                         "eqs": sketch.equations(names), "channel": ch,
+                         "eqs": sketch.equations(names), "support": supplied,
+                         "channel": ch,
                          "directions": order, "budget": budgets.get(n, budget),
                          "outdir": str(outdir), "binary": binary,
+                         "extra_flags": tuple(node_flags.get(n, ())),
                          "reuse": reuse, "ledger": ledger})
         if not jobs:
             continue
         res = _map_nodes(jobs, workers)
         results += res
 
-        # Guard: anything that failed in scope gets one standalone attempt,
-        # because a wrong edge is indistinguishable from a hard lemma otherwise.
-        retry = [n for n in runnable
-                 if not any(r["node"] == n and r["proved"] for r in res)
-                 and retry_standalone and sketch.nodes[n][2]]
-        if retry:
-            print(f"  retrying standalone: {retry}", flush=True)
-            rjobs = [{"problem": problem, "node": n,
-                      "lhs": sketch.nodes[n][0], "rhs": sketch.nodes[n][1],
-                      "eqs": [], "channel": "axioms",
-                      "directions": list(directions),
-                      "budget": budgets.get(n, budget), "outdir": str(outdir),
-                      "binary": binary, "reuse": reuse, "ledger": ledger}
-                     for n in retry]
-            rres = _map_nodes(rjobs, workers)
-            for r in rres:
-                r["scope_retry"] = True
-            results += rres
-            res += rres
-
         for n in runnable:
             best = min((r for r in res if r["node"] == n and r["proved"]),
                        key=lambda r: r["cpu"], default=None)
             if best:
                 proved[n] = best
-                flag = "  (standalone retry -- check this node's edges)" \
-                    if best.get("scope_retry") else ""
+                # Name the parents the certificate never cited. They are the
+                # candidates for a `set_parents` experiment, and saying so where
+                # the proof is reported is what makes them visible at all; the
+                # old line here reported only that a standalone retry had won,
+                # which was one bit and was never persisted.
+                dead = best.get("unused_support")
+                flag = f"  ({len(dead)} unused: {dead})" if dead else ""
                 print(f"  {n:<18} PROVED {best['direction']:<18} "
                       f"{best['cpu']:>7.1f}s  {best['n_support']} as "
                       f"{best['channel']}{flag}", flush=True)
@@ -459,9 +677,13 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
                 print(f"  {n:<18} unproven in both directions", flush=True)
 
     out = {"problem": problem, "scope": scope, "channel": channel or "auto",
-           "n_nodes": len(sketch.nodes), "n_proved": len(proved),
+           # Claims only: an axiom is not an achievement, and counting them
+           # would inflate every ratio a run reports.
+           "n_nodes": len(sketch.claims()),
+           "n_proved": len([n for n in proved if n not in sketch.given]),
+           "n_given": len(sketch.given),
            "proved": {k: v["cpu"] for k, v in proved.items()},
-           "missing": [n for n in sketch.nodes if n not in proved],
+           "missing": [n for n in sketch.claims() if n not in proved],
            "results": results}
     (outdir / "dag.json").write_text(json.dumps(out, indent=2) + "\n")
     return out
@@ -505,8 +727,8 @@ def mined_parents(sketch, node, proof_text, *, include_self=False):
 
 def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
             directions=DIRECTIONS, workers=2, label="final", reuse=True,
-            ledger=None):
-    """Run the problem's own file with `equations` appended as axioms.
+            ledger=None, channel="axioms", support=()):
+    """Run the problem's own file with `equations` supplied as `channel`.
 
     The final phase `verify` lacks. It was written twice -- in
     `scripts/transfer_dag._final` and in `ladder.run_ladder` -- and both did the
@@ -515,12 +737,22 @@ def attempt(problem, equations, *, outdir: Path, budget=300, binary=None,
     The problem file is not modified. `runner.write_problem` copies it and adds
     the equations, so what is proved is the problem as TPTP states it, not a
     restatement of it.
+
+    `channel` was hardcoded to "axioms" here while `verify` chose it per node
+    through `channel_for`, so the run this whole method exists to make was the
+    one run exempt from the method's own central finding. Two agent runs then
+    spent 6,003.7s of 10,423.9s and 1,201.4s of 1,441.9s attempting the target
+    with every verified node as an axiom -- the loose-bag configuration this
+    module's docstring records as a timeout on MVA005-1 and as unboundedly bad
+    on `teichmuller`. The caller now picks both the support set and the channel,
+    and `support` carries the names so the row says what was supplied.
     """
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     jobs = [{"problem": problem, "direction": direc, "eqs": tuple(equations),
              "budget": budget, "outdir": str(outdir), "binary": binary,
-             "label": label, "reuse": reuse, "ledger": ledger}
+             "label": label, "reuse": reuse, "ledger": ledger,
+             "channel": channel, "support": tuple(support)}
             for direc in directions]
     with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
         return list(pool.map(_attempt_job, jobs))
@@ -531,13 +763,25 @@ def _attempt_job(j):
     problem, direction, eqs = j["problem"], j["direction"], j["eqs"]
     budget, outdir, binary = j["budget"], j["outdir"], j.get("binary")
     label, reuse, ledger = j["label"], j.get("reuse", True), j.get("ledger")
+    channel, support = j.get("channel", "axioms"), j.get("support", ())
     stem = f"{label}.{direction[2:]}"
     flags = [*BASE_FLAGS, direction]
+    # The same two channels `_job` offers, and for the same measured reason.
+    kw = {}
+    if channel == "axioms":
+        kw["extra_axioms"] = list(eqs)
+        kw["axiom_prefix"] = "lemma"
+    else:
+        terms = []
+        for l, r in eqs:
+            terms += [t for t in (l, r) if "(" in t and t not in terms]
+        kw["hints"] = terms
+        if terms:
+            flags = [*BASE_FLAGS, *hintlib.HINT_FLAGS, direction]
     # Same identity-addressed naming as `_job`: an attempt with 18 lemmas and one
     # with 22 are different questions and must not share a filename.
     tmp = Path(outdir) / f".{stem}.building.p"
-    runner.write_problem(problem, tmp, extra_axioms=list(eqs),
-                         axiom_prefix="lemma")
+    runner.write_problem(problem, tmp, **kw)
     key = ledgerlib.key_for(tmp, flags, binary)
     tag = f"{stem}.{ledgerlib.short(key)}"
     path = Path(outdir) / f"{tag}.p"
@@ -545,8 +789,9 @@ def _attempt_job(j):
     if reuse:
         prior = ledgerlib.lookup(key, budget, ledger=ledger)
         if prior is not None:
-            return {"node": label, "direction": direction, "channel": "axioms",
-                    "n_support": len(eqs), "result": prior.get("result"),
+            return {"node": label, "direction": direction, "channel": channel,
+                    "n_support": len(eqs), "support": list(support),
+                    "result": prior.get("result"),
                     "proved": bool(prior.get("proved")),
                     "cpu": prior.get("cpu") or 0.0,
                     "wall": prior.get("wall") or 0.0, "reused": True,
@@ -555,8 +800,9 @@ def _attempt_job(j):
     r = runner.run(path, flags, budget, problem=problem, binary=binary)
     out_path = Path(outdir) / f"{tag}.{'out' if r.proved else 'fail.out'}"
     out_path.write_text(r.output)
-    row = {"node": label, "direction": direction, "channel": "axioms",
-           "n_support": len(eqs), "result": r.status, "proved": r.proved,
+    row = {"node": label, "direction": direction, "channel": channel,
+           "n_support": len(eqs), "support": list(support),
+           "result": r.status, "proved": r.proved,
            "cpu": r.cpu, "wall": r.wall, "key": key,
            "input": str(path), "output": str(out_path)}
     # A cancelled run answered nothing. Recording it would let reuse skip a
@@ -572,11 +818,24 @@ def cost(*row_lists):
     The number a per-problem pipeline reports. Everything spent counts: failed
     nodes, standalone retries, both goal directions, and the final attempts --
     not just the runs that happened to succeed.
+
+    Two totals, because inside a loop they differ enormously. `cpu` is what this
+    sketch costs from cold -- the honest per-problem figure, and the one to
+    quote. `cpu_new` excludes ledger-reused rows: what the machine actually
+    spent on this run. One agent iteration reported 601.7s of node time that was
+    100% reuse, and another run's running total rose by 600.7s across an
+    iteration whose two final attempts were both served from the ledger.
+    Reporting only `cpu` tells an agent it has burned a budget it never touched;
+    reporting only `cpu_new` understates what the decomposition costs anyone who
+    reruns it from scratch.
     """
     rows = [r for rl in row_lists for r in (rl or ())]
+    fresh = [r for r in rows if not r.get("reused")]
     return {"cpu": round(sum(r.get("cpu") or 0.0 for r in rows), 1),
+            "cpu_new": round(sum(r.get("cpu") or 0.0 for r in fresh), 1),
             "wall": round(sum(r.get("wall") or 0.0 for r in rows), 1),
-            "n_runs": len(rows),
+            "n_runs": len(rows), "n_new": len(fresh),
+            "n_reused": len(rows) - len(fresh),
             "n_failed": sum(1 for r in rows if not r.get("proved"))}
 
 

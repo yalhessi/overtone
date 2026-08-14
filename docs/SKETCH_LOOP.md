@@ -289,5 +289,28 @@ Current implementation:
   result this document analyses, and for the tracked bundles in
   `examples/sketch_loop/` (disjoint from `data/lists/twitch19.txt`).
 
+**Judging an edit needs a measurement, and the obvious one is wrong.** Rules
+derived, and the two sides of a goal counted separately, all rose across an
+RNG033-8 refinement that made the problem harder. `proofs.goal_contact` counts
+rules touching **both** sides — the only ones that can close a goal — and it fell
+from 162 to 102 across the same edit. It is on `State.contact` and in the model's
+prompt, because an agent that cannot tell a good edit from a bad one will loop.
+
+**Having the measurement is not the same as taking it.** For a whole agent run on
+RNG029-5 `State.contact` was `None` at every iteration: it was read by globbing
+the *goal node's* artifacts, and the goal node was blocked, so nothing was there
+to glob — while the target attempt in the same iteration left a failed search
+that scores perfectly well. Contact now comes from that attempt's own result row,
+as `State.target`, with the previous iteration's value beside it so the model
+reads a delta rather than a level. A fall reverts the edit; a rise still endorses
+nothing. See FINDINGS for what else that audit turned up — the attempt was 58%
+and 83% of those two runs' prover budgets, spent on the loose-bag-as-axioms
+configuration this document argues against.
+
+Getting there required discarding the method it replaces: counting term shapes in
+twee's output. `--flatten-goal` names every goal subterm and rewrites matching
+terms to the name, so the shape is not there to find, and one RNG033-8 iteration
+plus a `--precedence` experiment were both drafted against that artefact.
+
 The drafting half is still unproven: everything measured so far was drafted by a
 human or mined from a donor proof. `docs/PLAN.md` sets the direction.

@@ -1,0 +1,7 @@
+{
+ "rng033_goal": {
+  "lhs": "add(associator(multiply(X,Y),Z,W),associator(X,Y,commutator(Z,W)))",
+  "rhs": "add(multiply(X,associator(Y,Z,W)),multiply(associator(X,Z,W),Y))",
+  "parents": []
+ }
+}

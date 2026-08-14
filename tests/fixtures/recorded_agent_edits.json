@@ -1,0 +1,432 @@
+{
+ "RNG029-5": {
+  "stop_reason": "cycle: this sketch was already verified at iteration 0",
+  "cpu_total": 1441.9,
+  "iterations": [
+   {
+    "iter": 0,
+    "n_proved": 4,
+    "n_nodes": 9,
+    "actions": [
+     {
+      "op": "subdivide",
+      "name": "assoc_zero_gives_assoc",
+      "intermediates": [
+       {
+        "name": "assoc_zero_implies_right_assoc",
+        "lhs": "associator(X,Y,Z) = additive_identity",
+        "rhs": "multiply(multiply(X,Y),Z) = multiply(X,multiply(Y,Z))"
+       }
+      ],
+      "parents": [
+       "assoc_expand_zero_left"
+      ]
+     }
+    ]
+   },
+   {
+    "iter": 1,
+    "n_proved": 4,
+    "n_nodes": 10,
+    "actions": [
+     {
+      "op": "remove_node",
+      "name": "assoc_zero_implies_right_assoc"
+     }
+    ]
+   }
+  ]
+ },
+ "RNG033-8": {
+  "stop_reason": "the agent proposed no further edits",
+  "cpu_total": 10423.9,
+  "iterations": [
+   {
+    "iter": 0,
+    "n_proved": 5,
+    "n_nodes": 9,
+    "actions": [
+     {
+      "op": "subdivide",
+      "name": "associator_add_third",
+      "intermediates": [
+       {
+        "name": "associator_add_third_expand_left",
+        "lhs": "associator(X,Y,add(Z,W))",
+        "rhs": "add(multiply(multiply(X,Y),add(Z,W)),additive_inverse(multiply(X,multiply(Y,add(Z,W)))))"
+       },
+       {
+        "name": "associator_add_third_distribute_products",
+        "lhs": "add(multiply(multiply(X,Y),add(Z,W)),additive_inverse(multiply(X,multiply(Y,add(Z,W)))))",
+        "rhs": "add(add(multiply(multiply(X,Y),Z),multiply(multiply(X,Y),W)),additive_inverse(add(multiply(X,multiply(Y,Z)),multiply(X,multiply(Y,W)))))",
+        "parents": [
+         "associator_add_third_expand_left"
+        ]
+       },
+       {
+        "name": "associator_add_third_collect",
+        "lhs": "add(add(multiply(multiply(X,Y),Z),multiply(multiply(X,Y),W)),additive_inverse(add(multiply(X,multiply(Y,Z)),multiply(X,multiply(Y,W)))))",
+        "rhs": "add(associator(X,Y,Z),associator(X,Y,W))",
+        "parents": [
+         "associator_add_third_distribute_products"
+        ]
+       }
+      ],
+      "parents": []
+     },
+     {
+      "op": "subdivide",
+      "name": "associator_add_first",
+      "intermediates": [
+       {
+        "name": "associator_add_first_expand_left",
+        "lhs": "associator(add(X,Y),Z,W)",
+        "rhs": "add(multiply(multiply(add(X,Y),Z),W),additive_inverse(multiply(add(X,Y),multiply(Z,W))))"
+       },
+       {
+        "name": "associator_add_first_distribute_products",
+        "lhs": "add(multiply(multiply(add(X,Y),Z),W),additive_inverse(multiply(add(X,Y),multiply(Z,W))))",
+        "rhs": "add(add(multiply(multiply(X,Z),W),multiply(multiply(Y,Z),W)),additive_inverse(add(multiply(X,multiply(Z,W)),multiply(Y,multiply(Z,W)))))",
+        "parents": [
+         "associator_add_first_expand_left"
+        ]
+       },
+       {
+        "name": "associator_add_first_collect",
+        "lhs": "add(add(multiply(multiply(X,Z),W),multiply(multiply(Y,Z),W)),additive_inverse(add(multiply(X,multiply(Z,W)),multiply(Y,multiply(Z,W)))))",
+        "rhs": "add(associator(X,Z,W),associator(Y,Z,W))",
+        "parents": [
+         "associator_add_first_distribute_products"
+        ]
+       }
+      ],
+      "parents": []
+     },
+     {
+      "op": "subdivide",
+      "name": "commutator_product_right",
+      "intermediates": [
+       {
+        "name": "commutator_product_right_expand",
+        "lhs": "commutator(X,multiply(Y,Z))",
+        "rhs": "add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X)))"
+       },
+       {
+        "name": "commutator_product_right_reassociate",
+        "lhs": "add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X)))",
+        "rhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Y,multiply(Z,X)))),add(additive_inverse(associator(X,Y,Z)),associator(Y,Z,X)))",
+        "parents": [
+         "commutator_product_right_expand"
+        ]
+       },
+       {
+        "name": "commutator_product_right_collect",
+        "lhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Y,multiply(Z,X)))),add(additive_inverse(associator(X,Y,Z)),associator(Y,Z,X)))",
+        "rhs": "add(multiply(commutator(X,Y),Z),multiply(Y,commutator(X,Z)))",
+        "parents": [
+         "commutator_product_right_reassociate"
+        ]
+       }
+      ],
+      "parents": []
+     },
+     {
+      "op": "subdivide",
+      "name": "commutator_product_left",
+      "intermediates": [
+       {
+        "name": "commutator_product_left_expand",
+        "lhs": "commutator(multiply(X,Y),Z)",
+        "rhs": "add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y))))"
+       },
+       {
+        "name": "commutator_product_left_reassociate",
+        "lhs": "add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y))))",
+        "rhs": "add(add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Z,X),Y))),add(associator(X,Y,Z),additive_inverse(associator(Z,X,Y))))",
+        "parents": [
+         "commutator_product_left_expand"
+        ]
+       },
+       {
+        "name": "commutator_product_left_collect",
+        "lhs": "add(add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Z,X),Y))),add(associator(X,Y,Z),additive_inverse(associator(Z,X,Y))))",
+        "rhs": "add(multiply(X,commutator(Y,Z)),multiply(commutator(X,Z),Y))",
+        "parents": [
+         "commutator_product_left_reassociate"
+        ]
+       }
+      ],
+      "parents": []
+     }
+    ]
+   },
+   {
+    "iter": 1,
+    "n_proved": 11,
+    "n_nodes": 21,
+    "actions": [
+     {
+      "op": "subdivide",
+      "name": "commutator_product_right_expand",
+      "intermediates": [
+       {
+        "name": "commutator_product_right_expand_zero",
+        "lhs": "add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X)))",
+        "rhs": "add(add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X))),additive_identity)",
+        "parents": []
+       }
+      ],
+      "parents": []
+     }
+    ]
+   },
+   {
+    "iter": 2,
+    "n_proved": 12,
+    "n_nodes": 22,
+    "actions": [
+     {
+      "op": "set_parents",
+      "name": "commutator_product_right_expand",
+      "parents": []
+     },
+     {
+      "op": "add_node",
+      "name": "commutator_product_left_expand_zero",
+      "lhs": "add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))) = add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)",
+      "rhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)",
+      "parents": []
+     }
+    ]
+   },
+   {
+    "iter": 3,
+    "n_proved": 12,
+    "n_nodes": 23,
+    "actions": [
+     {
+      "op": "restate",
+      "name": "commutator_product_left_expand",
+      "lhs": "commutator(multiply(X,Y),Z)",
+      "rhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)"
+     },
+     {
+      "op": "remove_node",
+      "name": "commutator_product_left_expand_zero"
+     },
+     {
+      "op": "restate",
+      "name": "associator_product_first",
+      "lhs": "associator(multiply(X,Y),Z,W)",
+      "rhs": "add(multiply(X,associator(Y,Z,W)),multiply(associator(X,Z,W),Y))"
+     }
+    ]
+   },
+   {
+    "iter": 4,
+    "n_proved": 12,
+    "n_nodes": 22,
+    "actions": [
+     {
+      "op": "redraft",
+      "approach": "direct standard identities with exact expansion/collection chain",
+      "keep": [
+       "associator_zero_right",
+       "associator_add_third",
+       "associator_add_first",
+       "commutator_add_right",
+       "commutator_add_left",
+       "associator_add_third_expand_left",
+       "associator_add_third_distribute_products",
+       "associator_add_third_collect",
+       "associator_add_first_expand_left",
+       "associator_add_first_distribute_products",
+       "associator_add_first_collect",
+       "commutator_product_right_expand_zero"
+      ],
+      "nodes": [
+       {
+        "name": "commutator_product_right_expand_zeroed",
+        "lhs": "commutator(X,multiply(Y,Z))",
+        "rhs": "add(add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X))),additive_identity)",
+        "parents": []
+       },
+       {
+        "name": "commutator_product_right_reassociate",
+        "lhs": "add(add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X))),additive_identity)",
+        "rhs": "add(add(multiply(commutator(X,Y),Z),multiply(Y,commutator(X,Z))),add(additive_inverse(associator(X,Y,Z)),associator(Y,Z,X)))",
+        "parents": [
+         "commutator_product_right_expand_zeroed"
+        ]
+       },
+       {
+        "name": "commutator_product_right",
+        "lhs": "commutator(X,multiply(Y,Z))",
+        "rhs": "add(add(multiply(commutator(X,Y),Z),multiply(Y,commutator(X,Z))),add(additive_inverse(associator(X,Y,Z)),associator(Y,Z,X)))",
+        "parents": [
+         "commutator_product_right_reassociate"
+        ]
+       },
+       {
+        "name": "commutator_product_left_reassociate",
+        "lhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)",
+        "rhs": "add(add(multiply(X,commutator(Y,Z)),multiply(commutator(X,Z),Y)),add(associator(X,Y,Z),additive_inverse(associator(Z,X,Y))))",
+        "parents": []
+       },
+       {
+        "name": "commutator_product_left",
+        "lhs": "commutator(multiply(X,Y),Z)",
+        "rhs": "add(add(multiply(X,commutator(Y,Z)),multiply(commutator(X,Z),Y)),add(associator(X,Y,Z),additive_inverse(associator(Z,X,Y))))",
+        "parents": [
+         "commutator_product_left_reassociate"
+        ]
+       },
+       {
+        "name": "associator_product_first_expand_commutator",
+        "lhs": "add(associator(multiply(X,Y),Z,W),associator(X,Y,commutator(Z,W)))",
+        "rhs": "add(associator(multiply(X,Y),Z,W),add(associator(X,Y,multiply(Z,W)),additive_inverse(associator(X,Y,multiply(W,Z)))))",
+        "parents": [
+         "commutator_product_right_expand_zeroed",
+         "associator_add_third"
+        ]
+       },
+       {
+        "name": "associator_product_first_to_zero",
+        "lhs": "add(associator(multiply(X,Y),Z,W),add(associator(X,Y,multiply(Z,W)),additive_inverse(associator(X,Y,multiply(W,Z)))))",
+        "rhs": "add(multiply(X,associator(Y,Z,W)),multiply(associator(X,Z,W),Y))",
+        "parents": [
+         "commutator_product_left",
+         "associator_add_first"
+        ]
+       }
+      ],
+      "goal_parents": [
+       "associator_product_first_expand_commutator",
+       "associator_product_first_to_zero"
+      ]
+     }
+    ]
+   },
+   {
+    "iter": 5,
+    "n_proved": 12,
+    "n_nodes": 20,
+    "actions": [
+     {
+      "op": "add_node",
+      "name": "commutator_product_left_expand_zeroed",
+      "lhs": "commutator(multiply(X,Y),Z)",
+      "rhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)"
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_right_expand_zeroed",
+      "parents": [
+       "commutator_product_right_expand_zero"
+      ]
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_left_reassociate",
+      "parents": [
+       "commutator_product_left_expand_zeroed"
+      ]
+     }
+    ]
+   },
+   {
+    "iter": 6,
+    "n_proved": 12,
+    "n_nodes": 21,
+    "actions": [
+     {
+      "op": "add_node",
+      "name": "commutator_product_right_expand",
+      "lhs": "commutator(X,multiply(Y,Z))",
+      "rhs": "add(multiply(X,multiply(Y,Z)),additive_inverse(multiply(multiply(Y,Z),X)))"
+     },
+     {
+      "op": "add_node",
+      "name": "commutator_product_left_expand",
+      "lhs": "commutator(multiply(X,Y),Z)",
+      "rhs": "add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y))))"
+     }
+    ]
+   },
+   {
+    "iter": 7,
+    "n_proved": 12,
+    "n_nodes": 23,
+    "actions": [
+     {
+      "op": "subdivide",
+      "name": "commutator_product_left_expand_zeroed",
+      "intermediates": [
+       {
+        "name": "commutator_product_left_expand_add_zero",
+        "lhs": "add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y))))",
+        "rhs": "add(add(multiply(multiply(X,Y),Z),additive_inverse(multiply(Z,multiply(X,Y)))),additive_identity)",
+        "parents": []
+       }
+      ],
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "associator_product_first_expand_commutator",
+      "parents": [
+       "associator_add_third"
+      ]
+     }
+    ]
+   },
+   {
+    "iter": 8,
+    "n_proved": 13,
+    "n_nodes": 24,
+    "actions": [
+     {
+      "op": "set_parents",
+      "name": "associator_product_first_expand_commutator",
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_right_expand_zeroed",
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_left_expand_zeroed",
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_right_reassociate",
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "commutator_product_left_reassociate",
+      "parents": []
+     },
+     {
+      "op": "set_parents",
+      "name": "associator_product_first_to_zero",
+      "parents": [
+       "commutator_product_left",
+       "associator_add_third",
+       "associator_add_first"
+      ]
+     }
+    ]
+   },
+   {
+    "iter": 9,
+    "n_proved": 13,
+    "n_nodes": 24,
+    "actions": []
+   }
+  ]
+ }
+}

@@ -50,10 +50,19 @@ def read_with_includes(path: Path) -> str:
 
 
 def cnf_clauses(text):
-    """Yield (role, body) for each cnf(...) clause, matching parens properly.
+    """Yield (role, body) for each cnf(...) clause. See `named_clauses`."""
+    for _, role, body in named_clauses(text):
+        yield role, body
+
+
+def named_clauses(text):
+    """Yield (name, role, body) for each cnf(...) clause, matching parens properly.
 
     A regex cannot do this: clause bodies contain nested parentheses, so any
     non-greedy `\\)` stops inside the first term and silently truncates it.
+
+    The clause NAME matters once axioms are nodes in a sketch: it is the handle
+    an agent cites instead of restating the axiom.
     """
     for m in re.finditer(r"cnf\s*\(", text):
         i, depth = m.end(), 1
@@ -65,7 +74,7 @@ def cnf_clauses(text):
             i += 1
         parts = text[m.end():i - 1].split(",", 2)
         if len(parts) == 3:
-            yield parts[1].strip(), parts[2].strip()
+            yield parts[0].strip(), parts[1].strip(), parts[2].strip()
 
 
 def equations(path: Path, roles=("axiom", "hypothesis")):
@@ -141,6 +150,26 @@ def axiom_equations(path: Path) -> set:
         lhs, rhs = eq.split("=", 1)
         keys.add(eq_key(lhs.strip(), rhs.strip()))
     return keys
+
+
+def named_axioms(path: Path, roles=("axiom", "hypothesis")) -> dict:
+    """`{clause name: (lhs, rhs)}` for every unit-equation axiom, includes resolved.
+
+    Duplicate names across includes keep the first occurrence, so a problem file
+    cannot silently shadow an axiom from the file it includes.
+    """
+    out = {}
+    for name, role, body in named_clauses(read_with_includes(path)):
+        if role not in roles:
+            continue
+        body = re.sub(r"\s+", " ", body).strip()
+        while body.startswith("(") and body.endswith(")"):
+            body = body[1:-1].strip()
+        if "!=" in body or "=" not in body or "|" in body or "~" in body:
+            continue
+        lhs, rhs = body.split("=", 1)
+        out.setdefault(name, (lhs.strip(), rhs.strip()))
+    return out
 
 
 def contains_axioms(target, library) -> tuple:

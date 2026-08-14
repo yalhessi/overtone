@@ -39,9 +39,62 @@ stated expectation.
                                          through the commutator. Needs
                                          assoc_add_3 and comm_def_add; without
                                          comm_def_add I expect it to fail.
+ITERATION 3 predictions. Iteration 2 was drafted on a measurement that does not
+work: it grepped the output for the goal's right-hand term shape and found ~10
+matches in 24k rules, concluding the search never builds that side. But
+`--flatten-goal` introduces a constant for every goal subterm and rewrites
+matching terms to it on sight, so the shape *cannot* appear literally -- the
+count measured twee's naming convention. `proofs.goal_contact` resolves the names
+first, and says the opposite:
+
+  run                  rules    lhs     rhs    both
+  iter00  6 parents    24107   3033   11565     162   0.67%
+  iter01 10 parents    24727   2927   11596     102   0.41%
+  iter01 +precedence   25894   3058   12270     103   0.40%
+
+The right-hand side is the *dominant* side. What is scarce is rules touching
+both sides, which are the only ones that can close the goal -- and iteration 2's
+four nodes cut those by 37%. A --precedence experiment built on the same bad
+count moved them by one.
+
+So iteration 3 reverts those four nodes and cuts the goal to three parents:
+teichmuller, assoc_comm_3, assoc_cyclic. The two data points say contact fell as
+the parent set grew, which is the wrong-parents finding (an axiom forms critical
+pairs with every rule) appearing in the goal rather than in a lemma.
+
+  both > 162   dilution confirmed; six parents was never the floor
+  both ~ 162   parent count is not the lever -- it is which parents, and the
+               next move varies membership at fixed size
+  both < 162   one of the three dropped parents was load-bearing, and the diff
+               says which
+
+No prediction on proving the goal: three iterations have failed at it and a
+number here would be invention. `both` is what is being measured.
+
+ITERATION 3 OUTCOME: the middle branch, plus one result not predicted at all.
+
+  parents   rules    lhs     rhs   both    both%
+        0   19163   3297    9322    371    1.94%
+        3   26358   2708   12839    171    0.65%
+        6   24107   3033   11565    162    0.67%
+       10   24727   2927   11596    102    0.41%
+
+171 against 162 is flat, and lower by rate, so parent count is not the lever
+between 3 and 6; ten is genuinely worse. The unpredicted row is the standalone
+retry: **no parents scores the highest contact measured**, 371 at 1.94%, and
+did not prove the goal at 300s. So `both` is a veto, not an objective -- a fall is
+evidence an edit hurt, a rise is evidence of nothing, and maximising it would
+drive the sketch to the configuration already known to fail. That correction is
+now in `proofs.goal_contact`, `loop.State.contact`, and the agent's prompt.
+
+The goal remains unproven at 300s under every parent set tried (0, 3, 6, 10) and
+under a flipped term ordering.
+
 ITERATION 2 predictions (after the goal failed at 600s with parents and
 standalone). The refinement is driven by mining 6,777 universal rules out of the
-eight failed runs, not by guessing:
+eight failed runs, not by guessing. All four verified; the refinement was
+nonetheless wrong, for the reason recorded above -- the nodes were sound and
+aimed at a problem that did not exist:
 
   teich_isolated         <5s      Teichmuller solved for the multiplied term.
                                   Follows from teichmuller by rearrangement, so
@@ -84,6 +137,7 @@ with parents or standalone, what did its own run derive that the sketch does not
 name, and does a same-shape sibling that proved have different parents.
 """
 import importlib.util
+import re
 from pathlib import Path
 
 _spec = importlib.util.spec_from_file_location(
@@ -111,52 +165,92 @@ DAG["assoc_comm_3"] = (
     f"add({A}(X,Y,{M}(W,Z)),{I}({A}(X,Y,{M}(Z,W))))",
     ["assoc_add_3", "comm_def_add", "neg_add", "neg_mult_r"])
 
-# -- iteration 2: refinement driven by the failed search ---------------------
-# 6,777 universal rules were mined from the 8 failed runs. Of them, 699 build the
-# goal's LHS shape (associator of a product) and 629 the commutator term -- but
-# only 86 contain an associator *multiplied* by anything, which is the goal's
-# entire RHS, and on inspection those are sign shuffling and degenerate cases.
-# The search never constructs the right-hand side.
+# -- iteration 2, reverted --------------------------------------------------
+# Four nodes (teich_isolated, assoc_comm_1, assoc_prod_comm_a/b) were added here
+# after mining the failed searches, on the reading that "the search never builds
+# the goal's RHS shape". That reading came from grepping the output for the term
+# shape, and --flatten-goal names every goal subterm and rewrites matching terms
+# to the name, so the shape cannot appear literally. The count measured the
+# naming convention. Measured properly (`proofs.goal_contact`), the RHS is the
+# dominant side and the four nodes cut the rules touching *both* sides -- the
+# only ones that can close the goal -- from 162 to 102. They are removed rather
+# than kept: an axiom forms critical pairs with every rule, so a node that does
+# not help is not free. Their statements survive in scripts/loop.py, which
+# replays the iteration that added them.
+
+# -- invented waypoints -------------------------------------------------------
+# A first attempt identified two of the goal's four variables. Wrong altitude:
+# an instance of an open conjecture is still open, and it sits right next to the
+# conclusion, so it cannot decompose anything.
 #
-# The mechanism: teichmuller is the only source of `x(y,z,w)` and `(x,y,z)w`, and
-# it carries them on its heavier side, so twee orients it to eliminate exactly
-# what the goal needs. That is the assoc_def_add fault -- an identity oriented
-# against the direction the sketch requires -- which was worth 18x, and which
-# assoc_def_246/247 fixed for Moufang.
+# A waypoint has to be far from BOTH ends -- real work from the axioms, real
+# progress toward the goal. Teichmuller is the model, and note what it is: an
+# identity true in EVERY ring (overtone/freering.py confirms it expands to zero)
+# relating the associator to products. Sound by construction, and the single
+# most useful node in this sketch.
+#
+# These were derived rather than guessed. `freering.express` solves for how far a
+# familiar associative law is from holding, over a basis of associator terms,
+# exactly and with no prover; each statement is then checked by expansion before
+# it costs a run. They relate the commutator to the associator, which is what the
+# goal mixes and what nothing else in the library addresses.
+# Each waypoint gets the lemmas its own derivation uses, and nothing else.
+#
+# The first draft gave all four the same nine-lemma library tier. Both Leibniz
+# identities then FAILED with those parents and proved in ~8.6s standalone --
+# the wrong-parents finding, landing on this file's own draft. A generic tier is
+# not a parent set.
+_WP_PARENTS = []
 
-# Teichmuller solved for the multiplied term, so the goal's RHS shape has a rule
-# that yields it rather than only rules that consume it.
-DAG["teich_isolated"] = (
-    f"{M}({A}(X,Y,Z),W)",
-    f"add(add({A}({M}(X,Y),Z,W),{A}(X,Y,{M}(Z,W))),"
-    f"{I}(add({A}(X,{M}(Y,Z),W),{M}(X,{A}(Y,Z,W)))))",
-    ["teichmuller", "neg_add", "neg_mult_r"])
+# Leibniz rule for a commutator over a product, with its
+# non-associative correction. Universal.
+DAG["comm_prod_l"] = (
+    "commutator(multiply(X,Y),Z)",
+    "add(add(add(add(multiply(X,commutator(Y,Z)),multiply(commutator(X,Z),Y)),additive_inverse(associator(X,Y,Z))),associator(X,Z,Y)),additive_inverse(associator(Z,X,Y)))",
+    list(_WP_PARENTS))
 
-# Trilinearity in argument 1 through the commutator -- the mirror of
-# assoc_comm_3, which verified at 0.0s. The goal has a product in argument 1 and
-# a commutator in argument 3, so both directions are plausibly needed.
-DAG["assoc_comm_1"] = (
-    f"add({A}({M}(X,Y),Z,W),{A}({C}(X,Y),Z,W))",
-    f"{A}({M}(Y,X),Z,W)",
-    ["assoc_add_1", "comm_def_add", "neg_add", "neg_mult_r"])
+# The mirror: product in the second argument. Universal.
+DAG["comm_prod_r"] = (
+    "commutator(X,multiply(Y,Z))",
+    "add(add(add(add(multiply(commutator(X,Y),Z),multiply(Y,commutator(X,Z))),associator(X,Y,Z)),additive_inverse(associator(Y,X,Z))),associator(Y,Z,X))",
+    list(_WP_PARENTS))
 
-# Mined verbatim from the failed runs: twee derived these, so they are theorems
-# and will verify by construction. They bridge the goal's two LHS terms, relating
-# an associator of a product to an associator of a commutator.
-DAG["assoc_prod_comm_a"] = (
-    f"{A}({M}(X,Y),Z,{M}(Y,X))", f"{A}({C}(Y,X),Z,{M}(X,Y))",
-    ["assoc_comm_1", "assoc_cyclic", "alt12_additive"])
-DAG["assoc_prod_comm_b"] = (
-    f"{A}({M}(X,Y),{M}(Y,X),Z)", f"{A}({C}(X,Y),Z,{M}(X,Y))",
-    ["assoc_comm_1", "assoc_cyclic", "alt23_additive"])
+# How far the commutator is from a Lie bracket -- the alternating sum of
+# associators. Universal, and the expander is certain of it (zero monomials),
+# yet twee did not prove it at 120s either standalone or with a library tier.
+# Right altitude, wrong step size: it is a twelve-term additive identity, and
+# budget-as-diagnostic says subdivide rather than wait. Jacobi is a sum of three
+# commutator-of-commutator terms, and the Leibniz rules are precisely what
+# expand those -- so they are its parents, now that both have proved.
+DAG["jacobi_defect"] = (
+    "add(add(commutator(commutator(X,Y),Z),commutator(commutator(Y,Z),X)),commutator(commutator(Z,X),Y))",
+    "add(add(add(add(add(associator(X,Y,Z),additive_inverse(associator(X,Z,Y))),additive_inverse(associator(Y,X,Z))),associator(Y,Z,X)),associator(Z,X,Y)),additive_inverse(associator(Z,Y,X)))",
+    ["comm_prod_l", "comm_prod_r"])
+
+# The same defect in an ALTERNATIVE ring, where the alternating associator
+# collapses those six terms to 6(x,y,z). Not universal -- it needs alternativity
+# -- so it is a genuine conjecture, and the interesting waypoint of the four.
+# Its parents are the universal form plus the three alternating facts that do
+# the collapsing; nothing else is on its derivation.
+DAG["jacobi_alternative"] = (
+    "add(add(commutator(commutator(X,Y),Z),commutator(commutator(Y,Z),X)),commutator(commutator(Z,X),Y))",
+    "add(add(add(add(add(associator(X,Y,Z),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z))",
+    ["jacobi_defect", "alt12_additive", "alt23_additive",
+     "assoc_cyclic"])
+
+WAYPOINTS = ['comm_prod_l', 'comm_prod_r', 'jacobi_defect', 'jacobi_alternative']
 
 # -- the target --------------------------------------------------------------
+# Three parents, not ten and not six. Goal contact fell as the parent set grew
+# (6 -> 162 rules touching both sides, 10 -> 102), which is the wrong-parents
+# finding showing up in the goal rather than in a lemma. These three carry the
+# goal's structure: teichmuller is the only lemma relating a multiplied
+# associator to associators of products, assoc_comm_3 handles the commutator
+# term, assoc_cyclic is the symmetry both rely on.
 DAG["rng033_goal"] = (
     f"add({A}({M}(X,Y),Z,W),{A}(X,Y,{C}(Z,W)))",
     f"add({M}(X,{A}(Y,Z,W)),{M}({A}(X,Z,W),Y))",
-    ["teichmuller", "teich_isolated", "assoc_comm_3", "assoc_comm_1",
-     "assoc_prod_comm_a", "assoc_prod_comm_b", "assoc_cyclic",
-     "alt12_additive", "alt23_additive", "flexible"])
+    ["teichmuller", "assoc_comm_3", "assoc_cyclic"] + WAYPOINTS)
 
 # Budget is a diagnostic. right_moufang keeps a large budget only because the
 # library declares one; here it should be free, and a large number would itself
@@ -166,14 +260,39 @@ TIER_BUDGET = dict(_rng.TIER_BUDGET)
 # four mined nodes. It was briefly 900s, which mixed two changes: a proof
 # would not have separated the nodes from the extra 600 seconds. Reuse makes
 # holding it at 300s free -- iteration 1's runs are already in the ledger.
-TIER_BUDGET.update({"rng033_goal": 300, "assoc_comm_3": 60,
-                    "comm_def_add": 60, "teich_isolated": 120,
-                    "assoc_comm_1": 120, "assoc_prod_comm_a": 120,
-                    "assoc_prod_comm_b": 120})
+# The goal gets 4000s; every other node keeps a diagnostic budget.
+#
+# Budget-as-diagnostic governs the *library*: a lemma that needs more than
+# seconds means the sketch is wrong there, and all 18 of these prove in <=3.6s,
+# which is what says the decomposition itself is sound. It is the wrong rule for
+# the target. Reachability is the result being pursued here -- a problem out of
+# reach at any budget coming into reach -- and per-problem cost may rise.
+#
+# The untried configuration, after three iterations of sketch surgery:
+#
+#   no parents,  4000s   Timeout (the plain baseline screen)
+#   3 parents,    300s   Timeout
+#   3 parents,   4000s   <- this
+#
+# Both levers have produced results separately: the strongest RNG result in this
+# project is a plain 4000s screen (RNG027-10, 3271.1s, rating 1.00), and
+# decomposition flipped ten targets. They have never been combined on this
+# problem.
+TIER_BUDGET.update({"rng033_goal": 600, "assoc_comm_3": 60,
+                    "comm_def_add": 60})
+# An instance is meant to be easier than the goal. If one needs more than this,
+# it is not a waypoint and saying so early is the point of the budget.
+TIER_BUDGET.update({n: 120 for n in WAYPOINTS})
 
 TARGETS = ["RNG033-8"]
 
 from overtone.agent.dag import Sketch          # noqa: E402
+
+# Nodes the goal's parent set has named at any point, so every recorded
+# iteration stays representable. Iteration 3 cut the goal to three parents, and
+# pruning to *those* ancestors alone would drop `flexible` -- which iteration 0
+# names -- leaving scripts/loop.py unable to replay its own history.
+_HISTORICAL_PARENTS = ["alt12_additive", "alt23_additive", "flexible"]
 
 # Prune to what the goal actually needs. The library's Moufang tier is not on
 # this goal's derivation, and Pipeline A charges every node to the problem --
@@ -182,6 +301,8 @@ from overtone.agent.dag import Sketch          # noqa: E402
 # sketch already knows how to compute.
 _full = Sketch(DAG)
 _keep = set(_full.scope("rng033_goal", "closure")) | {"rng033_goal"}
+for _p in _HISTORICAL_PARENTS:
+    _keep |= set(_full.scope(_p, "closure")) | {_p}
 DAG = {n: v for n, v in DAG.items() if n in _keep}
 TIER_BUDGET = {n: b for n, b in TIER_BUDGET.items() if n in _keep}
 

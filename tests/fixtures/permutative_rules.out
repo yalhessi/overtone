@@ -1,0 +1,22 @@
+(13.571429) 2. add(X, Y) <-> add(Y, X)
+(24.857143) 32. add(X, add(Y, Z)) <-> add(Y, add(X, Z))
+(12.285714) 1. additive_inverse(additive_inverse(X)) -> X
+(12.285714) 3. add(X, additive_identity) -> X
+(15.857143) 4. add(X, additive_inverse(X)) -> additive_identity
+(12.285714) 5. add(additive_identity, X) -> X
+(12.428572) 6. multiply(X, additive_identity) -> additive_identity
+(12.428572) 7. multiply(additive_identity, X) -> additive_identity
+(13.0) 8. multiply(sk_dag_1, sk_dag_2) -> multiply3
+(13.0) 9. multiply(sk_dag_2, sk_dag_3) -> multiply2
+(17.0) 10. associator(sk_dag_1, sk_dag_2, sk_dag_3) -> associator2
+(22.857143) 11. add(add(X, Y), Z) -> add(X, add(Y, Z))
+(13.0) 12. multiply(sk_dag_1, multiply2) -> multiply4
+(22.857143) 13. multiply(multiply(X, X), Y) -> multiply(X, multiply(X, Y))
+(22.857143) 14. multiply(multiply(X, Y), Y) -> multiply(X, multiply(Y, Y))
+(13.0) 15. multiply(multiply3, sk_dag_3) -> multiply5
+(30.285715) 16. add(multiply(X, Y), multiply(X, Z)) -> multiply(X, add(Y, Z))
+(30.285715) 17. add(multiply(X, Y), multiply(Z, Y)) -> multiply(add(X, Z), Y)
+(32.428574) 18. add(multiply(X, Y), additive_inverse(multiply(Y, X))) -> commutator(Y, X)
+(13.0) 19. add(multiply4, associator2) -> add2
+(48.142853) 20. add(multiply(multiply(X, Y), Z), additive_inverse(multiply(X, multiply(Y, Z)))) -> associator(X, Y, Z)
+(11.0) 21. additive_inverse(additive_identity) -> additive_identity

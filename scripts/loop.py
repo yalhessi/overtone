@@ -89,6 +89,11 @@ SESSION_EDITS = [
 A33, M33, I33, C33 = ("associator", "multiply", "additive_inverse",
                       "commutator")
 
+# Each waypoint's own derivation, not a shared library tier. The first draft
+# gave all four the same nine lemmas; both Leibniz identities then failed with
+# them and proved in ~8.6s standalone.
+WP_PARENTS = {'comm_prod_l': [], 'comm_prod_r': [], 'jacobi_defect': ['comm_prod_l', 'comm_prod_r'], 'jacobi_alternative': ['jacobi_defect', 'alt12_additive', 'alt23_additive', 'assoc_cyclic']}
+
 # RNG033-8, iteration 2: the four nodes added after mining 6,777 universal rules
 # out of iteration 1's failed searches. The mining said the search builds the
 # goal's left side prolifically (699 + 629 rules) and its right side almost never
@@ -116,14 +121,96 @@ RNG033_EDITS = [
                   "assoc_comm_1", "assoc_prod_comm_a", "assoc_prod_comm_b",
                   "assoc_cyclic", "alt12_additive", "alt23_additive",
                   "flexible"]}],
+
+    # Iteration 3: revert iteration 2, then cut the parent set further.
+    #
+    # Iteration 2 was drafted on "the search never builds the goal's RHS",
+    # counted by grepping the output for the RHS term shape. That count was
+    # invalid: --flatten-goal names each goal subterm and rewrites matching
+    # terms to the name, so the shape cannot appear literally. Measured with
+    # `proofs.goal_contact`, which resolves the names first, the RHS is the
+    # *dominant* side (11,565 rules against 3,033), and the four nodes cut the
+    # only rules that can close the goal -- those touching both sides -- from
+    # 162 to 102. A --precedence experiment built on the same bad count moved it
+    # to 103. See docs/FINDINGS.md.
+    #
+    #   run                  rules   lhs    rhs    both
+    #   iter00  6 parents    24107  3033  11565     162   0.67%
+    #   iter01 10 parents    24727  2927  11596     102   0.41%
+    #   iter01 +precedence   25894  3058  12270     103   0.40%
+    #
+    # PREDICTION, recorded before running. The two points say contact fell as
+    # parents rose, which is finding 2 -- an irrelevant axiom forms critical
+    # pairs with every rule -- showing up in the goal rather than in a lemma. So
+    # cut to the three parents that carry the goal's structure: teichmuller (the
+    # only lemma relating a multiplied associator to associators of products),
+    # assoc_comm_3 (the commutator term), assoc_cyclic (the symmetry both use).
+    #
+    #   both > 162 (>0.67%)  dilution confirmed; keep cutting, and 6 parents was
+    #                        never the floor
+    #   both ~ 162           parent count is not the lever; it is *which*
+    #                        parents, and the next move is to vary membership at
+    #                        fixed size
+    #   both < 162           one of the three dropped parents was load-bearing;
+    #                        the diff says which, and that is worth more than a
+    #                        proof of a node
+    #
+    # No prediction on proving the goal. Three iterations have failed at it and
+    # a number here would be invention; `both` is the thing being measured.
+    [{"op": "remove_node", "name": "teich_isolated"},
+     {"op": "remove_node", "name": "assoc_prod_comm_a"},
+     {"op": "remove_node", "name": "assoc_prod_comm_b"},
+     {"op": "remove_node", "name": "assoc_comm_1"},
+     {"op": "set_parents", "name": "rng033_goal",
+      "parents": ["teichmuller", "assoc_comm_3", "assoc_cyclic"]}],
+
+    # Iteration 4: derived waypoints, at the right altitude this time.
+    #
+    # Iteration 3's parent-set surgery changed nothing structural, and a first
+    # attempt at waypoints identified two of the goal's four variables -- still
+    # the conclusion, one variable smaller, so it decomposed nothing.
+    #
+    # These were derived, not guessed. `overtone/freering.py` solves for how far
+    # a familiar associative law is from holding, over a basis of associator
+    # terms, exactly and with no prover; each statement is then checked by
+    # expansion before it costs a run. The first three hold in EVERY ring --
+    # sound by construction, the same class as teichmuller, which is the one
+    # node in this sketch that has consistently earned its place. The fourth
+    # needs alternativity, which makes it a genuine conjecture rather than
+    # bookkeeping.
+    [
+     {"op": "add_node", "name": "comm_prod_l",
+      "lhs": "commutator(multiply(X,Y),Z)",
+      "rhs": "add(add(add(add(multiply(X,commutator(Y,Z)),multiply(commutator(X,Z),Y)),additive_inverse(associator(X,Y,Z))),associator(X,Z,Y)),additive_inverse(associator(Z,X,Y)))",
+      "parents": WP_PARENTS["comm_prod_l"]},
+     {"op": "add_node", "name": "comm_prod_r",
+      "lhs": "commutator(X,multiply(Y,Z))",
+      "rhs": "add(add(add(add(multiply(commutator(X,Y),Z),multiply(Y,commutator(X,Z))),associator(X,Y,Z)),additive_inverse(associator(Y,X,Z))),associator(Y,Z,X))",
+      "parents": WP_PARENTS["comm_prod_r"]},
+     {"op": "add_node", "name": "jacobi_defect",
+      "lhs": "add(add(commutator(commutator(X,Y),Z),commutator(commutator(Y,Z),X)),commutator(commutator(Z,X),Y))",
+      "rhs": "add(add(add(add(add(associator(X,Y,Z),additive_inverse(associator(X,Z,Y))),additive_inverse(associator(Y,X,Z))),associator(Y,Z,X)),associator(Z,X,Y)),additive_inverse(associator(Z,Y,X)))",
+      "parents": WP_PARENTS["jacobi_defect"]},
+     {"op": "add_node", "name": "jacobi_alternative",
+      "lhs": "add(add(commutator(commutator(X,Y),Z),commutator(commutator(Y,Z),X)),commutator(commutator(Z,X),Y))",
+      "rhs": "add(add(add(add(add(associator(X,Y,Z),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z)),associator(X,Y,Z))",
+      "parents": WP_PARENTS["jacobi_alternative"]},
+     {"op": "set_parents", "name": "rng033_goal",
+      "parents": ["teichmuller", "assoc_comm_3", "assoc_cyclic",
+                  'comm_prod_l', 'comm_prod_r', 'jacobi_defect', 'jacobi_alternative']}],
 ]
 
 
 def rewind_rng033(sketch: Sketch) -> Sketch:
-    """The RNG033-8 sketch as iteration 1 had it, before the mined refinement."""
-    nodes = {n: v for n, v in sketch.nodes.items()
-             if n not in ("teich_isolated", "assoc_comm_1",
-                          "assoc_prod_comm_a", "assoc_prod_comm_b")}
+    """The RNG033-8 sketch as iteration 0 had it, with the six-parent goal.
+
+    The committed sketch is iteration 4's: the four mined nodes are gone (they
+    cut goal contact from 162 to 102), the four derived waypoints are in, and
+    the goal sits on all of them. Rewinding drops the waypoints and restores the
+    six-parent goal; every replayed edit carries its own statements, so nothing
+    here needs to know what they say.
+    """
+    nodes = {n: v for n, v in sketch.nodes.items() if n not in WAYPOINTS}
     nodes["rng033_goal"] = (*nodes["rng033_goal"][:2],
                             ["teichmuller", "assoc_comm_3", "assoc_cyclic",
                              "alt12_additive", "alt23_additive", "flexible"])
@@ -157,6 +244,10 @@ def rewind(sketch: Sketch) -> Sketch:
     return Sketch(nodes)
 
 
+# Nodes iteration 4 introduces; the rewind removes them so the replay can add
+# them back. Derived from the edit list itself, so the two cannot drift.
+WAYPOINTS = [a["name"] for a in RNG033_EDITS[-1] if a["op"] == "add_node"]
+
 SCRIPTS = {"rng029": SESSION_EDITS, "rng033": RNG033_EDITS}
 
 
@@ -166,6 +257,10 @@ def main():
     ap.add_argument("problem")
     ap.add_argument("--sketch", type=Path,
                     default=config.ROOT / "scripts" / "rng_dag.py")
+    ap.add_argument("--seed", action="store_true",
+                    help="start from the problem itself: one node per axiom "
+                         "(never proved) plus the goal. The canonical shape, so "
+                         "an agent cites axioms instead of re-encoding them.")
     ap.add_argument("--script", choices=("rng029", "rng033"), default="rng029",
                     help="which recorded edit sequence the scripted agent replays")
     ap.add_argument("--agent", choices=("scripted", "anthropic", "openai"),
@@ -182,6 +277,10 @@ def main():
     ap.add_argument("--max-iterations", type=int, default=6)
     ap.add_argument("--total-cpu", type=float)
     ap.add_argument("--outdir", type=Path)
+    ap.add_argument("--no-draft", action="store_true",
+                    help="skip the drafting phase and verify the seed sketch "
+                         "as given (drafting runs only for a model agent with "
+                         "a seed of one node or fewer)")
     ap.add_argument("--rerun", action="store_true",
                     help="ignore the ledger and re-run every "
                          "invocation, even ones already recorded")
@@ -191,15 +290,22 @@ def main():
                          "sketch they produce")
     a = ap.parse_args()
 
-    sketch = load_sketch(a.sketch)
+    if a.seed:
+        sketch = Sketch.from_problem(a.problem, goal=f"{a.problem.lower()}_goal")
+        print(f"seed: {len(sketch.given)} axiom node(s) + 1 goal", flush=True)
+    else:
+        sketch = load_sketch(a.sketch)
     target = sketch
     edits = SCRIPTS[a.script]
-    if a.script == "rng029" and not a.no_rewind:
-        sketch = rewind(sketch)
-    elif a.script == "rng033":
-        # RNG033-8's iteration 1 sketch is the committed one minus the four
-        # nodes iteration 2 added; the edits below re-add them.
-        sketch = rewind_rng033(sketch)
+    # Rewinding exists so replaying the recorded edits means something. A model
+    # agent is not replaying anything, so rewinding would silently hand it a
+    # sketch that is neither the committed one nor one it chose -- and any
+    # result would be unattributable.
+    if a.agent == "scripted" and not a.no_rewind:
+        if a.script == "rng029":
+            sketch = rewind(sketch)
+        elif a.script == "rng033":
+            sketch = rewind_rng033(sketch)
 
     if a.dry_run:
         print(f"start: {len(sketch.nodes)} nodes")
@@ -236,7 +342,8 @@ def main():
                    outdir=outdir, budget=budget,
                    budgets=load_budgets(a.sketch),
                    binary=a.binary or config.twee_path(deterministic=True),
-                   max_iterations=a.max_iterations, total_cpu=a.total_cpu)
+                   max_iterations=a.max_iterations, total_cpu=a.total_cpu,
+                   draft=not a.no_draft)
     print(f"\n  {'PROVED' if out['proved'] else 'NOT PROVED'} after "
           f"{out['iterations']} iteration(s), {out['cpu_total']:.1f}s CPU")
     print(f"  -> {outdir}/loop.json, trajectory.jsonl")

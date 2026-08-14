@@ -175,8 +175,6 @@ def main():
     ap.add_argument("--workers", type=int, default=20)
     ap.add_argument("--resume", action="store_true",
                     help="skip nodes an earlier run already proved")
-    ap.add_argument("--no-retry", action="store_true",
-                    help="do not re-attempt a failed node standalone")
     a = ap.parse_args()
 
     known, prior_results = (), ()
@@ -190,8 +188,7 @@ def main():
     out = verify("RNG029-5", SKETCH, outdir=OUT, budget=DEFAULT_BUDGET,
                  budgets=TIER_BUDGET, scope=a.scope, channel=a.channel,
                  workers=a.workers, binary=config.twee_path(deterministic=True), known=known,
-                 prior_results=prior_results,
-                 retry_standalone=not a.no_retry)
+                 prior_results=prior_results)
     print(f"\n{out['n_proved']}/{out['n_nodes']} nodes proved")
     for n in out["missing"]:
         print(f"  MISSING:  {n}")

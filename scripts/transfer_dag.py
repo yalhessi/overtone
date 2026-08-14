@@ -86,8 +86,7 @@ def main():
           f"verifying against {a.target}'s axioms", flush=True)
 
     res = verify(a.target, sketch, outdir=out, budget=a.node_budget,
-                 scope="parents", workers=a.workers, binary=binary,
-                 retry_standalone=False)
+                 scope="parents", workers=a.workers, binary=binary)
     ok = [n for n in res["proved"]]
     print(f"  {len(ok)}/{len(sketch.nodes)} donor lemmas hold in the target's theory",
           flush=True)

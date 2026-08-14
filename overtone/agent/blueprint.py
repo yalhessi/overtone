@@ -50,6 +50,20 @@ NODE_W, NODE_H, GAP_X, GAP_Y = 158, 46, 22, 74
 PAD, LEGEND_H = 26, 74
 
 
+def best_row(runs):
+    """The winning run a node's status and time are read from, or None.
+
+    Factored out so nothing can pick a *different* winning row and report its
+    evidence beside this one's timing. `loop.state_of` reads support attribution
+    from it, and the two directions of one node routinely differ in both time
+    and which parents their proofs cite.
+    """
+    wins = [r for r in runs if r.get("proved")]
+    if not wins:
+        return None
+    return min(wins, key=lambda r: r["cpu"] if r["cpu"] is not None else 0)
+
+
 def statuses(sketch, results):
     """Per-node status, best time, and how much scope that best run needed.
 
@@ -61,13 +75,12 @@ def statuses(sketch, results):
     out = {}
     for name in sketch.nodes:
         runs = [r for r in results if r["node"] == name]
-        wins = [r for r in runs if r["proved"]]
         # A run with no concrete result is one still in flight -- the live
         # directory scan sees its input file before its outcome exists. Counting
         # that as a failure would paint a running node red.
         settled = [r for r in runs if r.get("result") not in (None, "?")]
-        if wins:
-            best = min(wins, key=lambda r: r["cpu"] if r["cpu"] is not None else 0)
+        best = best_row(runs)
+        if best is not None:
             st = "proved_scoped" if best.get("n_support") else "proved"
             out[name] = {"status": st, "cpu": best["cpu"],
                          "direction": best["direction"],

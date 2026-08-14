@@ -42,14 +42,36 @@ def safe_term(s):
     TPTP carries clause shapes this grammar does not cover (propositional atoms,
     $-constants, arithmetic); skip them rather than abort a whole corpus scan.
     """
+    return parse_error(s)[0]
+
+
+def parse_error(s):
+    """(term, reason) -- `safe_term` with the reason it failed.
+
+    A caller scanning a corpus wants to skip the clause; a caller reviewing a
+    proposed node has to tell the model what to fix, and "it did not parse" is
+    not actionable. One agent proposed `associator(X,Y,Z) = additive_identity`
+    as one side of an equation: the `=` is not a token of this grammar, so it
+    was dropped, the leftover `additive_identity` made the parse short, and the
+    node went to the prover -- which rejected it in 0.003s and reported the same
+    "failed" a genuinely hard lemma reports.
+    """
+    toks = tokenize(s or "")
+    if not toks:
+        return None, "empty"
+    if "=" in (s or ""):
+        return None, ("contains `=`; a node's lhs and rhs are each a single "
+                      "term, and the equation between them is the node itself. "
+                      "An implication between two equations cannot be stated as "
+                      "one equation")
     try:
-        toks = tokenize(s)
-        if not toks:
-            return None
         t, i = parse(toks)
-        return t if i == len(toks) else None
     except (IndexError, ValueError):
-        return None
+        return None, "unbalanced parentheses or a missing argument"
+    if i != len(toks):
+        return None, (f"trailing tokens after a complete term: "
+                      f"{' '.join(toks[i:])!r}")
+    return t, None
 
 
 def unparse(t):
@@ -155,3 +177,14 @@ def merged(sets):
     for s in sets:
         out |= s
     return out
+
+
+def symbols_in(text: str) -> set:
+    """Lowercase-initial identifiers in a term string: its function symbols.
+
+    TPTP variables are uppercase-initial, so anything lowercase is a function or
+    constant. Shared by `dag.grounding_errors` and the signature reviewer on
+    purpose: if the two disagreed about what counts as a symbol, review would
+    pass a node that then aborts the whole run when verification rejects it.
+    """
+    return set(re.findall(r"\b([a-z_][A-Za-z0-9_]*)\b", text or ""))

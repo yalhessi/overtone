@@ -1,0 +1,156 @@
+Here is the input problem:
+  Axiom 1 (additive_inverse_additive_inverse): additive_inverse(additive_inverse(X)) = X.
+  Axiom 2 (flattening): commutator2 = commutator(sk_dag_2, sk_dag_3).
+  Axiom 3 (commutativity_for_addition): add(X, Y) = add(Y, X).
+  Axiom 4 (right_additive_identity): add(X, additive_identity) = X.
+  Axiom 5 (right_additive_inverse): add(X, additive_inverse(X)) = additive_identity.
+  Axiom 6 (left_additive_identity): add(additive_identity, X) = X.
+  Axiom 7 (left_additive_inverse): add(additive_inverse(X), X) = additive_identity.
+  Axiom 8 (right_multiplicative_zero): multiply(X, additive_identity) = additive_identity.
+  Axiom 9 (left_multiplicative_zero): multiply(additive_identity, X) = additive_identity.
+  Axiom 10 (flattening): multiply3 = multiply(sk_dag_2, sk_dag_3).
+  Axiom 11 (flattening): multiply2 = multiply(sk_dag_3, sk_dag_2).
+  Axiom 12 (parent_3): additive_inverse(add(X, Y)) = add(additive_inverse(X), additive_inverse(Y)).
+  Axiom 13 (parent_4): multiply(X, additive_inverse(Y)) = additive_inverse(multiply(X, Y)).
+  Axiom 14 (associativity_for_addition): add(X, add(Y, Z)) = add(add(X, Y), Z).
+  Axiom 15 (left_alternative): multiply(multiply(X, X), Y) = multiply(X, multiply(X, Y)).
+  Axiom 16 (right_alternative): multiply(multiply(X, Y), Y) = multiply(X, multiply(Y, Y)).
+  Axiom 17 (flattening): associator2 = associator(commutator(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1).
+  Axiom 18 (flattening): associator4 = associator(multiply(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1).
+  Axiom 19 (flattening): associator3 = associator(multiply(sk_dag_3, sk_dag_2), sk_dag_4, sk_dag_1).
+  Axiom 20 (parent_2): add(commutator(X, Y), multiply(X, Y)) = multiply(Y, X).
+  Axiom 21 (distribute1): multiply(X, add(Y, Z)) = add(multiply(X, Y), multiply(X, Z)).
+  Axiom 22 (distribute2): multiply(add(X, Y), Z) = add(multiply(X, Z), multiply(Y, Z)).
+  Axiom 23 (commutator): commutator(X, Y) = add(multiply(Y, X), additive_inverse(multiply(X, Y))).
+  Axiom 24 (right_moufang): multiply(X, multiply(Y, multiply(Z, Y))) = multiply(multiply(multiply(X, Y), Z), Y).
+  Axiom 25 (parent_1): associator(add(X, Y), Z, W) = add(associator(X, Z, W), associator(Y, Z, W)).
+  Axiom 26 (associator): associator(X, Y, Z) = add(multiply(multiply(X, Y), Z), additive_inverse(multiply(X, multiply(Y, Z)))).
+  Axiom 27 (flattening): add2 = add(associator(multiply(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1), associator(commutator(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1)).
+  Goal 1 (goal): add(associator(multiply(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1), associator(commutator(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1)) = associator(multiply(sk_dag_3, sk_dag_2), sk_dag_4, sk_dag_1).
+
+(12.285714) 1. additive_inverse(additive_inverse(X)) -> X
+(13.0) 2. commutator(sk_dag_2, sk_dag_3) -> commutator2
+(13.571429) 3. add(X, Y) <-> add(Y, X)
+(12.285714) 4. add(X, additive_identity) -> X
+(15.857143) 5. add(X, additive_inverse(X)) -> additive_identity
+(12.285714) 6. add(additive_identity, X) -> X
+(12.428572) 7. multiply(X, additive_identity) -> additive_identity
+(12.428572) 8. multiply(additive_identity, X) -> additive_identity
+(13.0) 9. multiply(sk_dag_2, sk_dag_3) -> multiply3
+(13.0) 10. multiply(sk_dag_3, sk_dag_2) -> multiply2
+(22.57143) 11. additive_inverse(add(X, Y)) -> add(additive_inverse(X), additive_inverse(Y))
+(18.57143) 12. additive_inverse(multiply(X, Y)) -> multiply(X, additive_inverse(Y))
+(22.857143) 13. add(add(X, Y), Z) -> add(X, add(Y, Z))
+(22.857143) 14. multiply(multiply(X, X), Y) -> multiply(X, multiply(X, Y))
+(22.857143) 15. multiply(multiply(X, Y), Y) -> multiply(X, multiply(Y, Y))
+(17.0) 16. associator(commutator2, sk_dag_4, sk_dag_1) -> associator2
+(17.0) 17. associator(multiply3, sk_dag_4, sk_dag_1) -> associator4
+(17.0) 18. associator(multiply2, sk_dag_4, sk_dag_1) -> associator3
+(28.428574) 19. add(commutator(X, Y), multiply(X, Y)) -> multiply(Y, X)
+(30.285715) 20. add(multiply(X, Y), multiply(X, Z)) -> multiply(X, add(Y, Z))
+(30.285715) 21. add(multiply(X, Y), multiply(Z, Y)) -> multiply(add(X, Z), Y)
+(32.428574) 22. add(multiply(X, Y), multiply(Y, additive_inverse(X))) -> commutator(Y, X)
+(32.14286) 23. multiply(multiply(multiply(X, Y), Z), Y) -> multiply(X, multiply(Y, multiply(Z, Y)))
+(38.000004) 24. add(associator(X, Y, Z), associator(W, Y, Z)) -> associator(add(X, W), Y, Z)
+(48.142853) 25. add(multiply(X, multiply(Y, additive_inverse(Z))), multiply(multiply(X, Y), Z)) -> associator(X, Y, Z)
+(25.0) 26. associator(add(multiply3, commutator2), sk_dag_4, sk_dag_1) -> add2
+(11.0) 27. additive_inverse(additive_identity) -> additive_identity
+(13.857143) 28. commutator(X, X) -> additive_identity
+(14.428572) 29. commutator(X, additive_identity) -> additive_identity
+(14.428572) 30. commutator(additive_identity, X) -> additive_identity
+(15.0) 31. add(multiply3, commutator2) -> multiply2
+(21.0) 32. associator(multiply2, sk_dag_4, sk_dag_1) -> add2
+(11.0) 33. associator3 -> add2
+(17.857143) 34. commutator(additive_inverse(X), X) -> additive_identity
+(17.857143) 35. associator(X, additive_identity, Y) -> additive_identity
+(17.857143) 36. associator(additive_identity, X, Y) -> additive_identity
+(19.857143) 37. associator(X, Y, additive_identity) -> additive_identity
+(19.857143) 38. commutator(X, additive_inverse(X)) -> additive_identity
+(20.0) 39. multiply(sk_dag_2, additive_inverse(sk_dag_3)) -> additive_inverse(multiply3)
+(20.0) 40. multiply(sk_dag_3, additive_inverse(sk_dag_2)) -> additive_inverse(multiply2)
+(21.0) 41. add(multiply2, additive_inverse(multiply3)) -> commutator2
+(22.57143) 42. multiply(additive_inverse(X), X) -> multiply(X, additive_inverse(X))
+(23.0) 43. add(multiply2, commutator(sk_dag_3, sk_dag_2)) -> multiply3
+(23.0) 44. add(multiply3, additive_inverse(multiply2)) -> commutator(sk_dag_3, sk_dag_2)
+(20.0) 45. commutator(sk_dag_3, sk_dag_2) -> additive_inverse(commutator2)
+(24.142857) 46. multiply(additive_inverse(X), additive_inverse(X)) -> multiply(X, X)
+(24.857143) 47. add(X, add(Y, Z)) <-> add(Y, add(X, Z))
+(24.857143) 48. multiply(add(X, X), Y) = multiply(X, add(Y, Y))
+(51.142853) 49. add(multiply(X, multiply(Y, Z)), multiply(multiply(X, Y), additive_inverse(Z))) -> additive_inverse(associator(X, Y, Z))
+(23.285715) 50. additive_inverse(associator(X, X, Y)) -> additive_identity
+(21.285715) 51. associator(X, X, Y) -> additive_identity
+(25.0) 52. multiply(sk_dag_2, multiply(sk_dag_3, sk_dag_3)) -> multiply(multiply3, sk_dag_3)
+(25.0) 53. multiply(sk_dag_3, multiply(sk_dag_2, sk_dag_2)) -> multiply(multiply2, sk_dag_2)
+(21.0) 54. add(multiply2, additive_inverse(commutator2)) -> multiply3
+(24.0) 55. add(commutator2, additive_inverse(multiply2)) -> additive_inverse(multiply3)
+(25.0) 56. additive_inverse(associator(sk_dag_2, sk_dag_3, sk_dag_3)) -> additive_identity
+(23.0) 57. associator(sk_dag_2, sk_dag_3, sk_dag_3) -> additive_identity
+(25.0) 58. additive_inverse(associator(sk_dag_3, sk_dag_2, sk_dag_2)) -> additive_identity
+(23.0) 59. associator(sk_dag_3, sk_dag_2, sk_dag_2) -> additive_identity
+(25.142859) 60. add(X, add(Y, additive_inverse(X))) -> Y
+(26.0) 61. add(additive_inverse(multiply3), additive_inverse(commutator2)) -> additive_inverse(multiply2)
+(26.285713) 62. multiply(sk_dag_2, add(X, sk_dag_3)) -> add(multiply3, multiply(sk_dag_2, X))
+(26.285713) 63. multiply(sk_dag_3, add(X, sk_dag_2)) -> add(multiply2, multiply(sk_dag_3, X))
+(26.285713) 64. multiply(add(X, sk_dag_2), sk_dag_3) -> add(multiply3, multiply(X, sk_dag_3))
+(26.285713) 65. multiply(add(X, sk_dag_3), sk_dag_2) -> add(multiply2, multiply(X, sk_dag_2))
+(26.285713) 66. add(multiply3, add(X, commutator2)) -> add(X, multiply2)
+(23.285715) 67. commutator(multiply(X, X), X) -> additive_identity
+(27.142859) 68. add(additive_inverse(X), add(Y, X)) -> Y
+(27.142859) 69. add(X, add(additive_inverse(X), Y)) -> Y
+(27.285715) 70. additive_inverse(associator(X, additive_inverse(Y), Y)) -> additive_identity
+(25.285715) 71. associator(X, additive_inverse(Y), Y) -> additive_identity
+(27.285715) 72. associator(X, Y, additive_inverse(Y)) -> additive_identity
+(28.285713) 73. multiply(sk_dag_2, add(sk_dag_3, X)) -> add(multiply3, multiply(sk_dag_2, X))
+(28.285713) 74. multiply(sk_dag_3, add(sk_dag_2, X)) -> add(multiply2, multiply(sk_dag_3, X))
+(28.285713) 75. multiply(add(sk_dag_2, X), sk_dag_3) -> add(multiply3, multiply(X, sk_dag_3))
+(28.285713) 76. multiply(add(sk_dag_3, X), sk_dag_2) -> add(multiply2, multiply(X, sk_dag_2))
+(28.285713) 77. add(multiply3, add(commutator2, X)) -> add(X, multiply2)
+(29.857143) 78. multiply(multiply(X, Y), additive_inverse(Y)) -> multiply(X, multiply(Y, additive_inverse(Y)))
+(23.285715) 79. additive_inverse(associator(X, Y, Y)) -> additive_identity
+(21.285715) 80. associator(X, Y, Y) -> additive_identity
+(29.857143) 81. additive_inverse(associator(X, Y, additive_inverse(Z))) -> associator(X, Y, Z)
+(28.857143) 82. additive_inverse(associator(X, Y, Z)) -> associator(X, Y, additive_inverse(Z))
+(30.0) 83. associator(commutator2, sk_dag_4, additive_inverse(sk_dag_1)) -> additive_inverse(associator2)
+(30.0) 84. associator(multiply3, sk_dag_4, additive_inverse(sk_dag_1)) -> additive_inverse(associator4)
+(30.0) 85. associator(multiply2, sk_dag_4, additive_inverse(sk_dag_1)) -> additive_inverse(add2)
+(31.0) 86. add(multiply3, multiply(additive_inverse(sk_dag_2), sk_dag_3)) -> additive_identity
+(29.0) 87. multiply(additive_inverse(sk_dag_2), additive_inverse(sk_dag_3)) -> multiply3
+(28.0) 88. multiply(additive_inverse(sk_dag_2), sk_dag_3) -> additive_inverse(multiply3)
+(28.0) 89. commutator(additive_inverse(sk_dag_2), sk_dag_3) -> additive_inverse(commutator2)
+(31.0) 90. add(multiply2, multiply(additive_inverse(sk_dag_3), sk_dag_2)) -> additive_identity
+(29.0) 91. multiply(additive_inverse(sk_dag_3), additive_inverse(sk_dag_2)) -> multiply2
+(28.0) 92. multiply(additive_inverse(sk_dag_3), sk_dag_2) -> additive_inverse(multiply2)
+(27.0) 93. commutator(additive_inverse(sk_dag_3), sk_dag_2) -> commutator2
+(31.0) 94. commutator(additive_inverse(sk_dag_2), additive_inverse(sk_dag_3)) -> commutator2
+(31.285713) 95. add(associator2, associator(X, sk_dag_4, sk_dag_1)) -> associator(add(X, commutator2), sk_dag_4, sk_dag_1)
+(17.0) 96. add(associator4, associator2) -> add2
+
+The conjecture is true! Here is a proof.
+
+Axiom 1 (commutativity_for_addition): add(X, Y) = add(Y, X).
+Axiom 2 (parent_2): add(commutator(X, Y), multiply(X, Y)) = multiply(Y, X).
+Axiom 3 (parent_1): associator(add(X, Y), Z, W) = add(associator(X, Z, W), associator(Y, Z, W)).
+
+Lemma 4: add(multiply(X, Y), commutator(X, Y)) = multiply(Y, X).
+Proof:
+  add(multiply(X, Y), commutator(X, Y)) (peak)
+= { by axiom 1 (commutativity_for_addition) R->L }
+  add(commutator(X, Y), multiply(X, Y))
+= { by axiom 2 (parent_2) }
+  multiply(Y, X)
+
+Lemma 5: add(associator(multiply(Y, X), Z, W), associator(commutator(Y, X), Z, W)) = associator(multiply(X, Y), Z, W).
+Proof:
+  add(associator(multiply(Y, X), Z, W), associator(commutator(Y, X), Z, W)) (peak)
+= { by axiom 3 (parent_1) R->L }
+  associator(add(multiply(Y, X), commutator(Y, X)), Z, W)
+= { by lemma 4 }
+  associator(multiply(X, Y), Z, W)
+
+Goal 1 (goal): add(associator(multiply(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1), associator(commutator(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1)) = associator(multiply(sk_dag_3, sk_dag_2), sk_dag_4, sk_dag_1).
+Proof:
+  add(associator(multiply(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1), associator(commutator(sk_dag_2, sk_dag_3), sk_dag_4, sk_dag_1)) (peak)
+= { by lemma 5 }
+  associator(multiply(sk_dag_3, sk_dag_2), sk_dag_4, sk_dag_1)
+
+RESULT: Unsatisfiable (the axioms are contradictory).

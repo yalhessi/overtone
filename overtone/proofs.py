@@ -131,6 +131,107 @@ def derived_rules(text: str):
     return rules
 
 
+GOAL_RE = re.compile(r"^\s*Goal \d+ \([^)]*\):\s*(.+?)\s*=\s*(.+?)\.\s*$",
+                     re.MULTILINE)
+FLAT_RE = re.compile(r"^\s*Axiom \d+ \(flattening\):\s*(\w+)\s*=\s*(.+?)\.\s*$",
+                     re.MULTILINE)
+NAMED_RE = re.compile(r"^(.*?)\s*->\s*([a-z_]+\d+)$")
+
+
+def _summands(term: str):
+    """Top-level summands of an `add(...)` tree, plus the whole term."""
+    out, stack = [], [term.strip()]
+    while stack:
+        t = stack.pop()
+        out.append(t)
+        if not t.startswith("add("):
+            continue
+        depth, split = 0, None
+        for i, c in enumerate(t[4:-1], start=4):
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+            elif c == "," and depth == 0:
+                split = i
+                break
+        if split is not None:
+            stack += [t[4:split].strip(), t[split + 1:-1].strip()]
+    return out
+
+
+def goal_contact(text: str) -> dict:
+    """How much of the search touches each side of the goal, and both at once.
+
+    Counting *source-level term shapes* in the output does not work and produced
+    a wrong diagnosis that cost a full RNG033-8 iteration. `--flatten-goal`
+    introduces a constant for each goal subterm and rewrites matching terms to it
+    on sight, so the shape stops appearing literally; and twee names ground
+    subterms in either mode. A grep for the shape therefore measures the naming
+    convention, not the search.
+
+    So resolve the names first -- flattening axioms and `<term> -> <name>` rules
+    -- and count rules mentioning each side's terms or any alias of them.
+
+    `both` is a veto, not an objective. Only a rule touching both sides can close
+    the goal, and it is the one quantity RNG033-8's refinement moved in the wrong
+    direction (162 -> 102) while every other count rose -- so a fall is evidence
+    the edit hurt. A rise is not evidence it helped: on that same node, supplying
+    no parents at all scores 371, the highest measured, and did not prove the goal
+    at 300s.
+    Maximising it drives a sketch toward the one configuration known to fail.
+    """
+    g = GOAL_RE.search(text)
+    if not g:
+        return {"lhs": 0, "rhs": 0, "both": 0, "rules": 0, "goal": None}
+    sides = [_summands(g.group(1)), _summands(g.group(2))]
+    rules = derived_rules(text)
+
+    alias = {n: t for n, t in FLAT_RE.findall(text)}
+    for r in rules.values():
+        m = NAMED_RE.match(r["body"])
+        if m and m.group(2) not in alias:
+            alias[m.group(2)] = m.group(1)
+
+    def expand(t, depth=8):
+        while depth:
+            nxt = re.sub(r"\b([a-z_]+\d+)\b",
+                         lambda m: alias.get(m.group(1), m.group(1)), t)
+            nxt = re.sub(r"\s+", "", nxt)
+            if nxt == re.sub(r"\s+", "", t):
+                return nxt
+            t, depth = nxt, depth - 1
+        return re.sub(r"\s+", "", t)
+
+    tokens = []
+    for side in sides:
+        flat = {re.sub(r"\s+", "", s) for s in side}
+        names = {n for n, t in alias.items() if expand(t) in flat}
+        tokens.append(names | flat)
+
+    def touches(body, toks):
+        # A bare name needs word boundaries so `add2` does not match `add23`; a
+        # compound term ends in `)` and `\b` after a paren never matches, so it
+        # is a plain containment test. Without the split, the no-flatten runs --
+        # where every goal term is compound -- silently scored zero.
+        b = re.sub(r"\s+", "", body)
+        return any(re.search(rf"\b{re.escape(t)}\b", b) if t.isidentifier()
+                   else t in b for t in toks)
+
+    bodies = [r["body"] for r in rules.values()]
+    hit = [[touches(b, t) for b in bodies] for t in tokens]
+    n_lhs, n_rhs = sum(hit[0]), sum(hit[1])
+    return {"lhs": n_lhs, "rhs": n_rhs,
+            "both": sum(a and b for a, b in zip(*hit)),
+            "rules": len(bodies), "goal": (g.group(1), g.group(2)),
+            # `--no-flatten-goal` never puts the goal into the rewrite system, so
+            # no derived rule mentions it and every count here is 0 by
+            # construction. Say so, rather than let a caller read that as "the
+            # search is not reaching the goal" -- the two are indistinguishable
+            # from the numbers alone.
+            "goal_directed": bool(n_lhs or n_rhs)}
+
+
 def used_lemma_refs(text: str) -> set:
     """Rule numbers the printed proof references."""
     used = set()
@@ -144,6 +245,39 @@ def used_lemma_refs(text: str) -> set:
         h = LEMMA_HDR_RE.match(line)
         if h:
             used.add(int(h.group(1)))
+    return used
+
+
+def used_supports(text: str, prefix: str = "parent", count=None):
+    """Which supplied support equations the printed proof actually used.
+
+    `dag._job` writes a node's parents into the problem as `cnf(parent_1, axiom,
+    ...)`, numbered from 1 in the order they were supplied, and twee echoes that
+    name wherever it cites one: `Axiom 3 (parent_1): ...` in the proof's axiom
+    listing and `= { by axiom 3 (parent_1) }` in a rewrite chain. Both forms
+    parenthesise the name, which is what this matches -- a bare `parent_1`
+    substring would also hit a term symbol of that name.
+
+    Returns the 1-based indices, or **None** when there is no proof section at
+    all. None and the empty set are different answers and the caller must not
+    conflate them: None is "this run did not prove, so nothing can be
+    attributed", the empty set is "it proved and used none of them", which is
+    the interesting case. 164 of 307 parents supplied to the 154 proved runs on
+    record were in that second category.
+
+    Only the proof section is read. twee lists every axiom of the problem in its
+    preamble, so scanning the whole output would report every parent as used.
+
+    `count` is how many were supplied; with it, indices outside 1..count are
+    dropped rather than returned as names the caller cannot resolve.
+    """
+    section = proof_section(text)
+    if not section:
+        return None
+    rx = re.compile(r"\(" + re.escape(prefix) + r"_(\d+)\)")
+    used = {int(n) for n in rx.findall(section)}
+    if count is not None:
+        used = {i for i in used if 1 <= i <= count}
     return used
 
 
