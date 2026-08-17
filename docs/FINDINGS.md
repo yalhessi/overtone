@@ -1750,7 +1750,8 @@ associator terms gives two.
 #### The scaffold below the waypoint is generated too
 
 The bridge is a restatement, so on its own it moves the difficulty rather than
-reducing it. What makes it a *route* is that everything beneath it is derivable
+reducing it. That sentence carried the whole result; see "A
+restatement is not a decomposition" below for what it cost across eleven runs. What makes it a *route* is that everything beneath it is derivable
 by the same machinery, and cheap. Verified against RNG029-5's own axioms, 60s a
 node, deterministic build:
 
@@ -2059,6 +2060,113 @@ banks, and the 5 missing ones are d8 through d12 unbroken -- the
 product-of-products manipulation, which no run's search produces at all. A
 scattered gap and a contiguous one are different problems and should not be
 reported as one.
+
+
+## A restatement is not a decomposition, and the machinery cannot make one (2026-08-17)
+
+Eleven loop runs on a derived RNG029-5 seed, across four code configurations,
+produced no proof and no meaningful refinement of the sketch. The reason is one
+property of the seed that was recorded when the waypoint was first built -- "the
+bridge is a restatement, so on its own it moves the difficulty rather than
+reducing it" -- and whose consequence for an ITERATING loop was not followed
+through.
+
+### The bridge is equivalent to the conjecture, by construction, on every problem
+
+Not approximately, and not only on RNG029-5. `freering.expand` of the bridge and
+of the conjecture return the identical residual:
+
+    conjecture: add(associator(VCX,VCY,multiply(VCZ,VCX)),
+                    additive_inverse(multiply(VCX,associator(VCY,VCZ,VCX))))
+    bridge:     add(associator(VCX,VCY,multiply(VCZ,VCX)),
+                    additive_inverse(multiply(VCX,associator(VCY,VCZ,VCX))))
+
+    RNG029-5  bridge==goal: True   RNG028-7  True   RNG027-5  True
+    RNG033-8  bridge==goal: True   RNG025-4  True
+
+It cannot be otherwise. `derive_sketch` has two branches and both restate the
+residual: a two-term residual becomes `A = B`, anything else becomes
+`residual = additive_identity`. Neither can produce a statement weaker than the
+conjecture, so the seed emits no waypoint in the sense this file uses the word --
+it emits the goal in the theory's own language.
+
+**What that costs an iterating loop, as against a single verification.** Supplying
+the bridge as an axiom does take the goal from a 4000s timeout to 6.7s, which is
+what the original entry measured and is real. But a run that must PROVE the
+bridge starts from a sketch with no interior: axioms, some scaffold lemmas, and
+one obligation that is the whole problem. Every observation across the eleven
+runs follows from that.
+
+  * The frontier sits at depth 1 in every run -- there is only ever one open
+    node and it is the conjecture.
+  * The goal "proves from the bridge" in about 5s in every run. It is a
+    restatement; that number measures nothing.
+  * Nine of eleven runs never edit the bridge. It presents as a reasonable single
+    node with seven parents.
+  * Its own search scores `goal_contact both = 0` while touching each side in the
+    hundreds (lhs 118, rhs 521).
+  * It resists 45 assumption sets at 300s, standalone included -- as the
+    conjecture should, its baseline being a 4000s timeout.
+  * The successful manual proof never proves it at all.
+
+The loop's actions all operate on structure -- `subdivide`, `set_parents`,
+`redraft` -- so with no structure to operate on its edits necessarily land
+BESIDE the single step rather than along a path. "The sketch is not being refined
+meaningfully" is the correct reading, and this is the mechanism.
+
+### The mechanical machinery cannot produce a real waypoint
+
+Everything `derive.py` emits -- additivity, polarizations, permutation symmetries
+-- is a linear consequence over the free ring, found by `freering.certificate`.
+That is a real capability and it is bounded: the goal is NOT a linear consequence
+of the scaffold. `certificate` cannot express `middle_moufang` over a basis of
+the scaffold plus `right_moufang` under every renaming, even though that is
+exactly the manual route -- because the step is 112.2s of equational search, not
+a combination. The gap that matters lies outside the linear span, and a change of
+representation is the only move the machinery has left when it reaches that edge.
+The bridge is what that move produces.
+
+### And the evidence bank cannot supply it either -- structurally
+
+Across 20 evidence banks from every archived run, each route step and how many
+banks hold it:
+
+    assoc_def_add     20/20      assoc_cyclic      13/20
+    assoc_xxy         20/20      assoc_def_246     13/20
+    assoc_xyx         20/20      alt12/alt23       13/20
+    flexible          20/20      assoc_def_247      4/20
+    assoc_add_1/2/3   15-16/20   middle_moufang     6/20
+                                 right_moufang     0/20
+
+Nineteen of twenty route steps appear. `right_moufang` -- the 192.6s step the
+whole route turns on -- appears in none. That is not sampling noise, it is
+definitional: a bank holds what searches derived CHEAPLY, and a waypoint earns
+its place by being what they do not derive. **A waypoint cannot be mined out of
+the searches that failed to reach it.**
+
+Which is why the evidence work moved gold recall not at all -- grounded means
+10.0 with neither change, 9.0 with the scheduler alone, 10.0 with the bank fully
+delivered. It made the cheap distribution visible, and the cheap distribution is
+where the answer is not.
+
+### What a waypoint has to be, and the check that is missing
+
+A waypoint must be strictly between the axioms and the goal. Both ways of missing
+that are on record here and neither is detected before prover time:
+
+  * **Equivalent to the goal.** The bridge. No progress is possible, and the loop
+    spends its iterations elsewhere because there is nowhere else to spend them.
+  * **Stronger than the goal.** RNG029-5-bank-02 proved the bridge in 0.009s from
+    four unproved parents, two of which asserted that the terms it was concluding
+    were zero -- `multiply(X, associator(Y,Z,X)) = additive_identity` being the
+    bridge's own right-hand side. `dag.grounding` refused it, which is the guard
+    working, but nothing had stopped the node being PROPOSED.
+
+Residual comparison decides which of the three a proposal is, before any prover
+time, and nothing currently does it. Note the asymmetry that makes this hard:
+the manual route's waypoint is not linearly derivable either, so CLASSIFYING a
+proposal is mechanical while GENERATING one is not. That is the open problem,
+not a missing function.
 
 
 ## Open
