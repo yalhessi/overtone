@@ -402,10 +402,52 @@ class Bank:
             items = [e for e in items if e.universal is universal]
         page = max(0, int(page))
         start = page * per_page
-        return {"facet": facet or "all", "contains": contains,
-                "n_matching": len(items), "page": page,
-                "n_pages": max(1, -(-len(items) // per_page)),
-                "items": [_row(e) for e in items[start:start + per_page]]}
+        out = {"facet": facet or "all", "contains": contains,
+               "n_matching": len(items), "page": page,
+               "n_pages": max(1, -(-len(items) // per_page)),
+               "items": [_row(e) for e in items[start:start + per_page]]}
+        if not items:
+            out.update(self._explain_empty(contains, sketch, facet, universal))
+        return out
+
+    def _explain_empty(self, contains, sketch, facet, universal):
+        """Why a query matched nothing. Silence here is worse than useless.
+
+        `n_matching: 0` conflates two opposite situations, and a run measured
+        the cost. `visible` hides an equation the sketch already states -- right,
+        or a promoted node would be re-offered as a candidate forever -- but the
+        planner cannot see that from the outside. One run promoted
+        `assoc_push_left_factor` at iteration 0 and then queried that same shape
+        at iterations 1 through 6, getting a bare zero each time; 51 of its 99
+        lookups came back empty, most of them this. It was being told "no" and
+        hearing "not found" when the answer was "you already have it".
+
+        So an empty result says which of these it is: the sketch has it, the
+        facet filter excluded it, or no search ever produced it -- the last being
+        the only one that means stop looking here.
+        """
+        matches = [e for e in self.items.values()
+                   if not contains or contains.lower() in e.text().lower()]
+        if not matches:
+            return {"why_empty": "no run in this loop has derived anything "
+                                 "matching that. This is not a filter -- the "
+                                 "search has not produced it, so look for a "
+                                 "different shape rather than rephrasing."}
+        known = {}
+        if sketch is not None:
+            known = {eq_key(a, b): n for n, (a, b, _) in sketch.nodes.items()}
+        have = [{"eq": e.text(), "node": known[eq_key(e.lhs, e.rhs)]}
+                for e in matches if eq_key(e.lhs, e.rhs) in known]
+        if have:
+            return {"why_empty": "your sketch ALREADY STATES these, so they are "
+                                 "hidden from candidate listings. You have them "
+                                 "-- do not look again.",
+                    "already_in_your_sketch": have[:10]}
+        return {"why_empty": f"{len(matches)} equation(s) match the text but "
+                             f"were excluded by this query's filters "
+                             f"(facet={facet!r}, universal={universal!r}). "
+                             f"Retry without them.",
+                "excluded_by_filters": [_row(e) for e in matches[:5]]}
 
 
 def _row(e):

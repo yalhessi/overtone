@@ -4199,3 +4199,48 @@ def test_the_recall_audit_separates_never_found_from_never_shown(tmp_path):
         "the search found it and the planner never saw it"
     assert not by["absent"]["surfaced"], "no search ever produced it"
     assert by["got"]["grounded"]
+
+
+def test_an_empty_lookup_says_which_kind_of_empty_it_is(tmp_path):
+    """`n_matching: 0` conflates two opposite answers, and a run paid for it.
+
+    `visible` hides an equation the sketch already states -- right, or a promoted
+    node would be re-offered as a candidate forever -- but the planner cannot see
+    that from outside. RNG029-5-paged-01 promoted `assoc_push_left_factor` at
+    iteration 0, then queried that same shape at iterations 1 through 6 and got a
+    bare zero every time; 51 of its 99 lookups came back empty, most of them
+    this. It was told "no" and heard "not found" when the answer was "you have
+    it already".
+    """
+    from overtone.agent import evidence
+
+    art = _artifact(tmp_path, "n.out", [
+        "associator(X,multiply(X,Y),Z) -> associator(X,Y,multiply(X,Z))",
+        "commutator(X,add(Y,multiply(X,X))) -> commutator(X,Y)",
+    ])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+
+    # 1. Nothing in the bank matches: the search never produced it, which is the
+    # only one of the three that means stop looking here.
+    r = bank.page(contains="frobnicate(", sketch=Sketch({}))
+    assert r["n_matching"] == 0 and "has not produced it" in r["why_empty"]
+    assert "already_in_your_sketch" not in r
+
+    # 2. It IS in the bank and the sketch already states it.
+    mine = Sketch({"push": ("associator(X,multiply(X,Y),Z)",
+                            "associator(X,Y,multiply(X,Z))", [])})
+    r = bank.page(contains="associator(X,multiply(X,Y),Z)", sketch=mine)
+    assert r["n_matching"] == 0, "correctly hidden -- it is already a node"
+    assert "ALREADY STATES" in r["why_empty"]
+    assert r["already_in_your_sketch"][0]["node"] == "push"
+
+    # 3. Present and visible, but this query's own filter excluded it.
+    r = bank.page(facet="proof_lemma", contains="commutator(X,add(",
+                  sketch=Sketch({}))
+    assert r["n_matching"] == 0 and "excluded by this query's filters" in r["why_empty"]
+    assert r["excluded_by_filters"]
+
+    # 4. A normal hit carries no explanation at all.
+    r = bank.page(contains="associator", sketch=Sketch({}))
+    assert r["n_matching"] == 1 and "why_empty" not in r
