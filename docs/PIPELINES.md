@@ -102,6 +102,54 @@ Derived from `agent/dag.py` and the run directory, not free text:
   that succeeded. This is the diagnostic that caught `left_moufang_a`, and it is
   not yet built.
 
+### The evidence bank
+
+The loop showed the planner **eight** equations per failing node per turn.
+Measured on `logs/loop/RNG029-5-derive-01` iteration 0, the `bridge` node -- the
+most expensive search of the iteration and the one aimed at the conjecture:
+
+| | |
+|---|---|
+| rules derived, no-flatten / flatten | 2,618 / 3,711 |
+| usable after filtering | 1,099 / 1,043 |
+| shown to the model | **8** |
+| associator↔product rules present | **459**, first at rank 62 |
+| derived rules across both 10-iteration runs | **166,705** |
+
+Five of the eight hold in *any* ring; the other three were already nodes. Three
+causes, all removed: mining stopped at the first artifact with output, so one
+goal direction was never read; the list was cut to 12 and then to 8; and the
+order was twee's own score, which ranks a rule by how cheap it is to keep and so
+opens with the smallest and most trivial in the run.
+
+`agent/evidence.py` keeps every usable equation instead, deduplicated by
+`eq_key`, mined once per artifact, and **carried across a redraft** -- changing
+approach used to discard every candidate found so far. It does not rank. It
+groups:
+
+- **`definition_bridge`** -- a defined operator tied to real product structure.
+  The family that was invisible.
+- **`proof_lemma`** -- steps a proof needed, goal-cited first. On RNG027-5 a
+  donor proof ran 234 lemmas deep, its goal cited four, and those four flipped
+  ten problems while all 234 as hints flipped none.
+- **`theory_content`** -- needs this problem's axioms. Its complement is
+  labelled `universal`: true in any ring. Not the same as useless -- the 18x
+  node here was a universal rearrangement -- but a candidate list that is all
+  universal is not about this problem.
+
+Two facets were tried and cut on measurement, both being the original mistake in
+a new costume: `recurring` (an equation many nodes derive) tops out at
+`commutator(X,X) = 0` and the additive group laws, so ubiquity is
+anti-correlated with usefulness; and `residual_shape` (expansion overlapping the
+goal's) matched 0 of 1,927, the residual being degree 4 and the rules not.
+
+The planner reads counts and a few representatives each turn, pages the rest
+with `inspect_evidence` -- answered mid-turn from a file, so it costs a request
+and **not an iteration** -- and turns one into a node with
+`promote_evidence(id=...)`, which copies the statement rather than retyping it.
+An `add_node` whose stated reason claims the prover derived it, when no run did,
+is rejected.
+
 ### Grounded and conditional
 
 Every claim is verified, whether or not its parents have proved. A node whose

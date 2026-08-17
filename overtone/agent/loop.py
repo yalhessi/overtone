@@ -28,14 +28,15 @@ from pathlib import Path
 from typing import Protocol
 
 from overtone import batch, problems
-from overtone.agent import blueprint, pricing, review as reviewlib
+from overtone.agent import (blueprint, evidence as evidencelib, pricing,
+                            review as reviewlib)
 from overtone.agent.dag import (DIRECTIONS, Sketch, attempt, channel_for, cost,
                                 diff, frontier_depth, grounding, mined_parents,
                                 sibling_diff, unproved_ancestors, verify)
 from overtone.agent.pipeline import Budget
 
 ACTIONS = ("add_node", "remove_node", "set_parents", "subdivide", "restate",
-           "attempt", "redraft")
+           "attempt", "redraft", "promote_evidence")
 
 # Iterations an approach gets before the loop says it has had its turn. Not a
 # hard stop -- the agent still chooses -- but without it a run can spend every
@@ -93,6 +94,12 @@ class State:
     cpu_spent: float
     nodes: tuple = ()
     candidates: dict = field(default_factory=dict)
+    # Facet counts and a few representatives from `agent/evidence.py`, over
+    # everything twee has derived in this run so far. `candidates` is the same
+    # material narrowed to one node; this is the whole seam, and the COUNTS are
+    # half its value -- "459 definition bridges" says the search produced a
+    # family the sketch does not name, which no list of eight could convey.
+    evidence: dict = field(default_factory=dict)
     diffs: dict = field(default_factory=dict)
     sources: tuple = ()          # retrieved references, for offline replay
     # {node: {lhs, rhs, both, rules}} for each failing node -- how much of its
@@ -302,7 +309,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
              slow=30, sources=(), history=(), findings=(), stalled=0,
              approach="", approaches_tried=(), iterations_on_approach=0,
              attempts=(), prev_target=None, outcome=None, spent=None,
-             proxy=None, frontier=None):
+             proxy=None, frontier=None, bank=None):
     """Classify every node, and explain the ones that need explaining.
 
     Builds on `blueprint.statuses`, which already computes
@@ -347,7 +354,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
                                unused_support=tuple(unused), failure=failure))
         if status == "slow" or status.startswith("failed"):
             candidates[name] = _candidates(name, sketch, results,
-                                           proved=status == "slow")
+                                           proved=status == "slow", bank=bank)
             d = sibling_diff(sketch, results, name)
             if d:
                 diffs[name] = d
@@ -359,7 +366,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
     # count. Everything it built was thrown away. These are the equations a run
     # aimed at the actual goal produced, which is the listing the single most
     # valuable node in this project was read off.
-    from_target = _candidates("final", sketch, attempts, proved=False)
+    from_target = _candidates("final", sketch, attempts, proved=False, bank=bank)
     if from_target:
         candidates["(the target attempt)"] = from_target
     # `spent` is the run's cumulative charged cost. Computed here it would be
@@ -370,6 +377,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
     return State(problem=problem, iteration=iteration,
                  cpu_spent=c["cpu"] if spent is None else spent,
                  nodes=tuple(nodes), candidates=candidates, diffs=diffs,
+                 evidence=(bank.summary(sketch) if bank is not None else {}),
                  contact=contact,
                  target=target_of(attempts, prev_target, proxy,
                                   frontier=frontier),
@@ -649,18 +657,32 @@ def _contact(name, rows):
     return best
 
 
-def _candidates(name, sketch, rows, *, proved, limit=12):
-    """Equations this node's own run derived that the sketch does not name.
+def _candidates(name, sketch, rows, *, proved, limit=12, bank=None):
+    """Equations this node's own runs derived that the sketch does not name.
 
-    For a slow success the proof's unnamed lemmas; for a failure the derived
-    rules, since a timed-out run emits no `Lemma` lines at all. `assoc_def_add`
-    -- worth 18x on `assoc_add_1` -- was read off exactly this listing by hand.
+    `assoc_def_add` -- worth 18x on `assoc_add_1` -- was read off exactly this
+    listing by hand. Since then the listing had three faults that between them
+    hid almost all of it, measured on the `bridge` node of derive-01 iteration 0
+    (2,618 and 3,711 derived rules, 1,099 and 1,043 usable, EIGHT shown):
 
-    Addressed through `row["output"]` for the same reason as `_contact`: a
-    directory glob picks up other runs' artifacts when an `iterNN` directory is
-    reused, and misses the ones a row points at elsewhere -- `_prior_artifact`
-    hands on a ledger-recorded path from whichever run first produced it.
+      * it stopped at the first artifact with any output, so one of the node's
+        two goal directions was never read;
+      * it truncated to 12 and then to 8 at render time;
+      * it ordered by twee's score, which ranks a rule by how cheap it is to
+        keep and therefore opens with the smallest, most trivial rules in the
+        run. Five of the eight shown hold in ANY ring.
+
+    With a `bank` this reads `agent/evidence.py` instead: every artifact, both
+    directions, deduplicated by `eq_key`, ordered shortest-first because a
+    shorter identity is the more general one. Without one it falls back to the
+    old path, which keeps every other caller and the scripted tests working.
     """
+    if bank is not None:
+        from overtone.agent.evidence import _order
+        mine = [e for e in bank.visible(sketch) if name in e.nodes]
+        mine.sort(key=_order(None))
+        return [e.text() for e in mine[:limit]]
+
     from overtone import proofs
     out = []
     for row in rows:
@@ -804,7 +826,7 @@ def _probe_of(actions):
     return {}, ""
 
 
-def apply(sketch: Sketch, action: dict, *, annot=None) -> Sketch:
+def apply(sketch: Sketch, action: dict, *, annot=None, bank=None) -> Sketch:
     """Apply one edit, returning a new Sketch. Pure; raises on anything invalid."""
     op = action.get("op")
     if op not in ACTIONS:
@@ -812,7 +834,39 @@ def apply(sketch: Sketch, action: dict, *, annot=None) -> Sketch:
     nodes = dict(sketch.nodes)
     annot = annot or {}
 
-    if op == "add_node":
+    if op == "promote_evidence":
+        # A node whose statement is COPIED from the evidence bank, never
+        # retyped. The same guard `restate(from_problem=...)` applies to a TPTP
+        # conjecture, for the same reason: an equation the model transcribes is
+        # an equation the model can silently alter, and a mined rule is exactly
+        # the kind of long term that invites it. Both archived runs contain
+        # nodes presented as mined that no artifact contains.
+        eid = action.get("id")
+        if bank is None:
+            raise ValueError("promote_evidence needs the run's evidence bank; "
+                             "this loop was not given one")
+        ev = bank.get(eid)
+        if ev is None:
+            raise ValueError(
+                f"no evidence with id {eid!r}. Ids come from `evidence_bank` in "
+                f"your state; a statement you wrote yourself is an `add_node`, "
+                f"and calling it mined evidence when it is not is the thing "
+                f"this rejects.")
+        name = action["name"]
+        if name in nodes:
+            raise ValueError(f"{name} already exists; use restate or set_parents")
+        parents = action.get("parents")
+        if parents is None:
+            # The grounded support of the run that produced it: that search had
+            # these lemmas and derived this rule, so they are the honest default.
+            seen = []
+            for s in ev.sources:
+                for p in s.get("support") or ():
+                    if p in nodes and p not in seen:
+                        seen.append(p)
+            parents = seen
+        nodes[name] = (ev.lhs, ev.rhs, list(parents))
+    elif op == "add_node":
         name = action["name"]
         if name in nodes:
             raise ValueError(f"{name} already exists; use restate or set_parents")
@@ -1012,6 +1066,11 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     traj = open(outdir / "trajectory.jsonl", "a", buffering=1)
+    # Everything twee derives, kept for the whole run. Deliberately outside the
+    # iteration loop and outside the sketch: a `redraft` replaces the
+    # decomposition wholesale and used to throw away every candidate found so
+    # far, which is the opposite of what changing approach needs.
+    bank = evidencelib.load(outdir)
     spent, spent_new, proved, history = 0.0, 0.0, False, []
     stalled, approach, tried, best_proved, approach_started = 0, "", [], -1, 0
     # Carried across iterations so an edit can be judged against what preceded
@@ -1204,6 +1263,15 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             spent, spent_new = spent + c["cpu"], spent_new + c["cpu_new"]
             proved = any(r["proved"] for r in a)
 
+            # Mine before building the state, so this iteration's own searches
+            # are in it -- including the target attempt, which is the longest
+            # search of the turn, aimed straight at the conjecture, and whose
+            # derived rules were previously read for a contact count and then
+            # thrown away.
+            found = bank.update(v["results"] + list(a), iteration=i)
+            print(f"  evidence: +{found} new equation(s), {len(bank)} in the "
+                  f"bank", flush=True)
+
             state = state_of(problem, sketch, v["results"],
                              outdir / f"iter{i:02d}", iteration=i,
                              slow=budget.slow, history=history,
@@ -1214,7 +1282,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                              sources=sources,
                              proxy=proxy_contact(sketch, goal, v["results"], v),
                              frontier=frontier_depth(sketch, goal,
-                                                     v["grounded"]))
+                                                     v["grounded"]),
+                             bank=bank)
 
             # Progress is the probe the agent declared coming true, not a node
             # newly proved. Proving nodes was the only thing this loop counted,
@@ -1311,13 +1380,20 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                                  proxy=proxy_contact(sketch, goal,
                                                      prev_results, v),
                                  frontier=frontier_depth(sketch, goal,
-                                                         restored_ground))
+                                                         restored_ground),
+                                 bank=bank)
                 state = replace(state, outcome=outcome, stalled=stalled)
 
+            # Re-attached every turn: the bank is the same object but the sketch
+            # is not, and `visible` hides what the CURRENT sketch already
+            # states. A stale sketch here would offer the model a node it just
+            # added as though it were a fresh candidate.
+            if hasattr(agent, "attach_bank"):
+                agent.attach_bank(bank, sketch)
             proposed = [] if proved else list(agent.act(state))
             probe, hypothesis = _probe_of(proposed)
             actions, findings = reviewlib.review(
-                proposed, reviewlib.context_for(problem, sketch))
+                proposed, reviewlib.context_for(problem, sketch, bank=bank))
             _report(findings)
             rec = {"iter": i, "digest": digest, "proved": proved,
                    "cpu_spent": round(spent, 1), "cpu_new": round(spent_new, 1),
@@ -1438,7 +1514,7 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             before, applied, rejected = sketch, [], 0
             for act in actions:
                 try:
-                    sketch = apply(sketch, act, annot=annot)
+                    sketch = apply(sketch, act, annot=annot, bank=bank)
                     applied.append(act)
                 except (ValueError, KeyError) as e:
                     # One malformed edit must not end a run that has already

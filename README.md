@@ -72,6 +72,7 @@ overtone/             this project's python package
                       (a library once, a marginal cost per target)
     loop.py           draft -> verify -> diagnose -> revise; typed state, a
                       closed action set, ScriptedAgent
+    evidence.py       every equation twee derived, deduplicated and grouped
     llm.py            Anthropic and OpenAI behind one action schema, stdlib-only
     blueprint.py      SVG / DOT / interactive page with a trajectory scrubber
     donors.py hints.py sketch.py    donor selection, the $hint channel, v0

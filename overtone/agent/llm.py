@@ -22,7 +22,7 @@ import urllib.request
 from pathlib import Path
 
 from overtone import config
-from overtone.agent import pricing
+from overtone.agent import evidence as evidencelib, pricing
 from overtone.agent.loop import ACTIONS, State
 
 ENDPOINTS = {
@@ -102,9 +102,31 @@ Everything below was measured on this project. Follow it over your own priors.
    proved, that is the bug: mirrored statements need mirrored parents. One such
    substitution was a 300s timeout against 1.0s.
 
-6. MINE THE NODE'S OWN RUN. The candidates you are given are equations twee
-   derived but the sketch does not name. The single most valuable node added in
-   this project was read off exactly that listing.
+6. MINE THE RUNS. `evidence_bank` is every equation twee has derived so far in
+   this run, grouped, deduplicated, and kept across redrafts. The single most
+   valuable node in this project was read off exactly such a listing by hand.
+
+   READ THE COUNTS, not just the examples. A family with 459 members is a seam
+   the search opened that your sketch does not name; three examples cannot show
+   you that, and the count can.
+
+   * `definition_bridge` -- a defined operator tied to real product structure.
+     This is the family that matters and the one a score-ordered listing buries:
+     on the run this was measured on, 459 of them existed and the model was
+     shown none.
+   * `proof_lemma` -- steps a proof actually needed, goal-cited ones first.
+     Recorded dependencies, not guesses.
+   * `theory_content` -- needs THIS problem's axioms. Its complement is marked
+     `universal`: true in any ring, so it cannot encode the theory. That is not
+     the same as useless -- the 18x node here was a universal rearrangement --
+     but if every candidate you are looking at is universal, you are not looking
+     at the mathematics of this problem. Five of the eight equations the old
+     listing showed were universal and the other three were already nodes.
+
+   PROMOTE, DO NOT RETYPE. `promote_evidence(id=..., name=...)` copies the
+   statement exactly. Writing it out yourself invites a silent alteration in a
+   long term, and describing an equation you wrote as "mined" when no run
+   produced it is rejected.
 
 7. NEVER AUTHOR A STATEMENT FOR A NODE THAT IS A TPTP PROBLEM. Use
    restate(from_problem=...) so it is copied. A node here once drifted from a
@@ -359,6 +381,21 @@ _SCHEMA = {
                  "from_problem": "string"}, ["name"],
                 "Change a node's statement. If the node is a TPTP problem you "
                 "must pass from_problem so the statement is copied, not written."),
+    "promote_evidence": ({"id": {"type": "string",
+                                 "description": "an id from `evidence_bank`"},
+                          "name": "string",
+                          "parents": {"type": "array",
+                                      "items": {"type": "string"},
+                                      "description": "node names; omit to use "
+                                                     "the support of the run "
+                                                     "that derived it"}},
+                         ["id", "name"],
+                         "Turn an equation twee actually derived into a node. "
+                         "The statement is COPIED from the bank by id -- you do "
+                         "not write it, so it cannot drift. Use this rather "
+                         "than add_node whenever the equation came from a run; "
+                         "an id that does not resolve is rejected, so do not "
+                         "invent one for a statement you wrote yourself."),
 }
 
 
@@ -374,9 +411,52 @@ def draft_schema(provider):
                           "parameters": _DRAFT_SCHEMA}}]
 
 
-def tool_schemas(provider):
+# A read-only lookup, deliberately NOT in `loop.ACTIONS`. It edits nothing, so
+# it is answered mid-turn from a file the run already wrote and the model gets
+# to ask again -- it must not cost an iteration, because the whole point is that
+# a planner facing 459 candidates can look through them before deciding. An
+# action that spent a turn to read would be worse than the truncated list it
+# replaces.
+_INSPECT = {
+    "type": "object",
+    "required": [],
+    "properties": {
+        "facet": {"type": "string",
+                  "enum": list(evidencelib.FACETS),
+                  "description": "which family to page through; omit for all"},
+        "contains": {"type": "string",
+                     "description": "substring filter on the equation text, "
+                                    "e.g. 'associator(X, multiply'"},
+        "universal": {"type": "boolean",
+                      "description": "true for ring identities only, false for "
+                                     "equations needing this problem's axioms"},
+        "page": {"type": "integer", "description": "0-based"},
+    },
+}
+INSPECT_TOOL = "inspect_evidence"
+INSPECT_DESC = ("Page through the evidence bank -- every equation twee has "
+                "derived in this run. FREE: it reads a file, runs no prover, "
+                "and does not use up your turn, so look before you edit. "
+                "Returns ids for `promote_evidence`.")
+# How many lookups one turn may make before it must commit to edits. Enough to
+# page a family and cross-check another; not enough to loop forever on a model
+# that keeps asking.
+MAX_LOOKUPS = 4
+
+
+def inspect_schema(provider):
+    """The lookup tool in one provider's format."""
+    if provider == "anthropic":
+        return {"name": INSPECT_TOOL, "description": INSPECT_DESC,
+                "input_schema": _INSPECT}
+    return {"type": "function",
+            "function": {"name": INSPECT_TOOL, "description": INSPECT_DESC,
+                         "parameters": _INSPECT}}
+
+
+def tool_schemas(provider, *, inspect=False):
     """The action set in one provider's tool format."""
-    out = []
+    out = [inspect_schema(provider)] if inspect else []
     for name, (props, required, desc) in _SCHEMA.items():
         # A property is either a bare type name or a full JSON Schema fragment,
         # so a structured field can describe its items instead of being an
@@ -432,6 +512,11 @@ def render_state(state: State, *, max_candidates=8):
         "derived_from": list(state.sources),
         "candidates_from_their_own_runs": {
             k: v[:max_candidates] for k, v in state.candidates.items()},
+        # Everything twee has derived in this run, grouped. The COUNTS carry as
+        # much as the examples: "459 definition_bridge" says the search produced
+        # a whole family the sketch does not name. `promote_evidence(id=...)`
+        # copies one verbatim -- do not retype a statement from here.
+        "evidence_bank": state.evidence,
         "same_shape_siblings_that_proved": state.diffs,
         # Judge an edit by `both`, not by rules or either side alone. On
         # RNG033-8 a refinement raised the rule count and both sides while
@@ -489,6 +574,14 @@ class LLMAgent:
         self.transcript_dir = Path(transcript_dir) if transcript_dir else None
         self.transcript = []
         self.usage = pricing.Usage()
+        # Set by `run_loop` when there is one. Without it the lookup tool is not
+        # offered at all, rather than offered and answered with an error.
+        self.bank = None
+        self.sketch = None
+
+    def attach_bank(self, bank, sketch=None):
+        """Give the agent the run's evidence bank, so it can page it mid-turn."""
+        self.bank, self.sketch = bank, sketch
 
     def draft(self, problem, axioms, conjecture, goal_name="goal"):
         """Propose an initial sketch from the problem statement alone.
@@ -525,13 +618,36 @@ class LLMAgent:
 
     def act(self, state: State):
         prompt = render_state(state)
-        return self._call(SYSTEM, prompt, step=f"iter{state.iteration:02d}")
+        return self._call(SYSTEM, prompt, step=f"iter{state.iteration:02d}",
+                          inspect=self.bank is not None)
 
-    def _call(self, system, prompt, *, step, tools=None, force=None):
+    def _answer_lookups(self, calls):
+        """Run `inspect_evidence` calls against the bank. -> [(id, result json)].
+
+        Never raises into the turn. A malformed facet or a paging error must not
+        end an iteration that has already cost prover-seconds; the model is told
+        what went wrong and asked again, which is the same contract `apply` has
+        for a bad edit.
+        """
+        out = []
+        for cid, args in calls:
+            try:
+                res = self.bank.page(
+                    facet=args.get("facet"), contains=args.get("contains"),
+                    universal=args.get("universal"), sketch=self.sketch,
+                    page=int(args.get("page") or 0))
+            except (ValueError, TypeError) as e:
+                res = {"error": str(e)}
+            out.append((cid, json.dumps(res)))
+        print(f"    evidence lookup: {len(out)} query(ies)", flush=True)
+        return out
+
+    def _call(self, system, prompt, *, step, tools=None, force=None,
+              inspect=False):
         if self.provider == "anthropic":
             body = {"model": self.model, "max_tokens": self.max_tokens,
                     "temperature": self.temperature, "system": system,
-                    "tools": tools or tool_schemas("anthropic"),
+                    "tools": tools or tool_schemas("anthropic", inspect=inspect),
                     "messages": [{"role": "user", "content": prompt}]}
             if force:
                 body["tool_choice"] = {"type": "tool", "name": force}
@@ -543,7 +659,7 @@ class LLMAgent:
             # is at the mercy of the model's default.
             body = {"model": self.model, "temperature": self.temperature,
                     "max_completion_tokens": self.max_tokens,
-                    "tools": tools or tool_schemas("openai"),
+                    "tools": tools or tool_schemas("openai", inspect=inspect),
                     "messages": [{"role": "system", "content": system},
                                  {"role": "user", "content": prompt}]}
             if force:
@@ -552,6 +668,19 @@ class LLMAgent:
             headers = {"authorization": f"Bearer {self.api_key}"}
 
         resp = _post(ENDPOINTS[self.provider], headers, body)
+        # Read-only lookups are answered here and the model asked again, so
+        # paging the evidence bank costs a request and not an ITERATION. An
+        # action that had to spend a turn to read would be worse than the
+        # truncated listing it replaces.
+        for _ in range(MAX_LOOKUPS if inspect else 0):
+            calls = self._lookup_calls(resp)
+            if not calls:
+                break
+            self.usage.add(self.model, f"{step}.lookup",
+                           resp.get("usage") or {})
+            body["messages"] = (list(body["messages"])
+                                + self._continue(resp, self._answer_lookups(calls)))
+            resp = _post(ENDPOINTS[self.provider], headers, body)
         actions = self._parse(resp)
         row = self.usage.add(self.model, step, resp.get("usage") or {})
         money = f"${row['cost']:.4f}" if row["cost"] is not None else "cost n/a"
@@ -566,6 +695,57 @@ class LLMAgent:
             (self.transcript_dir / f"llm.{step}.json").write_text(
                 json.dumps(self.transcript[-1], indent=2) + "\n")
         return actions
+
+    def _lookup_calls(self, resp):
+        """`[(call_id, args)]` for every `inspect_evidence` in this response."""
+        out = []
+        if self.provider == "anthropic":
+            for block in resp.get("content", []):
+                if (block.get("type") == "tool_use"
+                        and block.get("name") == INSPECT_TOOL):
+                    out.append((block.get("id"), block.get("input") or {}))
+        else:
+            for choice in resp.get("choices", []):
+                for call in (choice.get("message") or {}).get("tool_calls") or []:
+                    fn = call.get("function") or {}
+                    if fn.get("name") != INSPECT_TOOL:
+                        continue
+                    try:
+                        out.append((call.get("id"),
+                                    json.loads(fn.get("arguments") or "{}")))
+                    except json.JSONDecodeError:
+                        out.append((call.get("id"), {}))
+        return out
+
+    def _continue(self, resp, answers):
+        """The assistant turn plus the tool results, in this provider's shape.
+
+        Every tool call in the response must be answered, not just the lookups:
+        both APIs reject a continuation that leaves one dangling. So an edit the
+        model proposed alongside a lookup is acknowledged here and re-proposed
+        in its final answer, rather than silently ending the exchange.
+        """
+        if self.provider == "anthropic":
+            done = dict(answers)
+            results = []
+            for block in resp.get("content", []):
+                if block.get("type") != "tool_use":
+                    continue
+                results.append({
+                    "type": "tool_result", "tool_use_id": block.get("id"),
+                    "content": done.get(
+                        block.get("id"),
+                        '{"noted": "seen; re-propose it with your final answer"}')})
+            return [{"role": "assistant", "content": resp.get("content", [])},
+                    {"role": "user", "content": results}]
+        msg = (resp.get("choices") or [{}])[0].get("message") or {}
+        done = dict(answers)
+        results = [{"role": "tool", "tool_call_id": c.get("id"),
+                    "content": done.get(
+                        c.get("id"),
+                        '{"noted": "seen; re-propose it with your final answer"}')}
+                   for c in (msg.get("tool_calls") or [])]
+        return [msg, *results]
 
     def _parse(self, resp):
         """Tool calls -> actions. Unknown names are dropped here with a note; a
@@ -589,6 +769,11 @@ class LLMAgent:
             return [a for a in out if a.get("op") == "draft_sketch"]
         keep = [a for a in out if a.get("op") in ACTIONS]
         for a in out:
+            if a.get("op") == INSPECT_TOOL:
+                # Answered mid-turn and already shown to the model. Reaching
+                # here means it asked once more than `MAX_LOOKUPS` allows, which
+                # is not an edit and not an error worth a warning line.
+                continue
             if a.get("op") not in ACTIONS:
                 print(f"  dropping unknown action {a.get('op')!r}", flush=True)
         return keep

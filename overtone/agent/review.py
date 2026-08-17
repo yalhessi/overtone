@@ -62,6 +62,7 @@ class Context:
     arities: dict = field(default_factory=dict)       # symbol -> arity it has there
     node_names_by_key: dict = field(default_factory=dict)  # eq_key -> node name
     parents_of: dict = field(default_factory=dict)    # node name -> its parents
+    evidence_keys: frozenset = frozenset()   # eq_key of every mined equation
 
 
 def _eq(action):
@@ -206,8 +207,50 @@ def within_the_signature(action, ctx):
 
 # `well_formed` runs first: every other reviewer compares `eq_key`s, and an
 # unparseable side makes that comparison meaningless rather than false.
+# Words a model uses when it is claiming the prover produced the equation.
+# Matched on the declared `hypothesis`, which is the field that says WHY the
+# edit is being made and is recorded in the trajectory as the reason.
+_PROVENANCE = ("mined", "derived rule", "derived by twee", "from the run",
+               "read off", "twee derived", "candidates_from", "evidence_bank",
+               "the search derived", "appears in the search")
+
+
+def claims_evidence_it_does_not_have(action, ctx):
+    """An edit that says the prover derived this must be an equation it derived.
+
+    `promote_evidence` copies a statement from the bank by id and so cannot
+    misquote one. The hole is `add_node`: a model can type an equation, describe
+    it as mined, and be believed -- both archived runs contain nodes presented
+    that way whose statements appear in no artifact. That is worse than an
+    ordinary wrong guess, because the provenance is exactly what a reader (and
+    the next turn's model) would use to trust it without checking.
+
+    Refutation only, in the spirit of this module: it fires solely when the
+    action CLAIMS derivation and the bank -- which holds every equation every
+    run of this loop produced -- does not have that statement under `eq_key`. A
+    node offered as a guess is untouched, and so is every edit when no bank was
+    supplied.
+    """
+    if action.get("op") != "add_node" or not ctx.evidence_keys:
+        return []
+    why = str(action.get("hypothesis") or "").lower()
+    if not any(w in why for w in _PROVENANCE):
+        return []
+    key = _eq(action)
+    if key is None or key in ctx.evidence_keys:
+        return []
+    return [Finding("provenance", action.get("name", "?"), REJECT,
+                    "this is offered as an equation the prover derived, but no "
+                    "run in this loop produced it -- the evidence bank holds "
+                    f"{len(ctx.evidence_keys)} equations and this is not one. "
+                    "Promote a real one with `promote_evidence(id=...)`, or "
+                    "propose this as your own conjecture without claiming it "
+                    "was mined.")]
+
+
 REVIEWERS = [well_formed, restates_an_axiom, duplicates_a_node,
-             restates_the_goal, within_the_signature, size]
+             restates_the_goal, within_the_signature, size,
+             claims_evidence_it_does_not_have]
 
 
 def register(fn):
@@ -554,7 +597,7 @@ def _repair_refs(action, known, existing, alias=None):
     return out, findings
 
 
-def context_for(problem, sketch, goal=None):
+def context_for(problem, sketch, goal=None, bank=None):
     """Build a Context from the problem and the sketch as it currently stands."""
     from overtone import problems
 
@@ -578,8 +621,11 @@ def context_for(problem, sketch, goal=None):
     counts = {}
     for n, a in sig:
         counts.setdefault(n, set()).add(a)
+    mined = frozenset(eq_key(e.lhs, e.rhs) for e in bank.all()) if bank else \
+        frozenset()
     ctx = Context(problem=problem, axioms=axioms, goal=goal, sketch_keys=keys,
                   node_names=frozenset(sketch.nodes), axiom_names=axiom_names,
+                  evidence_keys=mined,
                   symbols=frozenset(n for n, _ in sig), node_names_by_key=by_key,
                   parents_of={n: list(p) for n, (_, _, p) in sketch.nodes.items()},
                   arities={n: next(iter(a)) for n, a in counts.items()

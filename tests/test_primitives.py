@@ -3786,3 +3786,365 @@ def test_a_conditional_proof_is_not_progress_and_is_not_supplied(tmp_path,
     assert node.status == "conditional" and node.assumes == ("dead",)
     assert any(f.node == "shaky" and "not yet a theorem" in f.reason
                for f in agent.seen.findings)
+
+
+# --------------------------------------------------------------- evidence bank
+
+def _artifact(tmp, name, rules, *, proof=()):
+    """A stand-in twee output: a search trace, then optionally a proof."""
+    lines = [f"({1.0 + i / 10:.1f}) {i + 1}. {r}" for i, r in enumerate(rules)]
+    if proof:
+        lines.append("Here is a proof.")
+        lines += [f"Lemma {i + 1}: {a} = {b}." for i, (a, b) in enumerate(proof)]
+        lines.append("Goal 1 (g): a = b.")
+        lines.append("= { by lemma 1 }")
+    lines.append("RESULT: Unsatisfiable")
+    p = tmp / name
+    p.write_text("\n".join(lines) + "\n")
+    return p
+
+
+def _row_for(path, node, direction="--flatten-goal", support=()):
+    return {"node": node, "direction": direction, "output": str(path),
+            "proved": False, "result": "Timeout", "cpu": 60.0,
+            "channel": "axioms", "support": list(support)}
+
+
+def test_the_bank_mines_both_directions_instead_of_stopping_at_the_first(tmp_path):
+    """`_candidates` had `if out: break`, so a node's second goal direction was
+    never read. On the measured artifact that was 1,043 usable equations thrown
+    away, from the search aimed straight at the conjecture."""
+    from overtone.agent import evidence
+
+    a = _artifact(tmp_path, "n.flatten.out",
+                  ["associator(X,Y,multiply(X,X)) -> associator(Y,X,multiply(X,X))"])
+    b = _artifact(tmp_path, "n.noflatten.out",
+                  ["multiply(X,commutator(X,Y)) -> commutator(X,multiply(X,Y))"])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(a, "n", "--flatten-goal"),
+                 _row_for(b, "n", "--no-flatten-goal")])
+
+    texts = {e.text() for e in bank.all()}
+    assert len(texts) == 2, texts
+    assert {s["direction"] for e in bank.all() for s in e.sources} == \
+        {"--flatten-goal", "--no-flatten-goal"}
+
+
+def test_the_bank_collapses_orientation_and_renaming(tmp_path):
+    """Deduplicated by `eq_key`, like every other comparison here: `a = b` and
+    `b = a` under renamed variables are one fact with two sources, and two
+    sources is not two candidates to read."""
+    from overtone.agent import evidence
+
+    a = _artifact(tmp_path, "one.out", ["multiply(X,Y) -> multiply(Y,X)"])
+    b = _artifact(tmp_path, "two.out", ["multiply(B,A) -> multiply(A,B)"])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(a, "p"), _row_for(b, "q")])
+
+    assert len(bank) == 1, [e.text() for e in bank.all()]
+    ev = bank.all()[0]
+    assert ev.nodes == {"p", "q"} and len(ev.artifacts) == 2
+
+
+def test_the_bank_drops_run_local_names_forever_but_sketch_matches_only_on_read(
+        tmp_path):
+    """Two filters with different lifetimes. A rule naming a constant twee
+    minted for this run can never be a lemma anywhere, so it is never stored. A
+    rule the sketch already states is uninteresting only while that node exists
+    -- remove it and the equation is worth having again, which a bank that had
+    dropped it could not say."""
+    from overtone.agent import evidence
+
+    art = _artifact(tmp_path, "n.out", [
+        "add(multiply3,multiply4) -> sk_dag_1",           # run-local: gone
+        "multiply(X,Y) -> multiply(Y,X)",                 # already a node
+        "commutator(X,add(Y,multiply(X,X))) -> commutator(X,Y)",
+    ])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+    assert len(bank) == 2, [e.text() for e in bank.all()]
+
+    have = Sketch({"c": ("multiply(X,Y)", "multiply(Y,X)", [])})
+    assert len(bank.visible(have)) == 1
+    assert len(bank.visible(Sketch({}))) == 2, \
+        "removing the node makes its equation a candidate again"
+
+
+def test_universal_equations_are_labelled_not_hidden(tmp_path):
+    """Five of the eight equations the old listing showed hold in ANY ring, so
+    they say nothing about this problem. But universal is not useless: the most
+    valuable node this project added (18x) was a definitional rearrangement,
+    which is universal. Hence a label and not a filter."""
+    from overtone.agent import evidence
+
+    assert evidence.is_universal("commutator(X,X)", "additive_identity") is True
+    assert evidence.is_universal("add(X,add(Y,additive_inverse(X)))", "Y") is True
+    # The alternative law is a real axiom of this theory, not a ring identity.
+    assert evidence.is_universal("associator(X,X,Y)", "additive_identity") is False
+
+    art = _artifact(tmp_path, "n.out", [
+        "commutator(X,X) -> additive_identity",
+        "associator(X,X,Y) -> additive_identity",
+    ])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+    fams = bank.families()
+    assert [e.text() for e in fams["theory_content"]] == \
+        ["associator(X,X,Y) = additive_identity"]
+    assert len(bank.all()) == 2, "the universal one is kept, just labelled"
+
+
+def test_a_mixed_listing_is_not_ordered_by_length(tmp_path):
+    """Shortest-first is right inside a facet and wrong across them: the
+    shortest equations in any run are the trivial ones, so a plain length sort
+    reproduces exactly the score-ordered listing this replaces. Measured on the
+    `bridge` node, it returned `commutator(X,X) = 0` first."""
+    from overtone.agent import evidence
+
+    art = _artifact(tmp_path, "n.out", [
+        "commutator(X,X) -> additive_identity",
+        "add(X,add(Y,Z)) -> add(Y,add(X,Z))",
+        "associator(X,Y,add(Z,multiply(X,Y))) -> associator(X,Y,Z)",
+    ])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+    first = sorted(bank.all(), key=evidence.relevance)[0]
+    assert "multiply" in first.text() and "associator" in first.text(), \
+        f"a definition bridge must outrank the short trivia, got {first.text()}"
+
+
+def test_the_bank_is_incremental_and_survives_a_redraft(tmp_path):
+    """Artifacts are 350-550 KB and there are thousands, so each is mined once
+    and the fact recorded. And the bank is keyed to the RUN, not the sketch: a
+    redraft replaces the decomposition wholesale and used to discard every
+    candidate found so far, which is the opposite of what changing approach
+    needs."""
+    from overtone.agent import evidence
+
+    art = _artifact(tmp_path, "n.out", ["multiply(X,Y) -> multiply(Y,X)"])
+    bank = evidence.load(tmp_path)
+    assert bank.update([_row_for(art, "n")]) == 1
+    assert bank.update([_row_for(art, "n")]) == 0, "an artifact is mined once"
+
+    reloaded = evidence.load(tmp_path)
+    assert len(reloaded) == 1 and str(art) in reloaded.mined
+    assert reloaded.update([_row_for(art, "n")]) == 0
+
+    # A redraft throws the sketch away; the bank is untouched by that.
+    from overtone.agent.loop import apply
+    before = Sketch({"a": ("multiply(X,X)", "add(X,X)", [])})
+    after = apply(before, {"op": "redraft", "approach": "new",
+                           "nodes": [{"name": "z", "lhs": "add(X,Y)",
+                                      "rhs": "add(Y,X)"}]})
+    assert "a" not in after.nodes
+    assert len(evidence.load(tmp_path)) == 1
+
+
+def test_promote_evidence_copies_the_statement_and_refuses_an_invented_id(tmp_path):
+    """The same guard `restate(from_problem=...)` applies to a TPTP conjecture.
+    An equation the model transcribes is one it can silently alter, and a mined
+    rule is exactly the long term that invites it."""
+    from overtone.agent import evidence
+    from overtone.agent.loop import apply
+
+    art = _artifact(tmp_path, "n.out",
+                    ["associator(X,multiply(X,Y),Z) -> associator(X,Y,multiply(X,Z))"])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n", support=("p",))])
+    ev = bank.all()[0]
+
+    s = Sketch({"p": ("multiply(X,X)", "add(X,X)", [])})
+    out = apply(s, {"op": "promote_evidence", "id": ev.id, "name": "bridge_1"},
+                bank=bank)
+    assert out.nodes["bridge_1"][:2] == (ev.lhs, ev.rhs), "copied, not retyped"
+    # Default parents are the support of the run that derived it.
+    assert out.nodes["bridge_1"][2] == ["p"]
+
+    with pytest.raises(ValueError, match="no evidence with id"):
+        apply(s, {"op": "promote_evidence", "id": "enope", "name": "x"},
+              bank=bank)
+    with pytest.raises(ValueError, match="evidence bank"):
+        apply(s, {"op": "promote_evidence", "id": ev.id, "name": "x"})
+
+
+def test_a_node_claimed_as_mined_must_actually_have_been_mined(tmp_path):
+    """`promote_evidence` copies by id and cannot misquote. The hole is
+    `add_node`: a model can type an equation, call it mined, and be believed.
+    Both archived runs contain nodes presented that way whose statements appear
+    in no artifact -- and provenance is exactly what a reader would trust
+    without checking."""
+    from overtone.agent import evidence, review
+
+    art = _artifact(tmp_path, "n.out", ["multiply(X,Y) -> multiply(Y,X)"])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+    s = Sketch({"g": ("add(X,Y)", "add(Y,X)", [])})
+    ctx = review.context_for("RNG029-5", s, bank=bank)
+
+    invented = {"op": "add_node", "name": "square_is_double",
+                "lhs": "multiply(X,X)", "rhs": "add(X,X)",
+                "hypothesis": "mined from the bridge's own run"}
+    kept, found = review.review([invented], ctx)
+    assert kept == [] and any(f.reviewer == "provenance" for f in found)
+
+    # The same statement offered as a guess is untouched -- refutation only.
+    guess = {**invented, "hypothesis": "worth testing: it would close the gap"}
+    kept, found = review.review([guess], ctx)
+    assert len(kept) == 1 and not [f for f in found if f.reviewer == "provenance"]
+
+    # And a claim that IS in the bank passes.
+    real = {"op": "add_node", "name": "comm", "lhs": "multiply(A,B)",
+            "rhs": "multiply(B,A)", "hypothesis": "twee derived this"}
+    kept, found = review.review([real], ctx)
+    assert not [f for f in found if f.reviewer == "provenance"]
+
+
+ARCHIVE = Path("logs/loop/RNG029-5-derive-01")
+
+
+@pytest.mark.skipif(not (ARCHIVE / "iter00/dag.json").exists(),
+                    reason="needs the archived run under logs/ (gitignored)")
+def test_the_bank_surfaces_what_the_archived_run_could_not_see(tmp_path):
+    """The regression this module exists for, on the artifacts that produced it.
+
+    derive-01 iteration 0: the `bridge` node's two searches derived 2,618 and
+    3,711 rules, of which 1,099 and 1,043 survive filtering. The planner was
+    shown eight, and five of those hold in any ring. The three rules below sat
+    at ranks 62, 209 and 210 of the score-ordered listing and never appeared.
+    """
+    from overtone.agent import evidence
+
+    d = json.loads((ARCHIVE / "iter00/dag.json").read_text())
+    sk = Sketch.from_json(json.loads((ARCHIVE / "sketch.00.json").read_text()))
+    bank = evidence.load(tmp_path)
+    bank.update(d["results"], iteration=0)
+
+    assert len(bank) > 1500, f"only {len(bank)} equations mined"
+    fams = bank.families(sk)
+    assert len(fams["definition_bridge"]) > 300, len(fams["definition_bridge"])
+
+    have = {e.text() for e in fams["definition_bridge"]}
+    for wanted in [
+            "associator(X, Y, multiply(X, X)) = associator(Y, X, multiply(X, X))",
+            "associator(X, multiply(X, Y), Z) = associator(X, Y, multiply(X, Z))",
+            "associator(X, multiply(Y, X), Z) = associator(X, Y, multiply(Z, X))"]:
+        assert wanted in have, wanted
+
+
+def test_paging_the_evidence_bank_costs_a_request_not_an_iteration(tmp_path,
+                                                                   monkeypatch):
+    """459 candidates cannot be shown and must not cost a turn to look at.
+
+    A read-only lookup is answered mid-exchange from a file the run already
+    wrote, and the model is asked again. An action that spent an iteration to
+    READ would be worse than the truncated listing it replaces -- the loop gets
+    six of them, and two runs spent all ten on one route.
+    """
+    from overtone.agent import evidence, llm
+
+    art = _artifact(tmp_path, "n.out", [
+        "associator(X,multiply(X,Y),Z) -> associator(X,Y,multiply(X,Z))",
+        "commutator(X,X) -> additive_identity",
+    ])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "bridge")])
+
+    for provider in ("anthropic", "openai"):
+        agent = llm.LLMAgent.__new__(llm.LLMAgent)
+        agent.provider, agent.model = provider, "m"
+        agent.max_tokens, agent.temperature, agent.api_key = 99, 0.0, "k"
+        agent.transcript, agent.transcript_dir = [], None
+        agent.usage = llm.pricing.Usage()
+        agent.attach_bank(bank)
+
+        seen = []
+
+        def fake_post(url, headers, body, _seen=seen, _p=provider):
+            _seen.append(body)
+            if len(_seen) == 1:              # first turn: ask to look
+                if _p == "anthropic":
+                    return {"content": [{"type": "tool_use", "id": "t1",
+                                         "name": "inspect_evidence",
+                                         "input": {"facet": "definition_bridge"}}],
+                            "usage": {}}
+                return {"choices": [{"message": {"tool_calls": [
+                    {"id": "t1", "function": {
+                        "name": "inspect_evidence",
+                        "arguments": '{"facet": "definition_bridge"}'}}]}}],
+                    "usage": {}}
+            if _p == "anthropic":            # second turn: commit to an edit
+                return {"content": [{"type": "tool_use", "id": "t2",
+                                     "name": "remove_node",
+                                     "input": {"name": "x"}}], "usage": {}}
+            return {"choices": [{"message": {"tool_calls": [
+                {"id": "t2", "function": {"name": "remove_node",
+                                          "arguments": '{"name": "x"}'}}]}}],
+                "usage": {}}
+
+        monkeypatch.setattr(llm, "_post", fake_post)
+        actions = agent._call("sys", "state", step="iter00", inspect=True)
+
+        assert len(seen) == 2, f"{provider}: the model was not asked again"
+        assert actions == [{"op": "remove_node", "name": "x"}], actions
+        # The lookup result reached the model, and it is the bridge -- not the
+        # shorter trivial rule a score order would have put first.
+        blob = json.dumps(seen[1]["messages"])
+        assert "inspect_evidence" not in [a.get("op") for a in actions]
+        assert "associator" in blob and "n_matching" in blob, \
+            f"{provider}: the tool result was not carried back"
+
+
+def test_a_lookup_alongside_an_edit_still_answers_every_tool_call(tmp_path,
+                                                                  monkeypatch):
+    """Both APIs reject a continuation that leaves a tool call unanswered, so a
+    model that proposes an edit and a lookup in one response must not wedge the
+    turn."""
+    from overtone.agent import evidence, llm
+
+    art = _artifact(tmp_path, "n.out", ["multiply(X,Y) -> multiply(Y,X)"])
+    bank = evidence.load(tmp_path)
+    bank.update([_row_for(art, "n")])
+
+    agent = llm.LLMAgent.__new__(llm.LLMAgent)
+    agent.provider, agent.model = "anthropic", "m"
+    agent.max_tokens, agent.temperature, agent.api_key = 99, 0.0, "k"
+    agent.transcript, agent.transcript_dir = [], None
+    agent.usage = llm.pricing.Usage()
+    agent.attach_bank(bank)
+
+    seen = []
+
+    def fake_post(url, headers, body):
+        seen.append(body)
+        if len(seen) == 1:
+            return {"content": [
+                {"type": "tool_use", "id": "a", "name": "inspect_evidence",
+                 "input": {}},
+                {"type": "tool_use", "id": "b", "name": "remove_node",
+                 "input": {"name": "x"}}], "usage": {}}
+        return {"content": [{"type": "tool_use", "id": "c",
+                             "name": "remove_node",
+                             "input": {"name": "x"}}], "usage": {}}
+
+    monkeypatch.setattr(llm, "_post", fake_post)
+    agent._call("sys", "state", step="iter00", inspect=True)
+
+    results = seen[1]["messages"][-1]["content"]
+    assert {r["tool_use_id"] for r in results} == {"a", "b"}, \
+        "every tool call in the response must be answered, lookup or not"
+
+
+def test_the_lookup_tool_is_absent_when_there_is_no_bank():
+    """Offered and broken is worse than not offered: a tool the model can call
+    and that always errors spends its attention on nothing."""
+    from overtone.agent import llm
+
+    def names(ts):
+        return {t.get("name") or t["function"]["name"] for t in ts}
+
+    assert "inspect_evidence" not in names(llm.tool_schemas("anthropic"))
+    assert "inspect_evidence" in names(llm.tool_schemas("anthropic", inspect=True))
+    assert "inspect_evidence" in names(llm.tool_schemas("openai", inspect=True))
+    # And it is not an EDIT: `loop.apply` must never be handed one.
+    from overtone.agent.loop import ACTIONS
+    assert "inspect_evidence" not in ACTIONS
