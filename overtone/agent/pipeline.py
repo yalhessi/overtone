@@ -48,7 +48,13 @@ class Budget:
     # out a bad decomposition: anything over `slow` is still reported as suspect,
     # so an oversized budget is visible rather than absorbed.
     final: int = 300
-    workers: int = 8
+    # Nodes in flight. `verify` keeps this many slots full across the whole DAG,
+    # and each one forks up to 2 twee processes to race the goal directions -- so
+    # 16 is up to 32 processes. That ceiling is not about throughput: `runner.run`
+    # enforces the budget on WALL CLOCK, so oversubscribing the box does not slow
+    # runs down, it silently shortens every budget in flight and makes a starved
+    # node look unprovable. Keep 2 x workers comfortably under the core count.
+    workers: int = 16
 
 
 def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
@@ -73,7 +79,13 @@ def run_problem(problem, sketch: Sketch, *, outdir: Path, budget=Budget(),
     v = verify(problem, sketch, outdir=outdir / "nodes", budget=budget.node,
                budgets=budgets, directions=directions, workers=budget.workers,
                binary=binary, reuse=reuse, ledger=ledger)
-    proved = [n for n in sketch.nodes if n in v["proved"]]
+    # GROUNDED, not merely proved. `verify` now attempts every claim, so a node
+    # can verify while something it rests on has not -- an implication, not a
+    # theorem here. Supplying one to the problem's own file would prove the
+    # conjecture from an unproved assumption and report it as rule 1 of this
+    # pipeline ("the problem file is immutable") being satisfied, which it would
+    # not be. `v["grounded"]` is the set with a chain back to the axioms.
+    proved = [n for n in sketch.nodes if n in v["grounded"]]
     a = attempt(problem, sketch.equations(proved), outdir=outdir / "attempt",
                 budget=budget.final, binary=binary, directions=directions,
                 reuse=reuse, ledger=ledger)
@@ -126,7 +138,11 @@ def run_theory(sketch: Sketch, targets, *, host, outdir: Path, budget=Budget(),
     lib = verify(host, sketch, outdir=outdir / "library", budget=budget.node,
                  budgets=budgets, directions=directions, workers=budget.workers,
                  binary=binary, reuse=reuse, ledger=ledger)
-    proved = [n for n in sketch.nodes if n in lib["proved"]]
+    # Grounded only, for the same reason `run_problem` insists on it and a
+    # sharper one: a library lemma travels to OTHER problems. A conditional one
+    # would carry its unproved assumption with it, silently, into every target
+    # it is supplied to -- containment checks the axioms and would not catch it.
+    proved = [n for n in sketch.nodes if n in lib["grounded"]]
 
     rows = {}
     for t in targets:

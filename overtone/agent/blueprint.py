@@ -26,7 +26,8 @@ import subprocess
 from html import escape
 from pathlib import Path
 
-STATUS_ORDER = ("proved", "proved_scoped", "failed", "blocked", "pending")
+STATUS_ORDER = ("proved", "proved_scoped", "conditional", "failed", "blocked",
+                "pending")
 
 # Fill / stroke / text, light and dark. Semantic, and deliberately not the
 # accent hue: a reader should be able to tell state from shape and colour at
@@ -34,6 +35,7 @@ STATUS_ORDER = ("proved", "proved_scoped", "failed", "blocked", "pending")
 PALETTE = {
     "proved":        ("#dcefe6", "#0f7a52", "#0b3d2a", "#12301f", "#4fc38d", "#bfe8d2"),
     "proved_scoped": ("#f6ebd8", "#9a6206", "#4a2f05", "#2e2312", "#d9a441", "#f0dcb4"),
+    "conditional":   ("#e8e3f7", "#6247aa", "#2b1f52", "#1d1830", "#9b83e8", "#ddd3f5"),
     "failed":        ("#f7e2df", "#b03a30", "#5a1a15", "#2e1715", "#e8776a", "#f5cdc7"),
     "blocked":       ("#e6e9f0", "#8d95a8", "#4d566b", "#171c26", "#4a5468", "#8b94a8"),
     "pending":       ("#eef0f5", "#b3bccd", "#5b6478", "#131822", "#39404f", "#7b8497"),
@@ -41,6 +43,7 @@ PALETTE = {
 LABEL = {
     "proved": "proved from the axioms",
     "proved_scoped": "proved with its parents supplied",
+    "conditional": "proved, but assumes an unproved lemma",
     "failed": "attempted, unproven",
     "blocked": "blocked — a parent is unproven",
     "pending": "not attempted",
@@ -71,7 +74,17 @@ def statuses(sketch, results):
     went through with nothing supplied and `proved_scoped` when it needed its
     parents -- a distinction worth showing, because it is the difference between
     a rung that stands alone and one that only exists inside the sketch.
+
+    `conditional` is a third kind and the one to read carefully: the node proved,
+    but something its proof rests on has not, so it states an implication rather
+    than a theorem of this problem. It is deliberately not called `proved_*`.
+    Several places here decide "did this work" with `status.startswith("proved")`,
+    and a name that slipped through those tests would silently credit a lemma
+    that assumes its own premise -- a guard rather than a hope.
     """
+    from overtone.agent.dag import grounding
+
+    ground, _ = grounding(sketch, results)
     out = {}
     for name in sketch.nodes:
         runs = [r for r in results if r["node"] == name]
@@ -82,6 +95,8 @@ def statuses(sketch, results):
         best = best_row(runs)
         if best is not None:
             st = "proved_scoped" if best.get("n_support") else "proved"
+            if name not in ground:
+                st = "conditional"
             out[name] = {"status": st, "cpu": best["cpu"],
                          "direction": best["direction"],
                          "n_support": best.get("n_support", 0)}
@@ -92,9 +107,11 @@ def statuses(sketch, results):
         else:
             out[name] = {"status": "pending", "cpu": None, "direction": None,
                          "n_support": 0}
-    # A node never attempted because a parent failed is blocked, not merely
-    # pending; the distinction says whether the sketch or the schedule is at
-    # fault.
+    # A node with no runs at all, resting on something unestablished. The
+    # scheduler no longer skips such a node -- every claim is attempted -- so
+    # this now describes a run that was interrupted or resumed rather than one
+    # the schedule wrote off. `conditional` counts as unestablished here, which
+    # is the whole point of giving it its own name.
     for name, (_, _, parents) in sketch.nodes.items():
         if out[name]["status"] == "pending" and any(
                 out[p]["status"] not in ("proved", "proved_scoped")

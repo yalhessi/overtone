@@ -67,13 +67,21 @@ def test_sketch_json_round_trip():
     assert Sketch.from_json(json.loads(json.dumps(s.to_json()))).nodes == s.nodes
 
 
-def test_layers_are_topological():
+def test_layers_and_topological_order_both_follow_the_edges():
+    """`layers()` is blueprint layout now and `topological()` is the schedule,
+    but a parent must precede its child in either or both are wrong."""
     s = Sketch({"a": ("associator(X,X,X)", "multiply(Y,Y)", []), "b": ("multiply(X,Y)", "multiply(Y,X)", ["a"]), "c": ("add(X,Y)", "add(Y,X)", ["a", "b"])})
     seen = set()
     for layer in s.layers():
         for n in layer:
             assert set(s.nodes[n][2]) <= seen
         seen |= set(layer)
+
+    seen = set()
+    for n in s.topological():
+        assert set(s.nodes[n][2]) <= seen
+        seen.add(n)
+    assert sorted(s.topological()) == sorted(s.nodes)
 
 
 # --------------------------------------------------------------- cost accounting
@@ -489,7 +497,7 @@ def test_verify_runs_a_node_end_to_end_with_a_stubbed_prover(tmp_path, monkeypat
     assert {r["node"] for r in out["results"]} == {"a", "b"}
     assert all(r["cpu"] == 1.5 and r["wall"] == 1.6 for r in out["results"])
     # Two nodes, ONE direction each: a node needs one direction to prove, and
-    # running the other costs its whole budget while the layer waits on it.
+    # running the other costs its whole budget for an answer already in hand.
     assert len(calls) == 2, calls
 
 
@@ -694,7 +702,7 @@ def test_reused_rows_keep_their_support_attribution(tmp_path, monkeypatch):
 # --------------------------------------------------------------- loop memory
 
 def test_sketch_digest_ignores_node_order_but_not_parent_order():
-    """Node order does not reach twee -- layers() sorts -- but parent order sets
+    """Node order does not reach twee -- the schedule sorts -- but parent order sets
     the order equations enter the prover, and so the search."""
     a = Sketch({"x": ("f", "g", ["p", "q"]), "p": ("additive_identity", "add(X,X)", []), "q": ("multiply(X,X)", "add(Y,Y)", [])})
     b = Sketch({"p": ("additive_identity", "add(X,X)", []), "q": ("multiply(X,X)", "add(Y,Y)", []), "x": ("f", "g", ["p", "q"])})
@@ -776,8 +784,8 @@ def test_state_carries_prior_iterations(tmp_path, monkeypatch):
 
 
 def test_a_proved_node_does_not_pay_for_the_other_direction(tmp_path, monkeypatch):
-    """The losing arm sets a layer's wall time. right_moufang_a reported 0.5s
-    while its layer waited 300.3s on the direction that could not prove it."""
+    """The losing arm sets the node's wall time. right_moufang_a reported 0.5s
+    while the run waited 300.3s on the direction that could not prove it."""
     from overtone import runner
     from overtone.agent import dag
 
@@ -826,7 +834,7 @@ def test_a_failing_node_still_tries_both_directions(tmp_path, monkeypatch):
 
 def test_racing_directions_cancels_the_loser(tmp_path, monkeypatch):
     """Both directions start together and the loser is stopped the moment the
-    winner proves, so a layer waits on the winner rather than on the arm that
+    winner proves, so the node waits on the winner rather than on the arm that
     could never succeed. Asserted on returned rows, which survive the fork that
     a shared counter would not."""
     import time as _time
@@ -862,7 +870,7 @@ def test_racing_directions_cancels_the_loser(tmp_path, monkeypatch):
     assert any(r["proved"] for r in rows), rows
     assert not any(r.get("result") == "Cancelled" for r in rows), \
         "a cancelled run answered nothing and is not a result"
-    assert elapsed < 2.0, f"the layer waited on the loser ({elapsed:.1f}s)"
+    assert elapsed < 2.0, f"the node waited on the loser ({elapsed:.1f}s)"
 
 
 def test_a_cancelled_run_is_never_recorded(tmp_path, monkeypatch):
@@ -1258,8 +1266,12 @@ def test_axioms_form_their_own_layer():
     with_ax = s.layers()
     assert with_ax[0] == sorted(s.given), "axioms are layer 0, alone"
     assert "g" not in with_ax[0]
-    assert s.layers(with_axioms=False) == with_ax[1:], \
-        "verification walks claims only; an axiom is never scheduled"
+    assert s.layers(with_axioms=False) == with_ax[1:]
+    # The separation that matters is not the layer -- that is layout -- but that
+    # an axiom is never a claim and is never scheduled. `verify` builds its jobs
+    # from `topological()` minus `given`, and grounds every axiom by assumption.
+    assert set(s.claims()) == set(s.topological()) - s.given
+    assert "g" in s.claims() and not (s.given & set(s.claims()))
 
 
 def test_review_withholds_an_out_of_signature_node_instead_of_aborting():
@@ -2038,7 +2050,10 @@ def test_uncited_parents_are_dropped_but_only_as_a_test():
     # `b` also feeds `other`, so dropping n's edge to it leaves it with a child.
     s = Sketch({"a": ("x", "y", []), "b": ("p", "q", []),
                 "other": ("m", "k", ["b"]), "n": ("u", "v", ["a", "b"])})
-    rows = [_row("n", 40.0, unused=["b"], support=("a", "b"))]
+    # The parents prove too. Only a GROUNDED parent may be dropped, so a fixture
+    # that leaves them unproved is testing a case the controller must decline.
+    rows = [_row("a", 1.0), _row("b", 1.0),
+            _row("n", 40.0, unused=["b"], support=("a", "b"))]
     acts, probs = probation_drops(s, rows, target="goal", iteration=3)
     assert acts == [{"op": "set_parents", "name": "n", "parents": ["a"]}]
     assert len(probs) == 1
@@ -2057,14 +2072,16 @@ def test_a_drop_that_would_orphan_its_parent_is_left_alone():
 
     s = Sketch({"a": ("x", "y", []), "only": ("p", "q", []),
                 "n": ("u", "v", ["a", "only"])})
-    rows = [_row("n", 40.0, unused=["only"], support=("a", "only"))]
+    rows = [_row("a", 1.0), _row("only", 1.0),
+            _row("n", 40.0, unused=["only"], support=("a", "only"))]
     assert probation_drops(s, rows, target="goal") == ([], [])
 
     # Two nodes sharing one uncited parent must not orphan it between them:
     # the second drop sees the count the first already spent.
     s2 = Sketch({"a": ("x", "y", []), "sh": ("p", "q", []),
                  "n1": ("u", "v", ["a", "sh"]), "n2": ("s", "t", ["a", "sh"])})
-    rows2 = [_row("n1", 9.0, unused=["sh"], support=("a", "sh")),
+    rows2 = [_row("a", 1.0), _row("sh", 1.0),
+             _row("n1", 9.0, unused=["sh"], support=("a", "sh")),
              _row("n2", 9.0, unused=["sh"], support=("a", "sh"))]
     acts, probs = probation_drops(s2, rows2, target="goal")
     assert [p.node for p in probs] == ["n1"], "only the first may drop it"
@@ -2079,7 +2096,8 @@ def test_probation_leaves_the_target_and_the_probed_node_alone():
 
     s = Sketch({"a": ("x", "y", []), "goal": ("u", "v", ["a"]),
                 "n": ("s", "t", ["a"]), "m": ("c", "d", ["a"])})
-    rows = [_row("goal", 5.0, unused=["a"], support=("a",)),
+    rows = [_row("a", 1.0),
+            _row("goal", 5.0, unused=["a"], support=("a",)),
             _row("n", 5.0, unused=["a"], support=("a",)),
             _row("m", 5.0, unused=["a"], support=("a",))]
     acts, probs = probation_drops(s, rows, target="goal", probe_node="n")
@@ -2500,8 +2518,14 @@ def test_the_target_is_not_attempted_with_no_support(tmp_path, monkeypatch):
                            draft=False, ledger=tmp_path / "l.jsonl")
     assert not _final_inputs(tmp_path), \
         "no proved support means the attempt would be the bare baseline"
-    assert out["history"][0]["target"] == {}, \
-        "and no attempt is not a measurement of zero"
+    # No attempt is not a measurement of zero: nothing here may claim a result,
+    # a cost or a contact reading. `frontier_depth` is exempt and is the reason
+    # this is not `== {}` -- it counts hops in the sketch, needs no run at all,
+    # and is precisely the number worth having on an iteration this bare.
+    target = out["history"][0]["target"]
+    assert set(target) <= {"frontier_depth"}, target
+    assert target.get("frontier_depth") == 1, \
+        "one unproved obligation stands between the axioms and the goal"
 
 
 def test_a_redraft_that_proposes_no_new_lemmas_is_not_a_new_approach():
@@ -3301,15 +3325,18 @@ def test_lhs_holding_the_equation_is_recovered_when_rhs_is_also_given():
     assert one("multiply(X,Y) = multiply(Y,X)", "associator(X,Y,Z)") is None
 
 
-def test_a_blocked_goal_is_reported_as_worse_than_a_failing_one():
-    """`verify` schedules a node only when every parent has proved, so a failed
-    ancestor removes the goal from the run entirely: no attempt, no artifact, no
-    contact, and therefore no regression verdict and no revert.
+def test_an_open_route_to_the_goal_names_the_whole_dead_chain():
+    """A failed ancestor used to remove the goal from the run entirely -- no
+    attempt, no artifact, no contact, so no regression verdict and no revert.
+    One run subdivided its single obligation at iteration 0, replacing seven
+    proved parents with three that failed, and spent nine iterations blind.
 
-    A run subdivided its single obligation at iteration 0, replacing seven
-    proved parents with three that failed, and spent the next nine iterations
-    blind -- the obligation never ran again and nothing said so.
+    The goal is attempted regardless now, so what this reports is not "cannot
+    run" but "cannot be SUPPLIED": every name here is a lemma the target attempt
+    will not receive. `given` axioms are never in it -- they are in the problem
+    file already -- and neither is a node that proved.
     """
+    from overtone.agent.dag import unproved_ancestors
     from overtone.agent.loop import _blocking
 
     s = Sketch({
@@ -3321,8 +3348,23 @@ def test_a_blocked_goal_is_reported_as_worse_than_a_failing_one():
     v = {"proved": {"ok"}}
     # nearest first, and the whole dead chain is named
     assert _blocking(s, "rng029-5_goal", v) == ["mid", "bad"]
+    assert unproved_ancestors(s, "rng029-5_goal", {"ok"}) == ["mid", "bad"]
     # once the chain proves, nothing is reported
     assert _blocking(s, "rng029-5_goal", {"proved": {"ok", "mid", "bad"}}) == []
+    # The walk prunes at an established node rather than continuing past it,
+    # and that is sound only because `v["proved"]` is GROUNDED-only: grounding
+    # is a least fixed point, so nothing can be in it whose own ancestors are
+    # not. `{ok, mid}` without `bad` is a state grounding cannot produce -- if
+    # it could, pruning at `mid` would hide `bad` and the chain would lie.
+    from overtone.agent.dag import grounding
+    rows = [{"node": "bad", "proved": False, "cpu": 9.0, "result": "Timeout"},
+            {"node": "mid", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": ["bad"], "used_support": ["bad"]},
+            {"node": "ok", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": [], "used_support": None}]
+    ground, conditional = grounding(s, rows)
+    assert ground == {"ok"} and conditional["mid"] == ("bad",)
+    assert _blocking(s, "rng029-5_goal", {"proved": ground}) == ["mid", "bad"]
 
 
 # ------------------------------------------------------- proxy goal contact
@@ -3417,7 +3459,12 @@ def test_pushing_the_frontier_away_from_the_goal_is_a_regression():
     from overtone.agent.loop import frontier_retreat, score_outcome
 
     def at(d):
-        return {"contact_depth": d, "contact": {"both": 0}}
+        # `frontier_depth`, not `contact_depth`: the scheduler attempts every
+        # claim now, so the goal almost always leaves an artifact and the
+        # distance-to-a-reading would sit at 0 through exactly the edit this
+        # catches. `dag.frontier_depth` counts hops to the furthest ungrounded
+        # node instead and reproduces the same 1 -> 2 on both runs.
+        return {"frontier_depth": d, "contact": {"both": 0}}
 
     assert frontier_retreat(at(2), at(1)) == (1, 2)
     o = score_outcome({}, target=at(2), nodes=(), prev_nodes=(), applied=1,
@@ -3437,7 +3484,12 @@ def test_the_frontier_guard_does_not_punish_repair_or_reward_severing():
     from overtone.agent.loop import frontier_retreat
 
     def at(d):
-        return {"contact_depth": d, "contact": {"both": 0}}
+        # `frontier_depth`, not `contact_depth`: the scheduler attempts every
+        # claim now, so the goal almost always leaves an artifact and the
+        # distance-to-a-reading would sit at 0 through exactly the edit this
+        # catches. `dag.frontier_depth` counts hops to the furthest ungrounded
+        # node instead and reproduces the same 1 -> 2 on both runs.
+        return {"frontier_depth": d, "contact": {"both": 0}}
 
     assert frontier_retreat(at(1), at(2)) is None, "repair is free"
     assert frontier_retreat(at(2), at(2)) is None, "standing still is not a fall"
@@ -3446,3 +3498,291 @@ def test_the_frontier_guard_does_not_punish_repair_or_reward_severing():
     assert frontier_retreat(at(4), at(None)) is None, "nothing to compare"
     assert frontier_retreat(at(None), at(1)) is None
     assert frontier_retreat({}, at(1)) is None and frontier_retreat(at(2), None) is None
+
+
+# ------------------------------------------------- scheduling without layers
+
+def test_a_node_whose_parent_failed_is_still_attempted(tmp_path, monkeypatch):
+    """The barrier removal, stated as behaviour.
+
+    `verify` used to walk topological layers and run a node only once every
+    parent had proved, so one failed ancestor removed an entire subtree from the
+    run -- and when that subtree held the goal there was no attempt, no
+    artifact, and no goal contact, so the loop's only veto went quiet. One run
+    spent nine iterations that way.
+
+    The rule was buying less than it looked: `scope` supplies a node's declared
+    parents whether or not they proved, so the input bytes and the verdict are
+    identical either way. All it decided was WHEN the question got asked.
+    """
+    from overtone import runner
+    from overtone.agent import dag
+
+    class R:
+        def __init__(self, ok):
+            self.proved = ok
+            self.status = "Unsatisfiable" if ok else "Timeout"
+            self.cpu = self.wall = 1.0
+            self.output = "x"
+
+    # `a` never proves; `b` and `c` hang off it.
+    monkeypatch.setattr(runner, "run",
+                        lambda path, *a, **k: R(not Path(path).name.startswith("a.")))
+    s = Sketch({"a": ("multiply(X,X)", "add(X,X)", []),
+                "b": ("commutator(X,Y)", "commutator(Y,X)", ["a"]),
+                "c": ("associator(X,X,Y)", "additive_identity", ["b"])})
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=1, workers=1,
+                     ledger=tmp_path / "l.jsonl")
+
+    assert {r["node"] for r in out["results"]} == {"a", "b", "c"}, \
+        "every claim is attempted, not just the reachable ones"
+    for n in ("b", "c"):
+        inputs = sorted(tmp_path.glob(f"{n}.*.p"))
+        assert inputs and all("parent" in f.read_text() for f in inputs), \
+            f"{n} must still be run WITH its declared parent supplied"
+
+
+def test_a_proof_resting_on_an_unproved_lemma_is_conditional_not_proved(
+        tmp_path, monkeypatch):
+    """It verified, so it is a real implication -- and it is not a theorem of
+    this problem until what it assumes is proved. Counting it would flatter a
+    run whose assumptions never discharge, and supplying it to the target would
+    prove the conjecture from an assumption."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    class R:
+        def __init__(self, ok):
+            self.proved = ok
+            self.status = "Unsatisfiable" if ok else "Timeout"
+            self.cpu = self.wall = 1.0
+            self.output = "x"
+
+    monkeypatch.setattr(runner, "run",
+                        lambda path, *a, **k: R(not Path(path).name.startswith("a.")))
+    s = Sketch({"a": ("multiply(X,X)", "add(X,X)", []),
+                "b": ("commutator(X,Y)", "commutator(Y,X)", ["a"])})
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=1, workers=1,
+                     ledger=tmp_path / "l.jsonl")
+
+    assert out["conditional"] == {"b": ["a"]}
+    assert out["n_conditional"] == 1
+    assert "b" in out["all_proved"], "it did prove, and the record says so"
+    assert "b" not in out["grounded"] and "b" not in out["proved"]
+    assert out["n_proved"] == 0, "grounded only -- the headline must not inflate"
+    assert "b" in out["missing"], "not established is not the same as proved"
+
+
+def test_grounding_reads_the_run_not_the_declared_parents():
+    """Three ways the two differ, each of which would ground the wrong node."""
+    from overtone.agent.dag import Sketch, grounding
+
+    s = Sketch({"a": ("x", "y", []), "b": ("p", "q", ["a"])})
+    fail_a = {"node": "a", "proved": False, "cpu": 60.0, "result": "Timeout"}
+
+    def b(**kw):
+        return {"node": "b", "proved": True, "cpu": 1.0, "channel": "axioms",
+                "support": ["a"], "used_support": None, **kw}
+
+    # 1. The hints channel adds nothing to the axiom set, so it assumes nothing.
+    assert grounding(s, [fail_a, b(channel="hints")])[0] == {"b"}
+
+    # 2. A certificate that never cites the assumption is a proof without it.
+    assert grounding(s, [fail_a, b(used_support=[])])[0] == {"b"}
+
+    # 3. ...but only when attribution is actually available. `None` means NOT
+    # ATTRIBUTED -- a failed run, the hint channel, a missing artifact -- and
+    # reading it as "used nothing" would ground a node on no evidence at all.
+    ground, conditional = grounding(s, [fail_a, b(used_support=None)])
+    assert ground == set() and conditional == {"b": ("a",)}
+
+
+def test_a_conditional_chain_names_everything_it_rests_on():
+    """Nearest first, and through a node that never proved: stopping at the
+    first dead assumption would report a shorter dependency than the sketch
+    actually claims."""
+    from overtone.agent.dag import Sketch, grounding
+
+    s = Sketch({"a": ("x", "y", []), "b": ("p", "q", ["a"]),
+                "c": ("u", "v", ["b"])})
+    rows = [{"node": "a", "proved": False, "cpu": 60.0, "result": "Timeout"},
+            {"node": "c", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": ["b"], "used_support": ["b"]}]
+    ground, conditional = grounding(s, rows)
+    assert ground == set()
+    # `b` was never even run, so the chain continues through what it is
+    # DECLARED to rest on.
+    assert conditional["c"] == ("b", "a")
+
+
+def test_grounding_promotes_a_whole_subtree_at_once():
+    """Least fixed point: a promotion grounds everything downstream of it, and
+    a node grounded late is not re-run -- both searches were handed the same
+    equations, so the verdict was always about the same question."""
+    from overtone.agent.dag import Sketch, grounding
+
+    s = Sketch({"a": ("x", "y", []), "b": ("p", "q", ["a"]),
+                "c": ("u", "v", ["b"])})
+    rows = [{"node": "a", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": [], "used_support": None},
+            {"node": "b", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": ["a"], "used_support": ["a"]},
+            {"node": "c", "proved": True, "cpu": 1.0, "channel": "axioms",
+             "support": ["b"], "used_support": ["b"]}]
+    assert grounding(s, rows) == ({"a", "b", "c"}, {})
+
+
+def test_ready_nodes_are_scheduled_before_speculative_ones():
+    """A priority, not a gate. Every claim is attempted; this only decides what
+    starts first when there are more of them than workers, and a run that
+    cannot start everything should spend the box on the conjecture rather than
+    on whatever sorts first alphabetically."""
+    from overtone.agent.dag import Sketch, _priority, _route_to
+
+    s = Sketch({"off": ("x", "y", []), "onroute": ("p", "q", []),
+                "mid": ("u", "v", ["onroute"]),
+                "zz_goal": ("m", "k", ["mid"])})
+    route = _route_to(s, "zz_goal")
+    assert route == {"zz_goal", "mid", "onroute"}
+
+    order = sorted(s.claims(),
+                   key=lambda n: _priority(n, s, proved=set(), route=route))
+    # Both parentless nodes are ready; the one on the route goes first. `mid`
+    # and the goal are speculative, and are ordered by route then name.
+    assert order == ["onroute", "off", "mid", "zz_goal"]
+
+    # Once `onroute` proves, `mid` becomes ready and overtakes the off-route
+    # node that is still merely parentless.
+    order = sorted(["off", "mid"],
+                   key=lambda n: _priority(n, s, proved={"onroute"}, route=route))
+    assert order == ["mid", "off"]
+
+
+def test_the_pool_is_refilled_rather_than_drained_at_a_layer_boundary(tmp_path,
+                                                                     monkeypatch):
+    """A barrier idles the box whenever a tier is narrower than `workers`.
+
+    The shape here is the one that punished it: one independent node plus a
+    chain of four, so every layer after the first held exactly one node and no
+    layered schedule could ever run more than two at once. The fake runner
+    blocks until three DISTINCT nodes are in flight, so this can only pass if
+    speculative work is filling the free slots -- and deadlocks into a timeout
+    if it is not.
+    """
+    import time
+    from overtone import runner
+    from overtone.agent import dag
+
+    seen = tmp_path / "inflight"
+    seen.write_text("")
+
+    class R:
+        proved, status, cpu, wall, output = True, "Unsatisfiable", 0.1, 0.1, "x"
+
+    def fake(path, flags, budget, **kw):
+        node = Path(path).name.split(".")[0]
+        with open(seen, "a") as f:
+            f.write(node + "\n")
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if len(set(seen.read_text().split())) >= 3:
+                break
+            time.sleep(0.02)
+        return R()
+
+    monkeypatch.setattr(runner, "run", fake)
+    nodes = {"solo": ("multiply(X,X)", "add(X,X)", [])}
+    prev = None
+    for i in range(4):
+        name = f"chain{i}"
+        nodes[name] = (f"multiply(X{i},Y)", "add(X,X)", [prev] if prev else [])
+        prev = name
+    s = Sketch(nodes)
+
+    out = dag.verify("RNG029-5", s, outdir=tmp_path, budget=30, workers=3,
+                     directions=["--flatten-goal"], ledger=tmp_path / "l.jsonl")
+    assert len(set(seen.read_text().split())) >= 3, \
+        "three nodes never ran at once: the pool is still draining per tier"
+    assert out["n_proved"] == 5
+
+
+def test_frontier_depth_counts_hops_to_the_furthest_open_node():
+    """The structural successor to the artifact depth, and the measurement it
+    has to preserve: both derived-sketch runs opened at 1 -- one obligation,
+    running and failing -- subdivided it into intermediates that did not prove,
+    and went to 2.
+    """
+    from overtone.agent.dag import Sketch, frontier_depth
+
+    before = Sketch({"scaffold": ("x", "y", []),
+                     "obligation": ("p", "q", ["scaffold"]),
+                     "goal": ("u", "v", ["obligation"])})
+    assert frontier_depth(before, "goal", {"scaffold"}) == 1
+
+    after = Sketch({"scaffold": ("x", "y", []),
+                    "i1": ("a", "b", ["scaffold"]), "i2": ("c", "d", ["scaffold"]),
+                    "obligation": ("p", "q", ["i1", "i2"]),
+                    "goal": ("u", "v", ["obligation"])})
+    assert frontier_depth(after, "goal", {"scaffold"}) == 2, \
+        "the subdivide pushed the frontier one hop further from the conjecture"
+
+    # Repairing it is free, and a fully grounded route reads 0.
+    assert frontier_depth(after, "goal",
+                          {"scaffold", "i1", "i2", "obligation"}) == 0
+
+
+def test_a_conditional_proof_is_not_progress_and_is_not_supplied(tmp_path,
+                                                                 monkeypatch):
+    """Three guards on one footgun, end to end.
+
+    A node that proved on an unproved assumption must not satisfy the probe that
+    predicted it, must not be handed to the run against the real conjecture, and
+    must say so where the agent can read it.
+    """
+    from overtone import runner
+    from overtone.agent import loop as looplib
+    from overtone.agent.dag import Sketch
+    from overtone.agent.loop import NodeState, score_outcome
+
+    # 1. It does not satisfy an `expect: "prove"` probe.
+    cond = NodeState("b", "p", "q", ("a",), "conditional", 1.0, "d",
+                     assumes=("a",))
+    was = NodeState("b", "p", "q", ("a",), "pending", None, None)
+    o = score_outcome({"node": "b", "expect": "prove"}, target={}, nodes=(cond,),
+                      prev_nodes=(was,), applied=1)
+    assert o["outcome"] == "inconclusive" and "conditional" in o["why"]
+
+    # 2. It never reaches the target attempt, and 3. it is reported.
+    class R:
+        def __init__(self, ok):
+            self.proved = ok
+            self.status = "Unsatisfiable" if ok else "Timeout"
+            self.cpu = self.wall = 1.0
+            self.output = "x"
+
+    monkeypatch.setattr(
+        runner, "run",
+        lambda path, *a, **k: R(not Path(path).name.startswith("dead.")))
+
+    class Quiet:
+        def act(self, state):
+            self.seen = state
+            return []
+
+    conj = problems.conjecture(problems.problem_path("RNG029-5"))
+    s = Sketch({"dead": ("multiply(X,X)", "add(X,X)", []),
+                "shaky": ("commutator(X,Y)", "commutator(Y,X)", ["dead"]),
+                "rng029-5_goal": (conj[0], conj[1], ["shaky"])})
+    agent = Quiet()
+    out = looplib.run_loop("RNG029-5", s, agent, outdir=tmp_path,
+                           max_iterations=1, directions=["--flatten-goal"],
+                           draft=False, ledger=tmp_path / "l.jsonl")
+
+    rec = out["history"][0]
+    assert rec["n_proved"] == 0 and rec["n_conditional"] == 2
+    assert not _final_inputs(tmp_path), \
+        "a conditional lemma must never be supplied to the real conjecture"
+    node = {n.name: n for n in agent.seen.nodes}["shaky"]
+    assert node.status == "conditional" and node.assumes == ("dead",)
+    assert any(f.node == "shaky" and "not yet a theorem" in f.reason
+               for f in agent.seen.findings)

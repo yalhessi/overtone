@@ -75,24 +75,42 @@ Everything below was measured on this project. Follow it over your own priors.
    * `error` -- nothing was proved about anything. Not mathematics; do not
      redesign the sketch around it.
 
-3. PREFER FEW, EXACT PARENTS. Direct parents beat the full ancestor closure:
+3. `conditional` IS AN IMPLICATION, NOT A THEOREM. Every node is now attempted,
+   whether or not its parents proved, so a node can verify GIVEN something that
+   has not. `assumes` lists what it is still resting on. Such a node does not
+   count as proved, is not supplied to the target attempt, and does not satisfy
+   a `prove` probe -- and it is genuinely useful evidence, because it says the
+   implication closes and the only remaining work is beneath it.
+
+   So the move it calls for is almost always the same: PROVE WHAT IT ASSUMES.
+   That is where the mathematics is, and grounding it costs nothing further --
+   the conditional node's own search is already recorded and does not re-run.
+   Do not restate or subdivide a conditional node to make it "work"; it already
+   worked.
+
+   One exception, and it is fatal: if something in `assumes` has
+   `failure: saturated`, twee CLOSED that search and it does not follow from the
+   axioms. Nothing resting on it can ever be grounded. Repair or drop it rather
+   than building further there.
+
+4. PREFER FEW, EXACT PARENTS. Direct parents beat the full ancestor closure:
    five lemmas and thirteen performed identically, and supplying the right five
    was worth ~3000x over supplying none.
 
-4. COMPARE AGAINST A SIBLING THAT WORKED. Every wrong-edge fault here was found
+5. COMPARE AGAINST A SIBLING THAT WORKED. Every wrong-edge fault here was found
    that way. If a failing node has the SAME parents as a same-shape sibling that
    proved, that is the bug: mirrored statements need mirrored parents. One such
    substitution was a 300s timeout against 1.0s.
 
-5. MINE THE NODE'S OWN RUN. The candidates you are given are equations twee
+6. MINE THE NODE'S OWN RUN. The candidates you are given are equations twee
    derived but the sketch does not name. The single most valuable node added in
    this project was read off exactly that listing.
 
-6. NEVER AUTHOR A STATEMENT FOR A NODE THAT IS A TPTP PROBLEM. Use
+7. NEVER AUTHOR A STATEMENT FOR A NODE THAT IS A TPTP PROBLEM. Use
    restate(from_problem=...) so it is copied. A node here once drifted from a
    problem's conjecture by one rewrite and stopped being that problem.
 
-7. `goal_contact.both` VETOES EDITS; IT DOES NOT RANK THEM. It counts derived
+8. `goal_contact.both` VETOES EDITS; IT DOES NOT RANK THEM. It counts derived
    rules touching BOTH sides of the goal, and only such a rule can close it. A
    FALL is real evidence the edit hurt: one refinement here raised the rule count
    and both sides while cutting `both` from 162 to 102, and it made the problem
@@ -103,7 +121,7 @@ Everything below was measured on this project. Follow it over your own priors.
    direction. Do not reason about term shapes you expect in the output -- twee
    renames goal subterms, so what you would grep for is not there.
 
-8. READ `review_of_your_last_edits` FIRST. Proposals are reviewed before they
+9. READ `review_of_your_last_edits` FIRST. Proposals are reviewed before they
    reach the prover: a `reject` was withheld and never ran, so re-proposing it
    unchanged wastes a turn. A `note` is information, not an objection -- in
    particular "needs the theory's own axioms" is the normal case for a useful
@@ -112,7 +130,7 @@ Everything below was measured on this project. Follow it over your own priors.
    than subdividing it. An agent here subdivided an unsound node for three
    iterations, which produced more unsound nodes.
 
-9. DECLARE WHAT YOUR EDIT PREDICTS. Put `probe` and `hypothesis` on the first
+10. DECLARE WHAT YOUR EDIT PREDICTS. Put `probe` and `hypothesis` on the first
    action of your batch: which node should change, and to what -- `prove`,
    `speed_up`, or `target`. The next turn reports
    `outcome_of_your_last_edits` scored against it. Only a probe that comes true
@@ -123,7 +141,7 @@ Everything below was measured on this project. Follow it over your own priors.
    automatically -- you will be told what was undone, and re-proposing it is a
    wasted turn.
 
-10. REDRAFT WHEN `stalled_iterations` >= 2 OR `iterations_on_approach` >= 4.
+11. REDRAFT WHEN `stalled_iterations` >= 2 OR `iterations_on_approach` >= 4.
    Two different failures, and the second is the one that hides. Stalled means
    no new node has been PROVED, however many you added. But proving nodes is not
    the objective -- closing the goal is, and an approach can prove node after
@@ -277,9 +295,12 @@ _PROBE = {
                  "description": "the node whose behaviour should change"},
         "expect": {"type": "string",
                    "enum": ["prove", "speed_up", "target"],
-                   "description": "prove: a currently failing/blocked node "
-                                  "verifies. speed_up: a slow node drops below "
-                                  "the diagnostic threshold. target: the "
+                   "description": "prove: a node that is currently failing, "
+                                  "or conditional, becomes GROUNDED -- it "
+                                  "verifies and so does everything it rests "
+                                  "on. A conditional proof does not satisfy "
+                                  "this. speed_up: a slow node drops below the "
+                                  "diagnostic threshold. target: the "
                                   "conjecture itself moves."},
     },
 }
@@ -391,6 +412,8 @@ def render_state(state: State, *, max_candidates=8):
         # of every turn to say nothing.
         if n.unused_support:
             row["unused_support"] = list(n.unused_support)
+        if n.assumes:
+            row["assumes"] = list(n.assumes)
         if n.failure:
             row["failure"] = n.failure
         nodes.append(row)

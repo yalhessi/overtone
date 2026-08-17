@@ -92,15 +92,47 @@ Derived from `agent/dag.py` and the run directory, not free text:
 
 - the sketch: nodes, statements, edges, and per-node status and time;
 - failures, classified: **slow** (proved above the diagnostic threshold),
-  **blocked** (a parent failed), and **failed** carrying why -- **saturated**
-  (the search closed and the statement does not follow), **timeout**, or
-  **error**;
+  **conditional** (proved, but resting on something that has not been), and
+  **failed** carrying why -- **saturated** (the search closed and the statement
+  does not follow), **timeout**, or **error**;
 - for a node that proved, the parents its certificate never cited;
 - for a slow or failed node, candidate intermediates mined from its own run --
   derived rules for a failure, `proof_section` lemmas for a slow success;
 - for a failed node, the parent-set diff against any structurally similar node
   that succeeded. This is the diagnostic that caught `left_moufang_a`, and it is
   not yet built.
+
+### Grounded and conditional
+
+Every claim is verified, whether or not its parents have proved. A node whose
+parents are unproved is still handed exactly the equations its edges name -- that
+was already true, since scope follows the declared parents -- so asking early is
+free whenever the parent eventually proves: the input bytes are identical and the
+ledger answers the second time.
+
+What that buys is a proof of the *implication* at the iteration the question is
+asked, rather than nothing at all. On RNG029-5 the conjecture itself now verifies
+in 4.7s given the bridge, which says the decomposition is right and all the
+remaining mathematics is in one node. Under the old schedule that node was never
+run, because a single failed ancestor removed it and everything beneath it from
+the run, leaving no artifact and no goal contact -- two ten-iteration runs went
+blind that way.
+
+So a proved node is one of two things, and they are never added together:
+
+- **grounded** -- it proved and so did everything its proof rests on, back to the
+  problem's own axioms. This is what `n_proved` counts, what `missing` excludes,
+  and the only thing supplied to a run against the real conjecture.
+- **conditional** -- it proved, but something it assumes has not. A real
+  implication and not yet a theorem of this problem. Reported beside the grounded
+  count, never inside it.
+
+What a node rests on is read from the run that happened, not from its declared
+parents: a hints-channel proof assumes nothing, since a hint joins no axiom set,
+and a certificate that never cites a supplied lemma is a proof without it, so
+such a node is grounded on the rest. `frontier_depth` -- hops from the conjecture
+to the furthest thing still open -- is the one number that says how far the route
+has left to go.
 
 ### Actions
 

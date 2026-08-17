@@ -65,8 +65,9 @@ overtone/             this project's python package
   batch.py            resumable parallel sweeps + the results.jsonl format
   otter.py            Otter/EQP equations -> twee $hint terms
   agent/              the sketch loop -- isolated; core never imports it
-    dag.py            a sketch as a DAG: verify in parent scope, attempt, cost,
-                      diff, sibling_diff, sketch_from_proof
+    dag.py            a sketch as a DAG: verify every claim in parent scope,
+                      grounded vs conditional, attempt, cost, diff,
+                      sibling_diff, sketch_from_proof
     pipeline.py       run_problem (one problem, one cost) and run_theory
                       (a library once, a marginal cost per target)
     loop.py           draft -> verify -> diagnose -> revise; typed state, a

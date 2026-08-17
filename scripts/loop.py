@@ -280,7 +280,11 @@ def main():
     ap.add_argument("--node-budget", type=int, default=60)
     ap.add_argument("--final-budget", type=int, default=300)
     ap.add_argument("--slow", type=int, default=30)
-    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--workers", type=int, default=16,
+                    help="nodes in flight. Each races 2 goal directions, so "
+                         "this is up to 2x that many twee processes, and the "
+                         "budget is a wall-clock timeout -- keep it under half "
+                         "the core count or every budget is quietly cut short")
     ap.add_argument("--max-iterations", type=int, default=6)
     ap.add_argument("--total-cpu", type=float)
     ap.add_argument("--outdir", type=Path)

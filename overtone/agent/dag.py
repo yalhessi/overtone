@@ -40,7 +40,7 @@ RNG025-4 proves in 371.9s, RNG025-5 times out, and still times out at 4000s.
 import json
 import re
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 
 from overtone import proofs
@@ -127,15 +127,55 @@ class Sketch:
         unknown = sorted(self.given - set(self.nodes))
         if unknown:
             raise ValueError(f"given names no such node: {unknown}")
-        self.layers()          # raises on a cycle
+        self.topological()     # raises on a cycle
+
+    def topological(self):
+        """Every node after all of its parents, as one flat list. Raises on a cycle.
+
+        Two jobs, and neither is a tier: the acyclicity check, and the order
+        `verify` offers nodes to the pool in.
+
+        Validation used to call `layers()` for its side effect -- correctness
+        riding on a *layout* helper, so a change to how the blueprint ranks nodes
+        could have quietly stopped checking the DAG. And scheduling used to walk
+        those layers with a barrier between them, which is a far stronger
+        promise than anything needs: nothing waits here, so the only guarantee
+        the order has to make is that a parent is OFFERED before its child. That
+        is what lets a child's proof be grounded the moment it lands instead of
+        retroactively.
+        """
+        done, out = set(self.given), sorted(self.given)
+        remaining = {n: v for n, v in self.nodes.items() if n not in self.given}
+        while remaining:
+            ready = sorted(n for n, (_, _, ps) in remaining.items()
+                           if all(p in done for p in ps))
+            if not ready:
+                raise ValueError(f"cycle among {sorted(remaining)}")
+            out += ready
+            done |= set(ready)
+            for n in ready:
+                del remaining[n]
+        return out
 
     def layers(self, with_axioms=True):
-        """Topological layers; every node follows all of its parents.
+        """Topological layers. **Layout only** -- nothing schedules on these.
 
-        The problem's axioms form layer 0 -- a tier of their own rather than
-        being mixed in with parentless claims, which they resemble structurally
-        and differ from completely: a claim at that position is something to
-        prove, an axiom is something assumed.
+        Layer assignment is most of a Sugiyama pass, which is why
+        `blueprint._positions` wants it: rank the nodes, order within a rank by
+        parent barycentre, draw. That is a legitimate use and the only one left.
+
+        It is deliberately NOT how verification is scheduled. A barrier per layer
+        idles the pool whenever a layer is narrower than `workers`, makes every
+        node wait on the slowest member of the tier above it, and -- because a
+        node only ran once all its parents had proved -- let a single failed
+        ancestor remove an entire subtree, the goal included, without anything
+        saying so. `topological` is the scheduling order; `grounding` is what
+        replaced the barrier's soundness guarantee.
+
+        The problem's axioms still form layer 0 -- a tier of their own rather
+        than being mixed in with parentless claims, which they resemble
+        structurally and differ from completely: a claim at that position is
+        something to prove, an axiom is something assumed.
         """
         done = set(self.given)
         out = [sorted(self.given)] if (with_axioms and self.given) else []
@@ -270,6 +310,167 @@ def grounding_errors(sketch: Sketch, problem) -> list:
     return errs
 
 
+def unproved_ancestors(sketch: Sketch, name, proved):
+    """Ancestors of `name` that did not prove, dependency order, nearest first.
+
+    Empty means every ancestor is established. This was `loop._blocking`, and it
+    was named for the schedule: a node whose parents had not proved was never
+    scheduled at all, so one failed ancestor silently took a whole subtree out
+    of the run. The scheduler no longer works that way -- every claim is
+    attempted -- so what this answers now is what a node's proof would still be
+    resting on, which is the question the goal findings ask and the fallback
+    `grounding` uses to continue a chain through a node that never proved.
+    """
+    proved, seen, out = set(proved or ()), set(), []
+    stack = list(sketch.nodes[name][2])
+    while stack:
+        n = stack.pop(0)
+        if n in seen or n in proved or n in sketch.given:
+            continue
+        seen.add(n)
+        out.append(n)
+        stack += sketch.nodes[n][2]
+    return out
+
+
+def frontier_depth(sketch: Sketch, goal, grounded):
+    """Hops from `goal` to the furthest node on its route that is not grounded.
+
+    0 means the frontier is at the conjecture itself: everything the goal rests
+    on is established and only the goal is open. 1 means one obligation stands
+    between them, 2 that the obligation now rests on something open in turn.
+
+    This is the structural successor to `proxy_contact`'s artifact depth, and it
+    exists because the scheduler change would otherwise silence that signal.
+    The measurement it has to preserve: two derived-sketch runs both opened at
+    depth 1 -- one obligation, running and failing -- subdivided it at iteration
+    0 into intermediates that did not prove, went to depth 2, and neither
+    recovered in nine and ten further iterations.
+
+    The old depth read that off *which artifact produced a contact number*,
+    which worked only because a node with unproved parents was never scheduled
+    and so left no artifact. Every claim runs now, so the goal almost always has
+    an artifact and that depth would sit at 0 through exactly the edit it was
+    built to catch. Counting the hops instead measures the same thing directly
+    and depends on nothing about which searches happened to leave a file.
+
+    Grounded ancestors are not traversed: grounding is a least fixed point, so
+    everything above a grounded node is grounded too and can add no depth.
+    """
+    if not goal or goal not in sketch.nodes:
+        return None
+    ground, seen, best = set(grounded or ()), {goal: 0}, 0
+    queue = [goal]
+    while queue:
+        n = queue.pop(0)
+        for p in sketch.nodes[n][2]:
+            if p in sketch.given or p in ground:
+                continue
+            d = seen[n] + 1
+            if seen.get(p, -1) >= d:
+                continue
+            seen[p] = d
+            best = max(best, d)
+            queue.append(p)
+    return best
+
+
+def grounding(sketch: Sketch, results, proved=()):
+    """-> (grounded names, {node: assumptions it still rests on, nearest first}).
+
+    The soundness the layer barrier used to enforce by accident, stated instead.
+    A node is **grounded** when it proved and everything its proof rests on is
+    grounded, back to the problem's own axioms; a node that proved but rests on
+    something unproved is **conditional** -- a real implication, and not yet a
+    theorem of this problem.
+
+    What a node rests on is read from the run that actually happened, never from
+    its declared parents. Three ways those differ, and each one would ground or
+    condemn the wrong node:
+
+      * **The hints channel adds nothing to the axiom set.** A hint steers the
+        search; it is not assumed. A hints-channel proof therefore assumes
+        nothing and is grounded outright.
+      * **`Sketch.equations` drops `given` nodes**, because an axiom is already
+        in the problem file and re-supplying it would state it twice. So a
+        declared axiom parent is never an assumption, and `support` -- the
+        post-filter list carried on the job -- is the only list that says what
+        the prover really received.
+      * **A proof that never cites a supplied lemma is a proof without it.** The
+        certificate is a derivation; if it does not use an assumption, the
+        statement follows from the rest. So a node whose certificate names none
+        of its ungrounded support is grounded on what remains.
+
+    That last one is the one that fails silently. `used_support is None` means
+    *not attributed* -- a failed run, the hint channel, an artifact that is gone
+    -- and must never be read as "used nothing"; only a non-None value may
+    narrow what a node depends on. `_support_usage` documents the same rule at
+    the point the field is produced.
+
+    The verdict is read from `blueprint.best_row`, the same row a node's status
+    and timing come from. Reading a different one would let a node be grounded
+    on one direction's support and timed on the other's, and the two directions
+    of one node routinely differ in both.
+
+    Least fixed point, so nothing grounds itself and a cycle -- which `validate`
+    already forbids -- could not either. `proved` names nodes an earlier run
+    established, which arrive with no rows and are trusted exactly as `verify`
+    already trusts them.
+    """
+    from overtone.agent import blueprint
+
+    ground = set(sketch.given)
+    rows_by = {}
+    for r in results or ():
+        rows_by.setdefault(r.get("node"), []).append(r)
+
+    # What each node that proved would have to assume. Absent from `need`
+    # entirely means it did not prove, which is a different thing from assuming
+    # nothing and is why the chain walk below falls back to declared parents.
+    need = {}
+    for name in sketch.nodes:
+        if name in ground:
+            continue
+        best = blueprint.best_row(rows_by.get(name, ()))
+        if best is None:
+            if name in proved:
+                need[name] = ()        # established by an earlier run
+            continue
+        support = list(best.get("support") or ())
+        if best.get("channel") != "axioms":
+            support = []               # hints join no axiom set
+        used = best.get("used_support")
+        need[name] = tuple(support if used is None
+                           else [s for s in support if s in used])
+
+    changed = True
+    while changed:
+        changed = False
+        for name, assumed in need.items():
+            if name not in ground and all(a in ground for a in assumed):
+                ground.add(name)
+                changed = True
+
+    conditional = {}
+    for name, assumed in need.items():
+        if name in ground:
+            continue
+        seen, chain, stack = set(), [], list(assumed)
+        while stack:
+            a = stack.pop(0)
+            if a in seen or a in ground:
+                continue
+            seen.add(a)
+            chain.append(a)
+            # A node that never proved has no `need` entry, so the chain
+            # continues through what it was DECLARED to rest on -- otherwise the
+            # walk stops at the first dead assumption and reports a shorter
+            # dependency than the sketch actually claims.
+            stack += list(need[a] if a in need else sketch.nodes[a][2])
+        conditional[name] = tuple(chain)
+    return ground, conditional
+
+
 def channel_for(names, sketch, node, override=None, *, on_route=False):
     """"axioms" or "hints" for this set of supporting lemmas.
 
@@ -390,20 +591,6 @@ def _job(j):
     # this run's reading of the record rather than part of it.
     row.update(_support_usage(support, channel, r.proved, out_path))
     return row
-
-
-def _map(jobs, workers):
-    """Run jobs, inline at workers=1.
-
-    Inline is not just an optimisation: a ProcessPoolExecutor puts the work
-    behind a pickling boundary, so no test can substitute `runner.run` and a
-    changed `_job` signature surfaces only as an unpickling error in a live run.
-    That is exactly how a stale 10-tuple job site reached a real invocation.
-    """
-    if workers <= 1 or len(jobs) == 1:
-        return [_job(j) for j in jobs]
-    with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
-        return list(pool.map(_job, jobs))
 
 
 def _support_usage(support, channel, proved, out_path):
@@ -534,28 +721,111 @@ def _node_job(j):
     return [r for r in rows if r.get("result") != "Cancelled"] or rows
 
 
-def _map_nodes(jobs, workers):
-    """Run per-node jobs, inline at workers=1 so a test can substitute the runner."""
+def _route_to(sketch: Sketch, target):
+    """`target` and every ancestor of it, or empty when there is no target."""
+    if not target or target not in sketch.nodes:
+        return frozenset()
+    seen, stack = {target}, list(sketch.nodes[target][2])
+    while stack:
+        n = stack.pop()
+        if n not in seen:
+            seen.add(n)
+            stack += sketch.nodes[n][2]
+    return frozenset(seen)
+
+
+def _priority(name, sketch, proved, route):
+    """Sort key for the next node to start. Lower goes first.
+
+    A **priority, not a gate**. Every claim is attempted; this only decides the
+    order when there are more of them than there are workers.
+
+    Ready first -- every parent already proved -- because that node's result is
+    grounded the moment it lands, where a speculative one has to wait for its
+    assumptions and may never be worth anything. Then the target's own route,
+    so a run with more claims than slots spends the box on the conjecture rather
+    than on whatever sorts first alphabetically. Name last, to stay
+    deterministic: two runs of the same sketch must schedule the same way or
+    nothing about them is comparable.
+    """
+    ready = all(p in proved for p in sketch.nodes[name][2])
+    return (0 if ready else 1, 0 if name in route else 1, name)
+
+
+def _run_nodes(jobs, workers, sketch, *, proved=(), route=frozenset(), on_row=None):
+    """Run per-node jobs, keeping `workers` slots full until nothing is left.
+
+    The scheduler. There is no barrier and no readiness gate: every job is run,
+    and `_priority` only picks which one starts next. A slot that frees is
+    refilled immediately, and `proved` grows as rows land, so a node whose
+    parents have just proved jumps ahead of one still resting on assumptions.
+
+    Inline at `workers <= 1` is not an optimisation. A ProcessPoolExecutor puts
+    the work behind a pickling boundary where no test can substitute
+    `runner.run`, so a changed `_job` signature surfaces only as an unpickling
+    error in a live run -- which is exactly how a stale 10-tuple job site
+    reached a real invocation. The sequential path runs the same priority order
+    so the two agree on more than the final verdict.
+    """
+    pending = {j["node"]: j for j in jobs}
+    proved, out = set(proved or ()), []
+
+    def settle(node, rows):
+        out.extend(rows)
+        if any(r.get("proved") for r in rows):
+            proved.add(node)
+        if on_row:
+            on_row(node, rows)
+
+    def nxt():
+        return min(pending, key=lambda n: _priority(n, sketch, proved, route))
+
     if workers <= 1:
-        out = [_node_job({**j, "race": False}) for j in jobs]
-    elif len(jobs) == 1:
-        out = [_node_job(jobs[0])]
-    else:
-        with ProcessPoolExecutor(max_workers=min(len(jobs), workers)) as pool:
-            out = list(pool.map(_node_job, jobs))
-    return [row for rows in out for row in rows]
+        while pending:
+            n = nxt()
+            settle(n, _node_job({**pending.pop(n), "race": False}))
+        return out
+
+    in_flight = {}
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        while pending or in_flight:
+            while pending and len(in_flight) < workers:
+                n = nxt()
+                in_flight[pool.submit(_node_job, pending.pop(n))] = n
+            done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+            for fut in done:
+                settle(in_flight.pop(fut), fut.result())
+    return out
 
 
 def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
            node_flags=None, scope="parents", channel=None, directions=DIRECTIONS,
            workers=8,
            binary: str | None = None, known=(), prior_results=(),
-           reuse=True, ledger=None, prefer=None):
-    """Prove every node, in topological order, each in the scope its edges imply.
+           reuse=True, ledger=None, prefer=None, target=None):
+    """Prove every node, each in the scope its edges imply, keeping the pool full.
 
-    A node whose parents did not prove is skipped rather than attempted without
-    them -- attempting it anyway is what produced the "6 of 19 failed" reading
-    that scope later explained away.
+    **Every claim is attempted.** A node whose parents have not proved is run
+    anyway, and its result recorded as *conditional*: a proof of the implication,
+    not yet a theorem of the problem. `grounding` sorts the two apart at the end
+    and only grounded nodes count.
+
+    That replaces a rule that skipped such a node entirely, and the rule was
+    buying less than it looked. It could not make a result sounder -- `scope`
+    supplies a node's declared parents whether or not they proved, so the input
+    bytes, the ledger key and the verdict are identical either way; all it
+    decided was *when* the question got asked. What it cost was severe: one
+    failed ancestor removed a whole subtree from the run, and when that subtree
+    contained the goal there was no attempt, no artifact, and no goal contact,
+    so the loop's only veto went quiet. One run spent nine iterations that way.
+    Asking early is free whenever the parent eventually proves -- the ledger
+    answers the second time -- and when it never proves, the failed search is
+    still the listing candidates are mined from.
+
+    Scheduling is a priority, not a barrier (`_priority`, `_run_nodes`): ready
+    nodes first, then the target's route, and a slot that frees is refilled at
+    once. Pass `target` to bias toward the conjecture when there are more claims
+    than workers.
 
     **A failed node is not re-attempted standalone.** It was, for a real reason:
     the prover's soundness catches a wrong *statement* and nothing catches a
@@ -620,70 +890,87 @@ def verify(problem, sketch: Sketch, *, outdir: Path, budget=600, budgets=None,
         raise ValueError("this sketch assumes more than the problem does:\n  "
                          + "\n  ".join(bad))
 
-    for depth, layer in enumerate(sketch.layers(with_axioms=False), start=1):
-        runnable = [n for n in layer if n not in proved
-                    and all(p in proved for p in sketch.nodes[n][2])]
-        skipped = [n for n in layer if n not in runnable and n not in proved]
-        print(f"layer {depth}: {len(runnable)} node(s)"
-              + (f", skipped {skipped}" if skipped else ""), flush=True)
-        jobs = []
-        for n in runnable:
-            names = sketch.scope(n, scope)
-            ch = channel_for(names, sketch, n, channel)
-            lhs, rhs, _ = sketch.nodes[n]
-            # Try the direction that worked for this node before, when anything
-            # knows. Direction is strongly node-dependent -- trilinearity proves
-            # only under --flatten-goal and the alternating laws only under the
-            # other -- so no global order is right, and a wrong first guess costs
-            # a whole budget.
-            order = list(directions)
-            pref = (prefer or {}).get(n)
-            if pref in order:
-                order.remove(pref)
-                order.insert(0, pref)
-            # `equations` drops given axioms, so this is the list the prover
-            # actually receives and the only one a `parent_N` can be resolved
-            # against. Built once and carried on the job, because computing it
-            # twice is how the two would come to disagree.
-            supplied = [m for m in names if m not in sketch.given]
-            jobs.append({"problem": problem, "node": n, "lhs": lhs, "rhs": rhs,
-                         "eqs": sketch.equations(names), "support": supplied,
-                         "channel": ch,
-                         "directions": order, "budget": budgets.get(n, budget),
-                         "outdir": str(outdir), "binary": binary,
-                         "extra_flags": tuple(node_flags.get(n, ())),
-                         "reuse": reuse, "ledger": ledger})
-        if not jobs:
+    jobs = []
+    for n in sketch.topological():
+        if n in proved or n in sketch.given:
             continue
-        res = _map_nodes(jobs, workers)
-        results += res
+        names = sketch.scope(n, scope)
+        ch = channel_for(names, sketch, n, channel)
+        lhs, rhs, _ = sketch.nodes[n]
+        # Try the direction that worked for this node before, when anything
+        # knows. Direction is strongly node-dependent -- trilinearity proves
+        # only under --flatten-goal and the alternating laws only under the
+        # other -- so no global order is right, and a wrong first guess costs
+        # a whole budget.
+        order = list(directions)
+        pref = (prefer or {}).get(n)
+        if pref in order:
+            order.remove(pref)
+            order.insert(0, pref)
+        # `equations` drops given axioms, so this is the list the prover
+        # actually receives and the only one a `parent_N` can be resolved
+        # against. Built once and carried on the job, because computing it
+        # twice is how the two would come to disagree.
+        supplied = [m for m in names if m not in sketch.given]
+        jobs.append({"problem": problem, "node": n, "lhs": lhs, "rhs": rhs,
+                     "eqs": sketch.equations(names), "support": supplied,
+                     "channel": ch,
+                     "directions": order, "budget": budgets.get(n, budget),
+                     "outdir": str(outdir), "binary": binary,
+                     "extra_flags": tuple(node_flags.get(n, ())),
+                     "reuse": reuse, "ledger": ledger})
 
-        for n in runnable:
-            best = min((r for r in res if r["node"] == n and r["proved"]),
-                       key=lambda r: r["cpu"], default=None)
-            if best:
-                proved[n] = best
-                # Name the parents the certificate never cited. They are the
-                # candidates for a `set_parents` experiment, and saying so where
-                # the proof is reported is what makes them visible at all; the
-                # old line here reported only that a standalone retry had won,
-                # which was one bit and was never persisted.
-                dead = best.get("unused_support")
-                flag = f"  ({len(dead)} unused: {dead})" if dead else ""
-                print(f"  {n:<18} PROVED {best['direction']:<18} "
-                      f"{best['cpu']:>7.1f}s  {best['n_support']} as "
-                      f"{best['channel']}{flag}", flush=True)
-            else:
-                print(f"  {n:<18} unproven in both directions", flush=True)
+    print(f"verifying {len(jobs)} claim(s) on {workers} worker(s)", flush=True)
+
+    def report(n, rows):
+        best = min((r for r in rows if r["proved"]),
+                   key=lambda r: r["cpu"], default=None)
+        if best is None:
+            print(f"  {n:<18} unproven in both directions", flush=True)
+            return
+        proved[n] = best
+        # Name the parents the certificate never cited. They are the candidates
+        # for a `set_parents` experiment, and saying so where the proof is
+        # reported is what makes them visible at all; the old line here reported
+        # only that a standalone retry had won, which was one bit and was never
+        # persisted.
+        dead = best.get("unused_support")
+        flag = f"  ({len(dead)} unused: {dead})" if dead else ""
+        print(f"  {n:<18} PROVED {best['direction']:<18} "
+              f"{best['cpu']:>7.1f}s  {best['n_support']} as "
+              f"{best['channel']}{flag}", flush=True)
+
+    results += _run_nodes(jobs, workers, sketch, proved=set(proved),
+                          route=_route_to(sketch, target), on_row=report)
+
+    # Grounded only after everything has landed. A node can be conditional when
+    # its own run finishes and grounded ten minutes later when the assumption
+    # proves, and nothing has to re-run for that: both runs were handed the same
+    # equations, so the verdict was always about the same question.
+    ground, conditional = grounding(sketch, results, proved=set(proved))
+    claims = set(sketch.claims())
+    if conditional:
+        print(f"conditional: {len(conditional)} node(s) proved on unproved "
+              f"assumptions -- implications, not yet theorems", flush=True)
+        for n in sorted(conditional):
+            print(f"  {n:<18} assumes {list(conditional[n])}", flush=True)
 
     out = {"problem": problem, "scope": scope, "channel": channel or "auto",
            # Claims only: an axiom is not an achievement, and counting them
            # would inflate every ratio a run reports.
            "n_nodes": len(sketch.claims()),
-           "n_proved": len([n for n in proved if n not in sketch.given]),
+           # Grounded only, deliberately. Every ratio in `runs/` and
+           # `docs/FINDINGS.md` was computed when a node could not prove without
+           # its parents, and letting conditional results into this number would
+           # flatter a run whose assumptions never discharge.
+           "n_proved": len(claims & ground),
            "n_given": len(sketch.given),
-           "proved": {k: v["cpu"] for k, v in proved.items()},
-           "missing": [n for n in sketch.claims() if n not in proved],
+           "n_conditional": len(claims & set(conditional)),
+           "proved": {k: v["cpu"] for k, v in proved.items() if k in ground},
+           "grounded": {k: v["cpu"] for k, v in proved.items() if k in ground},
+           "all_proved": {k: v["cpu"] for k, v in proved.items()},
+           "conditional": {n: list(a) for n, a in sorted(conditional.items())},
+           "missing": [n for n in sketch.claims() if n not in ground],
            "results": results}
     (outdir / "dag.json").write_text(json.dumps(out, indent=2) + "\n")
     return out

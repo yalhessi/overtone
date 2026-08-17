@@ -30,7 +30,8 @@ from typing import Protocol
 from overtone import batch, problems
 from overtone.agent import blueprint, pricing, review as reviewlib
 from overtone.agent.dag import (DIRECTIONS, Sketch, attempt, channel_for, cost,
-                                diff, mined_parents, sibling_diff, verify)
+                                diff, frontier_depth, grounding, mined_parents,
+                                sibling_diff, unproved_ancestors, verify)
 from overtone.agent.pipeline import Budget
 
 ACTIONS = ("add_node", "remove_node", "set_parents", "subdivide", "restate",
@@ -51,9 +52,20 @@ class NodeState:
     lhs: str
     rhs: str
     parents: tuple
-    status: str          # proved | proved_scoped | slow | failed | blocked | pending
+    # proved | proved_scoped | slow | conditional | failed | blocked | pending
+    status: str
     cpu: float | None
     direction: str | None
+    # What this node's proof still rests on that has not itself been proved,
+    # nearest first. Non-empty means the node is an IMPLICATION and not yet a
+    # theorem of this problem: it verified, but only given assumptions.
+    #
+    # Authoritative, and deliberately not read off `status`. `state_of`
+    # overwrites the status with `slow` and `given`, so a conditional node can
+    # arrive here under three different labels -- and `conditional` is spelled
+    # without a `proved_` prefix precisely because several checks here ask
+    # `status.startswith("proved")` and must not count one.
+    assumes: tuple = ()
     # Parents supplied to the winning run that its proof certificate never
     # cited. Candidates for a `set_parents` experiment, not proven dead weight:
     # see `dag._support_usage`. Empty when the node did not prove, when the
@@ -204,6 +216,8 @@ def probation_drops(sketch, results, *, target=None, probe_node=None,
       * a node whose probation was reverted, in `done` -- the measurement came
         back and said no.
 
+    A parent that is not itself grounded is never dropped: see the loop below.
+
     And an edge is left alone when removing it would leave its parent with no
     children at all. That orphan is a new sink, and `_target_node` falls back to
     the unique sink when a sketch's goal is not the problem's conjecture -- so a
@@ -213,6 +227,7 @@ def probation_drops(sketch, results, *, target=None, probe_node=None,
     drop it deliberately.
     """
     actions, out = [], []
+    ground, _ = grounding(sketch, results)
     children = {n: 0 for n in sketch.nodes}
     for _, _, parents in sketch.nodes.values():
         for p in parents:
@@ -231,7 +246,14 @@ def probation_drops(sketch, results, *, target=None, probe_node=None,
         # the same parent in one turn cannot orphan it between them.
         drop = []
         for p in parents:
-            if p in unused and children.get(p, 0) > 1:
+            # Grounded parents only. An UNGROUNDED parent has not been
+            # established, so dropping it is not an optimisation -- it withdraws
+            # the sketch's claim that this node needs that lemma at all, which is
+            # a structural edit about the route and the agent's to make. The
+            # certificate evidence is not wasted: `dag.grounding` already reads
+            # the same `used_support` and grounds a node whose proof cited none
+            # of its open assumptions, without touching a single edge.
+            if p in unused and p in ground and children.get(p, 0) > 1:
                 children[p] -= 1
                 drop.append(p)
         if not drop:
@@ -280,30 +302,37 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
              slow=30, sources=(), history=(), findings=(), stalled=0,
              approach="", approaches_tried=(), iterations_on_approach=0,
              attempts=(), prev_target=None, outcome=None, spent=None,
-             proxy=None):
+             proxy=None, frontier=None):
     """Classify every node, and explain the ones that need explaining.
 
     Builds on `blueprint.statuses`, which already computes
-    proved/proved_scoped/failed/blocked/pending and is exercised by the renderer.
-    The refinement is the part a reviser needs: *slow* (proved but above the
-    diagnostic threshold, so a node is probably missing beneath it), why a
-    failure failed (`failure_kind`), and which supplied parents the proof
-    certificate never cited.
+    proved/proved_scoped/conditional/failed/blocked/pending and is exercised by
+    the renderer. The refinement is the part a reviser needs: *slow* (proved but
+    above the diagnostic threshold, so a node is probably missing beneath it),
+    why a failure failed (`failure_kind`), which supplied parents the proof
+    certificate never cited, and what a conditional proof still assumes.
     """
     outdir = Path(outdir)
     st = blueprint.statuses(sketch, results)
+    _, conditional = grounding(sketch, results)
     nodes, candidates, diffs, contact = [], {}, {}, {}
     for name, (lhs, rhs, parents) in sketch.nodes.items():
         s = st[name]
         status = s["status"]
         rows = [r for r in results if r["node"] == name]
         failure = None
+        assumes = tuple(conditional.get(name, ()))
         if name in getattr(sketch, "given", ()):
             # An axiom is an assumption, not an open claim. Left as `pending` it
             # reads as work outstanding: one prompt showed the model 15 of the
             # problem's own axioms as `pending`, three quarters of the node list,
             # inviting it to go and prove things that are true by definition.
             status = "given"
+        elif assumes:
+            # Conditional outranks slow. A conditional node's time was measured
+            # under assumptions that may never hold, so calling it slow would
+            # invite a subdivide aimed at a number that means nothing yet.
+            status = "conditional"
         elif status.startswith("proved") and s["cpu"] and s["cpu"] >= slow:
             status = "slow"
         elif status == "failed":
@@ -314,7 +343,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
         best = blueprint.best_row(rows)
         unused = (best or {}).get("unused_support") or ()
         nodes.append(NodeState(name, lhs, rhs, tuple(parents), status,
-                               s["cpu"], s["direction"],
+                               s["cpu"], s["direction"], assumes=assumes,
                                unused_support=tuple(unused), failure=failure))
         if status == "slow" or status.startswith("failed"):
             candidates[name] = _candidates(name, sketch, results,
@@ -342,7 +371,8 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
                  cpu_spent=c["cpu"] if spent is None else spent,
                  nodes=tuple(nodes), candidates=candidates, diffs=diffs,
                  contact=contact,
-                 target=target_of(attempts, prev_target, proxy),
+                 target=target_of(attempts, prev_target, proxy,
+                                  frontier=frontier),
                  outcome=dict(outcome or {}),
                  sources=tuple(sources), history=tuple(history),
                  findings=tuple(findings), stalled=stalled, approach=approach,
@@ -350,7 +380,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
                  iterations_on_approach=iterations_on_approach)
 
 
-def target_of(attempts, prev=None, proxy=None):
+def target_of(attempts, prev=None, proxy=None, frontier=None):
     """What the target attempt was asked and what it answered.
 
     `both` is the veto quantity (FINDINGS: it fell 162 -> 102 across an edit
@@ -379,7 +409,11 @@ def target_of(attempts, prev=None, proxy=None):
     if not contact and proxy:
         source, contact, depth = proxy
     if not attempts and not contact:
-        return {}
+        # `frontier_depth` is structural -- it counts hops in the sketch and
+        # needs no artifact -- so it survives the case where nothing left a
+        # reading. Dropping it here would blind `frontier_retreat` on exactly
+        # the iterations where the route is in the worst shape.
+        return {"frontier_depth": frontier} if frontier is not None else {}
 
     out = {}
     if attempts:
@@ -393,6 +427,8 @@ def target_of(attempts, prev=None, proxy=None):
                "reused": all(r.get("reused") for r in attempts),
                "skipped_unchanged": all(r.get("skipped_unchanged")
                                         for r in attempts)}
+    if frontier is not None:
+        out["frontier_depth"] = frontier
     if not contact:
         return out
 
@@ -463,12 +499,22 @@ OUTCOMES = ("solved", "productive", "regressed", "inconclusive", "invalid")
 
 
 def frontier_retreat(target, prev):
-    """`(was, now)` when an edit pushed the running frontier from the goal.
+    """`(was, now)` when an edit pushed the frontier away from the goal.
 
-    The signal both derived-sketch runs needed and neither had. `contact_depth`
-    is 0 when the target or the goal itself ran and larger when the nearest node
-    that still produces a search is further away; a subdivide into nodes that do
-    not prove raises it by one and removes the obligation from the run.
+    The signal both derived-sketch runs needed and neither had. `frontier_depth`
+    is 0 when everything the goal rests on is grounded and only the conjecture
+    is open, and larger when an obligation stands between them; a subdivide into
+    nodes that do not prove raises it by one.
+
+    It reads `frontier_depth`, not the `contact_depth` this originally scored.
+    That depth was the distance to whichever node produced a contact artifact,
+    which tracked the frontier only because a node with unproved parents was
+    never scheduled and so left no file. Every claim runs now, so the goal
+    almost always leaves an artifact and that number would sit at 0 through
+    exactly the edit this exists to catch. `dag.frontier_depth` counts the hops
+    instead and reproduces the same 1 -> 2 on both runs. `contact_depth` stays
+    on the target for what it does say: where the reading came from, and hence
+    whether two readings are comparable at all.
 
     Two guards, both learned from those runs. A DECREASE is never a retreat, so
     repairing the chain is free. And a previous depth of 0 does not count as a
@@ -479,7 +525,7 @@ def frontier_retreat(target, prev):
     """
     if not target or not prev:
         return None
-    was, now = prev.get("contact_depth"), target.get("contact_depth")
+    was, now = prev.get("frontier_depth"), target.get("frontier_depth")
     if was is None or now is None or was < 1 or now <= was:
         return None
     return was, now
@@ -729,22 +775,15 @@ def _target_node(sketch: Sketch, problem=None):
 
 
 def _blocking(sketch: Sketch, name, v):
-    """Ancestors of `name` that did not prove, so it is never scheduled.
+    """Ancestors of `name` that are not established, nearest first.
 
-    Returns the names in dependency order, nearest first, or [] when `name` is
-    reachable. `verify` skips a node whose parents are unproved, so a single
-    failed ancestor removes an entire subtree from the run silently.
+    The logic moved to `dag.unproved_ancestors`, which `verify` needs too. What
+    it means moved with the scheduler: a node with an unproved ancestor is no
+    longer skipped, so this is not "never scheduled" any more -- it is what the
+    node's proof would still be resting on. `v["proved"]` is grounded-only, so
+    an ancestor that proved conditionally still counts as unestablished.
     """
-    proved, seen, out = set(v.get("proved") or ()), set(), []
-    stack = list(sketch.nodes[name][2])
-    while stack:
-        n = stack.pop(0)
-        if n in seen or n in proved or n in sketch.given:
-            continue
-        seen.add(n)
-        out.append(n)
-        stack += sketch.nodes[n][2]
-    return out
+    return unproved_ancestors(sketch, name, v.get("proved") or ())
 
 
 def _probe_of(actions):
@@ -1018,9 +1057,13 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                 break
             seen[digest] = i
             retry_after_rejection = controller_edited = False
+            # `target` is a scheduling priority, not a gate: every claim is
+            # attempted, and this only decides what starts first when there are
+            # more of them than workers. The conjecture's own route goes first.
             v = verify(problem, sketch, outdir=outdir / f"iter{i:02d}",
                        budget=budget.node, budgets=budgets, workers=budget.workers,
-                       binary=binary, directions=directions, ledger=ledger)
+                       binary=binary, directions=directions, ledger=ledger,
+                       target=_target_node(sketch, problem))
             # The support for the target is the GOAL NODE's declared parents,
             # not every node that happens to have proved. Sending everything was
             # the loose-bag-as-axioms configuration this project measured as a
@@ -1051,27 +1094,28 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                 print(f"  GOAL DISCONNECTED: {goal} has no parents; "
                       f"{len(proved_now)} proved node(s) available", flush=True)
             elif goal is not None:
-                # A node is scheduled only when every parent has proved, so an
-                # ancestor that FAILS takes the goal out of the run entirely --
-                # it is not attempted, produces no artifact, and yields no
-                # contact, so the loop's whole veto goes quiet. One run
-                # subdivided its single obligation at iteration 0, replacing
-                # seven proved parents with three that failed, and spent the
-                # next nine iterations blind: the obligation never ran again.
-                # Blocked is worse than failed, and nothing said so.
+                # The goal is never removed from the run any more -- every claim
+                # is attempted -- so "BLOCKED, and therefore unmeasured" is no
+                # longer true and reporting it at reject severity every turn was
+                # noise the model correctly ignored for nine iterations running.
+                # What still costs something is that an ungrounded ancestor
+                # cannot be SUPPLIED: the attempt takes only the grounded part
+                # of the goal's declared parents, so an open route is a weaker
+                # attempt rather than no attempt. Said once, as a note, with the
+                # numbers; `frontier_retreat` scores the edit that made it worse.
                 dead = _blocking(sketch, goal, v)
                 if dead:
+                    have = [n for n in sketch.nodes[goal][2] if n in v["proved"]]
                     findings = tuple(findings) + (reviewlib.Finding(
-                        "controller", goal, reviewlib.REJECT,
-                        f"`{goal}` is BLOCKED, not merely unproved: it is never "
-                        f"scheduled because {dead} did not prove, so the target "
-                        f"is not attempted and no goal contact is measured. A "
-                        f"node that runs and fails is strictly better than one "
-                        f"that cannot run -- repair or drop {dead}, or point "
-                        f"the goal at parents that have proved.",
-                        {"blocked_by": dead}),)
-                    print(f"  GOAL BLOCKED by {dead} -- the target cannot be "
-                          f"attempted and contact is unmeasurable", flush=True)
+                        "controller", goal, reviewlib.NOTE,
+                        f"`{goal}`'s route is open: {dead} did not prove, so "
+                        f"the target attempt is supplied only the {len(have)} "
+                        f"grounded parent(s) {have} and not the rest. The goal "
+                        f"still runs and still leaves a search -- what is "
+                        f"missing is support, not measurement.",
+                        {"ungrounded": dead, "supplied": have}),)
+                    print(f"  goal route open: {dead} unproved; attempt gets "
+                          f"{len(have)} grounded parent(s)", flush=True)
             if goal is None:
                 # Silently attempting with no support would look like a cheap
                 # iteration and be a measurement of nothing.
@@ -1079,7 +1123,15 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                       "not named *goal, and not a unique sink) -- the target "
                       "is attempted with no support", flush=True)
             declared = list(sketch.nodes[goal][2]) if goal else []
-            support = [n for n in declared if n in v["proved"]]
+            # GROUNDED, not merely proved. This run is against the problem's own
+            # file with the conjecture as TPTP states it, so a lemma supplied
+            # here is assumed outright -- and a conditional lemma is one that
+            # verified only given something unproved. Supplying one would prove
+            # the conjecture from an assumption and report it as a result, which
+            # is exactly how RNG027-10 and RNG029-10 were briefly claimed and
+            # then withdrawn. `v["grounded"]` is the set with a chain back to
+            # the axioms; `v["all_proved"]` is the one that must never come here.
+            support = [n for n in declared if n in v["grounded"]]
             # on_route: `support` is the goal's own declared parents filtered to
             # what proved, so every member is on the route by construction even
             # while the set is incomplete.
@@ -1110,6 +1162,40 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                             outdir=outdir / f"iter{i:02d}", budget=budget.final,
                             binary=binary, directions=directions, ledger=ledger,
                             channel=ch, support=support)
+            # A node that proved on unproved assumptions is an implication, not
+            # a theorem: it does not count, it is not supplied to the target, and
+            # nothing else in the loop would say so. Reported per node, at note
+            # severity, because a conditional proof is a real and often useful
+            # result -- it says the implication closes, which is what backward
+            # reasoning is for. The one case that is worse than useless is an
+            # assumption whose OWN search came back `saturated`: twee closed it
+            # and the statement does not follow from the axioms, so everything
+            # resting on it is worth nothing and the model must stop building
+            # there.
+            def _saturated(name, rows=v["results"]):
+                return failure_kind([r for r in rows
+                                     if r["node"] == name]) == "saturated"
+
+            for name, assumed in sorted(v["conditional"].items()):
+                doomed = [x for x in assumed if _saturated(x)]
+                findings = tuple(findings) + (reviewlib.Finding(
+                    "controller", name,
+                    reviewlib.REJECT if doomed else reviewlib.NOTE,
+                    (f"`{name}` proved, but only GIVEN {list(assumed)}, which "
+                     f"{'has' if len(assumed) == 1 else 'have'} not been proved."
+                     f" It is an implication, not yet a theorem of this problem,"
+                     f" so it does not count as proved and is not supplied to "
+                     f"the target.")
+                    + (f" Worse: {doomed} SATURATED -- twee closed that search, "
+                       f"so it does not follow from the axioms and nothing "
+                       f"resting on it can. Repair or drop it before building "
+                       f"further here." if doomed else
+                       f" Proving {list(assumed)} would ground it at no further "
+                       f"cost: the same search is already recorded."),
+                    {"assumes": list(assumed), "saturated": doomed}),)
+            if v["conditional"]:
+                print(f"  {len(v['conditional'])} conditional proof(s): "
+                      f"{sorted(v['conditional'])}", flush=True)
             # Captured before `prev_support` is overwritten, or the scorer reads
             # this iteration's support as if it were the previous one's.
             lost_support = bool(prev_support) and not support
@@ -1126,7 +1212,9 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                              iterations_on_approach=i - approach_started,
                              attempts=a, prev_target=prev_target, spent=spent,
                              sources=sources,
-                             proxy=proxy_contact(sketch, goal, v["results"], v))
+                             proxy=proxy_contact(sketch, goal, v["results"], v),
+                             frontier=frontier_depth(sketch, goal,
+                                                     v["grounded"]))
 
             # Progress is the probe the agent declared coming true, not a node
             # newly proved. Proving nodes was the only thing this loop counted,
@@ -1174,8 +1262,10 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
 
             timeline_steps.append({"label": f"iter {i}", "sketch": sketch,
                                    "results": v["results"],
-                                   "note": (f"{v['n_proved']}/{v['n_nodes']} nodes, "
-                                            f"{spent:.0f}s CPU")})
+                                   "note": (f"{v['n_proved']}/{v['n_nodes']} grounded"
+                                            + (f" +{v['n_conditional']} conditional"
+                                               if v["n_conditional"] else "")
+                                            + f", {spent:.0f}s CPU")})
             results_of_last = v["results"]
 
             # A regression closes this branch instead of the run. The edits made
@@ -1203,6 +1293,12 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                 # node because its state said it was absent, and review rejected
                 # it as a duplicate because it had just been restored. Rebuild
                 # from the restored sketch's own last results.
+                #
+                # Grounding is recomputed against the RESTORED sketch: `v` grounds
+                # the sketch that was just judged and thrown away, and the
+                # frontier depth the agent is shown has to describe the graph
+                # that now exists or the next iteration differences two shapes.
+                restored_ground, _ = grounding(sketch, prev_results)
                 state = state_of(problem, sketch, prev_results,
                                  outdir / f"iter{i:02d}", iteration=i,
                                  slow=budget.slow, history=history,
@@ -1213,7 +1309,9 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                                  prev_target=None, outcome=outcome, spent=spent,
                                  sources=sources,
                                  proxy=proxy_contact(sketch, goal,
-                                                     prev_results, v))
+                                                     prev_results, v),
+                                 frontier=frontier_depth(sketch, goal,
+                                                         restored_ground))
                 state = replace(state, outcome=outcome, stalled=stalled)
 
             proposed = [] if proved else list(agent.act(state))
@@ -1223,7 +1321,15 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
             _report(findings)
             rec = {"iter": i, "digest": digest, "proved": proved,
                    "cpu_spent": round(spent, 1), "cpu_new": round(spent_new, 1),
+                   # `n_proved` is GROUNDED nodes, which is what it has always
+                   # counted and what every ratio in runs/ and FINDINGS.md was
+                   # computed against. Conditional proofs are recorded beside it,
+                   # never inside it: a run whose assumptions never discharge
+                   # must not read as a run that proved more.
                    "n_proved": v["n_proved"], "n_nodes": v["n_nodes"],
+                   "n_conditional": v["n_conditional"],
+                   "conditional": v["conditional"],
+                   "frontier_depth": state.target.get("frontier_depth"),
                    "missing": v["missing"],
                    "slow": [n.name for n in state.slow()],
                    "failing": [n.name for n in state.failing()],
@@ -1247,8 +1353,12 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                    "sources": list(state.sources)}
             batch.append_record(traj, rec)
             history.append(rec)
-            print(f"iter {i}: {v['n_proved']}/{v['n_nodes']} nodes, "
-                  f"{'PROVED' if proved else 'not proved'}, "
+            cond = (f" (+{v['n_conditional']} conditional)"
+                    if v["n_conditional"] else "")
+            depth = state.target.get("frontier_depth")
+            print(f"iter {i}: {v['n_proved']}/{v['n_nodes']} grounded{cond}, "
+                  + (f"frontier {depth}, " if depth is not None else "")
+                  + f"{'PROVED' if proved else 'not proved'}, "
                   f"{spent:.1f}s CPU charged ({spent_new:.1f}s new), "
                   f"{len(actions)} action(s)", flush=True)
 
