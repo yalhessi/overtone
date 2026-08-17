@@ -374,10 +374,10 @@ def target_of(attempts, prev=None, proxy=None):
     invent regressions, and this loop reverts them.
     """
     attempts = list(attempts or ())
-    contact, source = (_contact("final", attempts), "final") if attempts \
-        else (None, None)
+    contact, source, depth = (_contact("final", attempts), "final", 0) \
+        if attempts else (None, None, None)
     if not contact and proxy:
-        source, contact = proxy
+        source, contact, depth = proxy
     if not attempts and not contact:
         return {}
 
@@ -398,6 +398,10 @@ def target_of(attempts, prev=None, proxy=None):
 
     out["contact"] = contact
     out["contact_source"] = source
+    # How far from the conjecture this reading was taken. 0 is the target or the
+    # goal node itself; larger means the nearest thing that still runs is
+    # further away, which is what a subdivide into unproved nodes does.
+    out["contact_depth"] = depth
     if source != "final":
         # Careful with the wording: the attempt may have run and simply left no
         # measurable contact (a no-flatten run puts the goal nowhere in the
@@ -430,18 +434,26 @@ def target_of(attempts, prev=None, proxy=None):
 
 
 def proxy_contact(sketch: Sketch, goal, results, v):
-    """`(node, contact)` from the deepest node on the goal's route that ran.
+    """`(node, contact, depth)` from the nearest node to the goal that ran.
 
     The goal first, then its blocking chain nearest-first, so the reading is
     always from the closest thing to the conjecture that produced a search. A
     node that is blocked leaves no artifact, which is exactly why this exists.
+
+    `depth` is that node's distance from the goal, and it is the more useful
+    half. Two runs on a derived sketch both started at depth 1 -- the single
+    obligation itself running -- subdivided it at iteration 0 into intermediates
+    that did not prove, dropped to depth 2, and never recovered. The contact
+    numbers barely moved and their sources churned, so no delta was ever
+    comparable; the depth said plainly, at the iteration it happened, that the
+    running frontier had been pushed away from the conjecture.
     """
     if not goal or goal not in sketch.nodes:
         return None
-    for name in [goal] + _blocking(sketch, goal, v):
+    for depth, name in enumerate([goal] + _blocking(sketch, goal, v)):
         c = _contact(name, results)
         if c:
-            return name, c
+            return name, c, depth
     return None
 
 
@@ -450,8 +462,31 @@ def proxy_contact(sketch: Sketch, goal, results, v):
 OUTCOMES = ("solved", "productive", "regressed", "inconclusive", "invalid")
 
 
+def frontier_retreat(target, prev):
+    """`(was, now)` when an edit pushed the running frontier from the goal.
+
+    The signal both derived-sketch runs needed and neither had. `contact_depth`
+    is 0 when the target or the goal itself ran and larger when the nearest node
+    that still produces a search is further away; a subdivide into nodes that do
+    not prove raises it by one and removes the obligation from the run.
+
+    Two guards, both learned from those runs. A DECREASE is never a retreat, so
+    repairing the chain is free. And a previous depth of 0 does not count as a
+    baseline to fall from: one run reached depth 0 by DISCONNECTING the goal,
+    which makes it verify standalone and score the best contact of the run, so
+    treating that as the mark to hold would reward severing the goal and punish
+    reattaching it. A disconnected goal is reported on its own.
+    """
+    if not target or not prev:
+        return None
+    was, now = prev.get("contact_depth"), target.get("contact_depth")
+    if was is None or now is None or was < 1 or now <= was:
+        return None
+    return was, now
+
+
 def score_outcome(probe, *, target, nodes, prev_nodes, slow=30,
-                  applied=0, rejected=0, support_lost=False):
+                  applied=0, rejected=0, support_lost=False, retreat=None):
     """Classify the last turn's edits against the probe that turn declared.
 
     The loop had exactly one notion of progress -- a node newly proved -- and it
@@ -491,6 +526,13 @@ def score_outcome(probe, *, target, nodes, prev_nodes, slow=30,
         return done(f"goal contact fell by {-delta} rules touching both sides "
                     f"of the conjecture; the edits made the target harder to "
                     f"reach", "regressed")
+    if retreat:
+        was, now = retreat
+        return done(f"the nearest node to the conjecture that still runs moved "
+                    f"from {was} step(s) away to {now}: the edits replaced "
+                    f"something that was being searched with nodes that are "
+                    f"not, so nothing is now aimed at the goal. A node that "
+                    f"runs and fails beats one that cannot run", "regressed")
 
     now = {n.name: n for n in nodes}
     was = {n.name: n for n in prev_nodes}
@@ -1099,7 +1141,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                     probe, target=state.target, nodes=state.nodes,
                     prev_nodes=prev_nodes, slow=budget.slow,
                     applied=last_applied, rejected=last_rejected,
-                    support_lost=lost_support)
+                    support_lost=lost_support,
+                    retreat=frontier_retreat(state.target, prev_target))
                 print(f"  outcome: {outcome['outcome']} -- {outcome['why']}",
                       flush=True)
                 if outcome["outcome"] in ("solved", "productive"):

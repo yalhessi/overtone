@@ -3359,6 +3359,7 @@ def test_contact_falls_back_to_the_deepest_node_that_actually_ran(tmp_path):
 
     got = proxy_contact(s, "rng029-5_goal", rows, v)
     assert got and got[0] == "bridge" and got[1]["both"] == 7
+    assert got[2] == 1, "the bridge is one step from the goal"
 
     t = target_of([], None, got)               # no attempt at all
     assert t["contact"]["both"] == 7
@@ -3373,15 +3374,15 @@ def test_a_proxy_reading_is_never_differenced_against_another_source(tmp_path):
     from overtone.agent.loop import target_of
 
     first = target_of([], None, ("bridge", {"lhs": 1, "rhs": 1, "both": 9,
-                                            "rules": 10}))
+                                            "rules": 10}, 1))
     # same source: a delta is meaningful
     same = target_of([], first, ("bridge", {"lhs": 1, "rhs": 1, "both": 4,
-                                            "rules": 10}))
+                                            "rules": 10}, 1))
     assert same["contact_delta_both"] == -5
 
     # different proxy node: no delta, and it says why
     other = target_of([], first, ("deeper", {"lhs": 1, "rhs": 1, "both": 4,
-                                             "rules": 10}))
+                                             "rules": 10}, 2))
     assert "contact_delta_both" not in other
     assert "bridge" in other["contact_incomparable"]
 
@@ -3401,4 +3402,47 @@ def test_the_proxy_prefers_the_goal_itself_when_the_goal_ran(tmp_path):
     rows = [_contact_row(tmp_path, 2, node="rng029-5_goal"),
             _contact_row(tmp_path, 9, node="bridge")]
     got = proxy_contact(s, "rng029-5_goal", rows, {"proved": {"bridge"}})
-    assert got[0] == "rng029-5_goal" and got[1]["both"] == 2
+    assert got[0] == "rng029-5_goal" and got[1]["both"] == 2 and got[2] == 0
+
+
+def test_pushing_the_frontier_away_from_the_goal_is_a_regression():
+    """The signal two derived-sketch runs needed and neither had.
+
+    Both started at depth 1 -- the single obligation itself running and leaving
+    a search -- subdivided it at iteration 0 into intermediates that did not
+    prove, dropped to depth 2, and never recovered. Contact barely moved and its
+    sources churned, so no delta was ever comparable; the depth says plainly, at
+    the iteration it happens, that nothing is aimed at the goal any more.
+    """
+    from overtone.agent.loop import frontier_retreat, score_outcome
+
+    def at(d):
+        return {"contact_depth": d, "contact": {"both": 0}}
+
+    assert frontier_retreat(at(2), at(1)) == (1, 2)
+    o = score_outcome({}, target=at(2), nodes=(), prev_nodes=(), applied=1,
+                      retreat=(1, 2))
+    assert o["outcome"] == "regressed" and "1 step(s) away to 2" in o["why"]
+
+
+def test_the_frontier_guard_does_not_punish_repair_or_reward_severing():
+    """Two guards, both learned from the runs.
+
+    A decrease is never a retreat, so repairing the chain is free. And depth 0
+    is not a baseline to fall from: one run reached it by DISCONNECTING the
+    goal, which makes it verify standalone and score the best contact of the
+    run -- so treating that as the mark to hold would reward severing the goal
+    and punish reattaching it.
+    """
+    from overtone.agent.loop import frontier_retreat
+
+    def at(d):
+        return {"contact_depth": d, "contact": {"both": 0}}
+
+    assert frontier_retreat(at(1), at(2)) is None, "repair is free"
+    assert frontier_retreat(at(2), at(2)) is None, "standing still is not a fall"
+    assert frontier_retreat(at(1), at(0)) is None, \
+        "0 came from a disconnected goal; reattaching must not be punished"
+    assert frontier_retreat(at(4), at(None)) is None, "nothing to compare"
+    assert frontier_retreat(at(None), at(1)) is None
+    assert frontier_retreat({}, at(1)) is None and frontier_retreat(at(2), None) is None

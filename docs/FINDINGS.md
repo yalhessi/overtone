@@ -1904,6 +1904,50 @@ The derived scaffold itself needs no defence: it was ledger-served at zero cost
 and the model never had to invent it. What this run tests is what the loop does
 when the model damages a derived sketch, and the answer was: nothing, silently.
 
+### Depth to the running frontier is the signal; contact on a derived sketch is not
+
+Two model runs on derived sketches, same problem, same model, same budgets. Both
+made the same first move and lost the same way, and the numbers say why.
+
+|  | derive-01 | derive-02 |
+|---|---|---|
+| iterations / new CPU | 10 / 728.6s | 10 / 1,202.4s |
+| depth at iteration 0 | 1 | 1 |
+| after the iteration-0 subdivide | **2** | **2** |
+| recovered? | no, 9 iterations | no |
+| distinct contact sources | 3 | 6 |
+| iterations with a comparable delta | 7 | 2 |
+
+Both open at depth 1: the single obligation runs, fails, and leaves a search.
+Both subdivide it into intermediates that do not prove, which takes it out of
+the schedule entirely -- `verify` runs a node only when every parent has proved
+-- and the nearest thing to the conjecture that still runs is a step further
+away. Neither recovered.
+
+**Contact alone could not see this.** The proxy gives a reading at nine of ten
+iterations, but the source moves whenever the sketch does, and readings from
+different nodes cannot be differenced: derive-02 had six sources and a
+comparable delta at two iterations. **Depth could**, at the iteration it
+happened, in both runs, from one integer.
+
+So a depth increase now scores `regressed` and reverts, and it fires exactly at
+the deciding edit in both runs (and again at derive-01's iteration 8, 2 -> 4).
+
+Two guards, both learned from the same runs. A decrease is never a retreat, so
+repairing the chain costs nothing. And **depth 0 is not a baseline to fall
+from**: derive-02 reached it at iteration 5 by *disconnecting* the goal, which
+makes it verify standalone and score the best contact of either run (`both` 7).
+Holding that as the mark would reward severing the goal and punish reattaching
+it, so a previous depth of 0 is ignored -- a disconnected goal is reported on
+its own.
+
+**And the blocked-goal report added before this was the wrong instrument.** A
+derived sketch begins with a blocked goal by construction, since the bridge is
+unproved at iteration 0, so reporting it every turn is noise; the model read it
+at reject severity for nine consecutive iterations in both runs and correctly
+ignored it. What discriminates is not whether the goal is blocked but how far
+the blockage has pushed the frontier.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.
