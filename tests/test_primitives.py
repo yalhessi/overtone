@@ -3323,3 +3323,82 @@ def test_a_blocked_goal_is_reported_as_worse_than_a_failing_one():
     assert _blocking(s, "rng029-5_goal", v) == ["mid", "bad"]
     # once the chain proves, nothing is reported
     assert _blocking(s, "rng029-5_goal", {"proved": {"ok", "mid", "bad"}}) == []
+
+
+# ------------------------------------------------------- proxy goal contact
+
+def _contact_row(tmp, both, node="final", direction="--flatten-goal"):
+    p = tmp / f"{node}.{both}.fail.out"
+    p.write_text("  Goal 1 (g): multiply(a, b) = multiply(b, a).\n"
+                 "  Axiom 9 (flattening): multiply3 = multiply(a, b).\n"
+                 "  Axiom 10 (flattening): multiply4 = multiply(b, a).\n"
+                 + "".join(f"(1.0) {i + 1}. add(multiply3, multiply4) -> z{i}\n"
+                           for i in range(both)))
+    return {"node": node, "direction": direction, "proved": False,
+            "result": "Timeout", "channel": "axioms", "support": ["x"],
+            "n_support": 1, "cpu": 60.0, "output": str(p)}
+
+
+def test_contact_falls_back_to_the_deepest_node_that_actually_ran(tmp_path):
+    """A derived sketch makes an unattempted target the normal case: the goal's
+    only parent is the bridge, so until the bridge proves there is no support,
+    no attempt, no contact and therefore no veto. One run went ten iterations
+    that way.
+
+    The bridge is an exact restatement of the conjecture, so its own
+    verification artifact measures the same content -- and it costs nothing,
+    because that run already happened.
+    """
+    from overtone.agent.loop import proxy_contact, target_of
+
+    s = Sketch({"deep": ("commutator(X,Y)", "commutator(Y,X)", []),
+                "bridge": ("associator(X,Y,Z)", "additive_identity", ["deep"]),
+                "rng029-5_goal": ("multiply(X,Y)", "multiply(Y,X)", ["bridge"])})
+    rows = [_contact_row(tmp_path, 7, node="bridge")]
+    v = {"proved": set()}                      # nothing proved: goal is blocked
+
+    got = proxy_contact(s, "rng029-5_goal", rows, v)
+    assert got and got[0] == "bridge" and got[1]["both"] == 7
+
+    t = target_of([], None, got)               # no attempt at all
+    assert t["contact"]["both"] == 7
+    assert t["contact_source"] == "bridge"
+    assert "proxy" in t["contact_is_proxy"] or "closest" in t["contact_is_proxy"]
+
+
+def test_a_proxy_reading_is_never_differenced_against_another_source(tmp_path):
+    """The bridge scored `both: 0` at 60s where real target attempts on the same
+    problem scored 152 and 21. Differencing across that boundary would invent
+    regressions, and this loop reverts them."""
+    from overtone.agent.loop import target_of
+
+    first = target_of([], None, ("bridge", {"lhs": 1, "rhs": 1, "both": 9,
+                                            "rules": 10}))
+    # same source: a delta is meaningful
+    same = target_of([], first, ("bridge", {"lhs": 1, "rhs": 1, "both": 4,
+                                            "rules": 10}))
+    assert same["contact_delta_both"] == -5
+
+    # different proxy node: no delta, and it says why
+    other = target_of([], first, ("deeper", {"lhs": 1, "rhs": 1, "both": 4,
+                                             "rules": 10}))
+    assert "contact_delta_both" not in other
+    assert "bridge" in other["contact_incomparable"]
+
+    # a real attempt after a proxy is also not comparable
+    real = target_of([_contact_row(tmp_path, 3)], first, None)
+    assert real["contact_source"] == "final"
+    assert "contact_delta_both" not in real
+
+
+def test_the_proxy_prefers_the_goal_itself_when_the_goal_ran(tmp_path):
+    """Nearest to the conjecture wins: the proxy exists because the goal was
+    blocked, not to replace it when it runs."""
+    from overtone.agent.loop import proxy_contact
+
+    s = Sketch({"bridge": ("associator(X,Y,Z)", "additive_identity", []),
+                "rng029-5_goal": ("multiply(X,Y)", "multiply(Y,X)", ["bridge"])})
+    rows = [_contact_row(tmp_path, 2, node="rng029-5_goal"),
+            _contact_row(tmp_path, 9, node="bridge")]
+    got = proxy_contact(s, "rng029-5_goal", rows, {"proved": {"bridge"}})
+    assert got[0] == "rng029-5_goal" and got[1]["both"] == 2

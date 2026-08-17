@@ -279,7 +279,8 @@ def probation_verdicts(active, results):
 def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
              slow=30, sources=(), history=(), findings=(), stalled=0,
              approach="", approaches_tried=(), iterations_on_approach=0,
-             attempts=(), prev_target=None, outcome=None, spent=None):
+             attempts=(), prev_target=None, outcome=None, spent=None,
+             proxy=None):
     """Classify every node, and explain the ones that need explaining.
 
     Builds on `blueprint.statuses`, which already computes
@@ -340,7 +341,8 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
     return State(problem=problem, iteration=iteration,
                  cpu_spent=c["cpu"] if spent is None else spent,
                  nodes=tuple(nodes), candidates=candidates, diffs=diffs,
-                 contact=contact, target=target_of(attempts, prev_target),
+                 contact=contact,
+                 target=target_of(attempts, prev_target, proxy),
                  outcome=dict(outcome or {}),
                  sources=tuple(sources), history=tuple(history),
                  findings=tuple(findings), stalled=stalled, approach=approach,
@@ -348,7 +350,7 @@ def state_of(problem, sketch: Sketch, results, outdir: Path, *, iteration=0,
                  iterations_on_approach=iterations_on_approach)
 
 
-def target_of(attempts, prev=None):
+def target_of(attempts, prev=None, proxy=None):
     """What the target attempt was asked and what it answered.
 
     `both` is the veto quantity (FINDINGS: it fell 162 -> 102 across an edit
@@ -356,41 +358,91 @@ def target_of(attempts, prev=None):
     iteration's value travels with it so the agent reads a change rather than a
     level -- a level is the number it must never maximise, and a fall is the
     only reading that carries evidence.
+
+    `proxy` is `(node, contact)` from the deepest node on the goal's route that
+    actually ran, used when the target itself was not attempted. A derived
+    sketch makes that the normal case: the goal's only parent is the bridge, so
+    until the bridge proves there is no support, no attempt, no contact, and
+    therefore no veto -- one run went ten iterations that way. The bridge is an
+    exact restatement of the conjecture, so its own verification artifact
+    measures the same content, and it costs nothing because the run already
+    happened.
+
+    Readings from different sources are NOT comparable and never produce a
+    delta. The bridge scored `both: 0` at 60s where real target attempts on the
+    same problem scored 152 and 21; differencing across that boundary would
+    invent regressions, and this loop reverts them.
     """
     attempts = list(attempts or ())
-    if not attempts:
+    contact, source = (_contact("final", attempts), "final") if attempts \
+        else (None, None)
+    if not contact and proxy:
+        source, contact = proxy
+    if not attempts and not contact:
         return {}
-    contact = _contact("final", attempts)
-    best = next((r for r in attempts if r.get("proved")), attempts[0])
-    out = {"proved": any(r.get("proved") for r in attempts),
-           "result": best.get("result"),
-           "channel": best.get("channel"),
-           "support": list(best.get("support") or []),
-           "n_support": best.get("n_support"),
-           "cpu": round(sum(r.get("cpu") or 0.0 for r in attempts), 1),
-           "reused": all(r.get("reused") for r in attempts),
-           "skipped_unchanged": all(r.get("skipped_unchanged")
-                                    for r in attempts)}
-    if contact:
-        out["contact"] = contact
-        # A delta is only meaningful between comparable configurations, and the
-        # empty-support run is the one configuration FINDINGS says is NOT
-        # comparable: supplying nothing scores the highest contact ever measured
-        # (371 against 171 for three parents and 162 for six) and proves
-        # nothing. Using it as the reference would make the first edit that
-        # supplies a real lemma look like a large regression -- and this loop
-        # REVERTS regressions, so it would undo every genuine step and keep the
-        # configuration already known to fail.
-        if (prev and prev.get("contact") and prev.get("n_support")
-                and out["n_support"]):
-            out["contact_previous"] = prev["contact"]
-            out["contact_delta_both"] = (contact["both"]
-                                         - prev["contact"]["both"])
-        elif prev and prev.get("contact"):
-            out["contact_incomparable"] = (
-                "no delta: one of the two runs supplied no lemmas, and contact "
-                "is highest when nothing is supplied")
+
+    out = {}
+    if attempts:
+        best = next((r for r in attempts if r.get("proved")), attempts[0])
+        out = {"proved": any(r.get("proved") for r in attempts),
+               "result": best.get("result"),
+               "channel": best.get("channel"),
+               "support": list(best.get("support") or []),
+               "n_support": best.get("n_support"),
+               "cpu": round(sum(r.get("cpu") or 0.0 for r in attempts), 1),
+               "reused": all(r.get("reused") for r in attempts),
+               "skipped_unchanged": all(r.get("skipped_unchanged")
+                                        for r in attempts)}
+    if not contact:
+        return out
+
+    out["contact"] = contact
+    out["contact_source"] = source
+    if source != "final":
+        # Careful with the wording: the attempt may have run and simply left no
+        # measurable contact (a no-flatten run puts the goal nowhere in the
+        # rewrite system), which is a different situation from not running at
+        # all. Say where the number came from, not what did not happen.
+        out["contact_is_proxy"] = (
+            f"not measured on the target: this is `{source}`'s own run, which "
+            f"is the closest node to the conjecture that produced a search")
+    # A delta needs the same measurement twice. Two ways it can fail to be:
+    # the source changed (a proxy against a real attempt, or one proxy node
+    # against another), or one side supplied no lemmas at all -- and supplying
+    # nothing scores the highest contact ever measured here (371 against 162 for
+    # six parents), so using it as the reference would make the first real
+    # lemma read as a large regression and get reverted.
+    same = prev and prev.get("contact") and \
+        prev.get("contact_source") == source
+    comparable = same and (source != "final"
+                           or (prev.get("n_support") and out.get("n_support")))
+    if comparable:
+        out["contact_previous"] = prev["contact"]
+        out["contact_delta_both"] = contact["both"] - prev["contact"]["both"]
+    elif prev and prev.get("contact"):
+        out["contact_incomparable"] = (
+            f"no delta: this reading is from {source!r} and the previous one "
+            f"from {prev.get('contact_source')!r}"
+            if not same else
+            "no delta: one of the two runs supplied no lemmas, and contact is "
+            "highest when nothing is supplied")
     return out
+
+
+def proxy_contact(sketch: Sketch, goal, results, v):
+    """`(node, contact)` from the deepest node on the goal's route that ran.
+
+    The goal first, then its blocking chain nearest-first, so the reading is
+    always from the closest thing to the conjecture that produced a search. A
+    node that is blocked leaves no artifact, which is exactly why this exists.
+    """
+    if not goal or goal not in sketch.nodes:
+        return None
+    for name in [goal] + _blocking(sketch, goal, v):
+        c = _contact(name, results)
+        if c:
+            return name, c
+    return None
 
 
 # What an iteration's edits turned out to be worth, judged against the probe
@@ -1031,7 +1083,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                              approach=approach, approaches_tried=tried,
                              iterations_on_approach=i - approach_started,
                              attempts=a, prev_target=prev_target, spent=spent,
-                             sources=sources)
+                             sources=sources,
+                             proxy=proxy_contact(sketch, goal, v["results"], v))
 
             # Progress is the probe the agent declared coming true, not a node
             # newly proved. Proving nodes was the only thing this loop counted,
@@ -1115,7 +1168,9 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                                  iterations_on_approach=i - approach_started,
                                  attempts=prev_attempts_before,
                                  prev_target=None, outcome=outcome, spent=spent,
-                                 sources=sources)
+                                 sources=sources,
+                                 proxy=proxy_contact(sketch, goal,
+                                                     prev_results, v))
                 state = replace(state, outcome=outcome, stalled=stalled)
 
             proposed = [] if proved else list(agent.act(state))
@@ -1130,7 +1185,14 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                    "slow": [n.name for n in state.slow()],
                    "failing": [n.name for n in state.failing()],
                    "diffs": state.diffs, "actions": actions,
+                   # Both sets: `findings` is the review of what the agent just
+                   # proposed, and `state.findings` is what it was SHOWN before
+                   # proposing -- the disconnected-goal and blocked-goal reports
+                   # among them. Recording only the first lost every controller
+                   # finding that steered a turn, which is exactly what the
+                   # trajectory exists to preserve.
                    "findings": [f.to_json() for f in findings],
+                   "shown_to_agent": [f.to_json() for f in state.findings],
                    "stalled": stalled, "approach": approach,
                    # the sketch that was judged, not the one a rollback restored
                    "target": judged_target, "outcome": outcome,
