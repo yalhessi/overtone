@@ -39,6 +39,7 @@ RNG025-4 proves in 371.9s, RNG025-5 times out, and still times out at 4000s.
 """
 import json
 import re
+import time
 import multiprocessing as mp
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
@@ -719,6 +720,107 @@ def _node_job(j):
     # A cancelled run answered nothing, so it is not a result -- only the rows
     # that reached a verdict are reported.
     return [r for r in rows if r.get("result") != "Cancelled"] or rows
+
+
+def _support_worker(j, cancel, q):
+    """One (assumption set, direction) attempt, reporting through `q`."""
+    try:
+        row = _job({**j, "cancel": cancel})
+    except Exception as e:                                        # noqa: BLE001
+        row = {"node": j["node"], "direction": j["direction"],
+               "channel": j["channel"], "n_support": len(j["eqs"]),
+               "result": f"Error: {e}", "proved": False, "cpu": 0.0,
+               "wall": 0.0, "support": list(j.get("support") or ()),
+               "used_support": None, "unused_support": None}
+    q.put({**row, "label": j["label"]})
+
+
+def race_support(problem, lhs, rhs, candidates, *, outdir: Path, budget=300,
+                 directions=DIRECTIONS, workers=8, binary=None, ledger=None,
+                 reuse=True, channel="axioms", node="probe"):
+    """Attempt one statement under many assumption sets, stopping at the first proof.
+
+    Which lemmas a node is given decides whether it proves at all, the space is
+    combinatorial, and the signal is close to binary. `right_moufang` proves in
+    197.8s from exactly three lemmas and times out if any one is removed OR if a
+    fourth true, universal, 0.0s lemma is added; `middle_moufang`, one hop away,
+    tolerates additions at 2x and is 27s FASTER without one of its recorded
+    parents. Nothing about a lemma predicts which it will be, and the certificate
+    cannot steer the choice: the parent worth dropping there is one the proof
+    CITES, so `unused_support` cannot see it (FINDINGS). Measurement is the only
+    way through, and several sets at once is the only affordable measurement.
+
+    **Everything stops at the first proof.** The remaining arms are answering a
+    question that no longer has value -- the same argument the goal-direction
+    race already makes, where a losing arm burned its whole budget for nothing.
+    Cancellation is cooperative through one `mp.Event` shared by every arm, so a
+    set still queued when the winner lands never starts and one in flight is
+    killed. Forked processes rather than a pool, for the two reasons `_node_job`
+    gives: an Event cannot be pickled into a `ProcessPoolExecutor`, and
+    `runner.run` measures CPU as a RUSAGE_CHILDREN delta, which is process-wide
+    and would charge every arm the others' time.
+
+    `candidates` is `[(label, [names], [(lhs, rhs), ...])]` -- what to call the
+    set, the node names for attribution, and the equations to supply.
+
+    -> (winning label or None, rows). A cancelled arm answered nothing, so it is
+    dropped from the rows and never recorded in the ledger, as in `_node_job`.
+    """
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+    jobs = []
+    for label, names, eqs in candidates:
+        for direction in directions:
+            jobs.append({
+                "problem": problem, "node": f"{node}.{label}", "label": label,
+                "lhs": lhs, "rhs": rhs, "eqs": list(eqs),
+                "support": list(names), "channel": channel,
+                "direction": direction, "budget": budget,
+                "outdir": str(outdir), "binary": binary,
+                "reuse": reuse, "ledger": ledger})
+
+    ctx = mp.get_context("fork")
+    cancel, q = ctx.Event(), ctx.Queue()
+    pending, running, rows = list(jobs), [], []
+    started = received = 0
+    winner = None
+    try:
+        while True:
+            # Reap FIRST. Dead workers left in `running` keep the pool looking
+            # full, and then nothing new starts while nothing is outstanding --
+            # which is a spin, not a wait.
+            running = [p for p in running if p.is_alive()]
+            while (pending and len(running) < max(1, workers)
+                   and not cancel.is_set()):
+                j = pending.pop(0)
+                p = ctx.Process(target=_support_worker, args=(j, cancel, q),
+                                daemon=True)
+                p.start()
+                running.append(p)
+                started += 1
+            if received >= started:
+                # Nothing outstanding: the field is exhausted, or the winner has
+                # already stopped it.
+                if not pending or cancel.is_set():
+                    break
+                time.sleep(0.05)      # a worker has reported and not yet exited
+                continue
+            row = q.get()
+            received += 1
+            rows.append(row)
+            if row.get("proved") and winner is None:
+                winner = row["label"]
+                cancel.set()
+                print(f"  WON by {winner} in {row['cpu']:.1f}s "
+                      f"({row['direction']}); stopping "
+                      f"{len(pending) + len(running) - 1} other attempt(s)",
+                      flush=True)
+    finally:
+        for p in running:
+            p.join(timeout=30)
+            if p.is_alive():
+                p.terminate()
+    return winner, [r for r in rows if r.get("result") != "Cancelled"]
 
 
 def _route_to(sketch: Sketch, target):

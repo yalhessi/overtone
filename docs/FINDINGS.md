@@ -1948,6 +1948,119 @@ at reject severity for nine consecutive iterations in both runs and correctly
 ignored it. What discriminates is not whether the goal is blocked but how far
 the blockage has pushed the frontier.
 
+## The assumption set is the binding constraint, and it is not monotone (2026-08-17)
+
+Established while checking, at Yousef's insistence, whether a "this decomposition
+does not work" conclusion was really about the decomposition or about a badly
+chosen assumption set. It was worth checking: one of the two conclusions it was
+testing turned out to be wrong, and the check produced a sharper result than the
+thing it was auditing.
+
+All timings are the deterministic build, 300s node budget, both goal directions
+raced, one sample per configuration. Reproduction drift against the archived
+manual run is about 10% (`right_moufang` 197.8s here against 192.6s recorded,
+`middle_moufang` 124.2s against 112.2s), so differences under ~25s are not
+readable.
+
+### Each node has a core, a set of poisons, and ballast -- and they differ per node
+
+Sensitivity to the supplied set is NOT the single rule "more is worse". Two nodes
+of the same family, one hop apart on the same route, behave completely
+differently.
+
+`right_moufang` is a knife edge. It proves in 197.8s from exactly
+`{assoc_cyclic, assoc_def_246, assoc_def_247}` and from nothing else tried:
+dropping any one member times out, and so does ADDING `assoc_def_add` -- which is
+universal, proves in 0.0s, and is the lemma the other two are built from. Adding
+`cp24`, also true and also cheap, likewise times out.
+
+`middle_moufang`, its child, has a tolerance band:
+
+    manual four                            124.2s
+    drop assoc_cyclic                       97.0s     FASTER than the manual set
+    drop assoc_def_246                     216.1s
+    drop assoc_def_247                     timeout
+    drop right_moufang                     timeout
+    add assoc_def_add                      233.1s
+    add assoc_xyx                          219.0s
+    add flexible                           timeout
+
+So `assoc_def_247` and `right_moufang` are core, `assoc_cyclic` is ballast that
+costs 27s, `assoc_def_add` and `assoc_xyx` are tolerated at roughly 2x, and
+`flexible` is a poison -- true, cheap, on the route, and fatal here while
+harmless elsewhere. Which lemma is which cannot be read off the lemma; it is a
+property of the pair.
+
+### A CITED parent can still be worth dropping
+
+The mechanism that already exists for this -- `probation_drops` on
+`unused_support` -- cannot find the 27s improvement above, because the parent it
+would need to drop is cited:
+
+    m1 (manual four)   124.2s   used=[assoc_cyclic, assoc_def_246,
+                                      assoc_def_247, right_moufang]  UNCITED=[]
+    m2 (without it)     97.0s
+
+`_support_usage` already warns of the converse, that an uncited parent is not
+thereby proven droppable. This is the other direction and it is worse: removing
+an axiom changes the rewrite system, so twee finds a DIFFERENT and shorter proof,
+and the certificate of the run you have cannot predict that. Citation is a fact
+about the proof found, not about whether the parent helped the search. Probation
+therefore addresses only the uncited half of the space, and in this instance the
+wrong half. Assumption-set choice has to be driven by measurement.
+
+### The derived seed's obligation resists 45 assumption sets
+
+`derive.py` reduces the conjecture to one obligation, the bridge
+
+    associator(X,Y,multiply(Z,X)) = multiply(X,associator(Y,Z,X))
+
+and every loop run on record attempts it with the same 7 parents and times out at
+60s, never `saturated`. Swept properly it fails from standalone upward: 12 sets
+in the first pass and 39 in the second -- every singleton over a 12-lemma pool,
+every pair over the 7 plausible ones, and six triples including
+`{def_246, def_247, perm_201}`, which is the exact structural analogue of
+`right_moufang`'s working triple. Nothing proves at 300s.
+
+This does not show the bridge is unprovable; there are 220 triples over that pool
+and six were tried, and `right_moufang` demonstrates a single triple can be the
+only one that works. What it does show is that the bridge is a bad decomposition
+TARGET: the conjecture itself proves in 97-124s from four parents, so the seed
+reduced a reachable goal to an obligation that is harder than it, and the
+successful manual proof never proves the bridge at all.
+
+### The definitional rearrangements are derivable and were missing
+
+`derive.py` emits additivity, polarizations and permutation symmetries, and every
+one of them relates associators to associators; the conjecture is pure
+`multiply`. The rules that cross between the two vocabularies are mechanically
+derivable and were absent. `associator(X,Y,Z) + X(YZ) = (XY)Z` expands to zero,
+so it is universal and checkable; the two variants the manual route uses are that
+composed with lemmas the seed ALREADY derives --
+
+    def_246 residual = (X,Y,Z) - (Y,Z,X)  = assoc_cyclic     (= associator_perm_201)
+    def_247 residual = (X,Y,Z) + (Y,X,Z)  = alt12_additive   (= left_alternative_polar)
+
+-- and all three ground in 0.0s once added. Adding them does not make the bridge
+provable, which is what condemns the bridge rather than the lemma set.
+
+### Most of a hard node's derivation is already in the loop's evidence
+
+`right_moufang`'s own proof is 131 lemmas, 26 deep. Cross-referenced against six
+loop runs' evidence banks, **23 of the 27 steps on its critical path are already
+there**, including the lemma directly beneath it,
+`associator(Y,Z,multiply(X,Y)) = associator(X,Y,multiply(Z,Y))`, which is in 6 of
+6 banks and which takes `right_moufang` from 192.6s to 0.0s when supplied. The
+loop derives nearly the whole derivation and never assembles it -- but per the
+knife-edge result above, assembling it is not the easy part either.
+
+`middle_moufang` fails differently: its critical path is 14 steps, 9 are in the
+banks, and the 5 missing ones are d8 through d12 unbroken -- the
+product-of-products manipulation, which no run's search produces at all. A
+scattered gap and a contiguous one are different problems and should not be
+reported as one.
+
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.

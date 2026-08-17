@@ -4252,3 +4252,119 @@ def test_an_empty_lookup_says_which_kind_of_empty_it_is(tmp_path):
     # 4. A normal hit carries no explanation at all.
     r = bank.page(contains="associator", sketch=Sketch({}))
     assert r["n_matching"] == 1 and "why_empty" not in r
+
+
+# ------------------------------------------------- racing assumption sets
+
+def test_racing_assumption_sets_stops_the_field_at_the_first_proof(tmp_path,
+                                                                   monkeypatch):
+    """Which lemmas a node is given decides whether it proves at all, the space
+    is combinatorial, and the certificate cannot steer the choice -- the parent
+    worth dropping from `middle_moufang` is one its proof CITES. So sets get
+    measured, several at once. The moment one proves, every other arm is
+    answering a question with no value left, exactly as for the losing goal
+    direction that once burned 300.3s while its winner took 0.5s.
+    """
+    import time as _time
+    from overtone import runner
+    from overtone.agent import dag
+
+    class R:
+        def __init__(s, ok, cpu):
+            s.proved, s.cpu, s.wall, s.output = ok, cpu, cpu, "x"
+            s.status = "Unsatisfiable" if ok else "Timeout"
+
+    def fake(path, flags, budget, cancel=None, **kw):
+        # Only the two-lemma set proves, and quickly. Everything else would sit
+        # out the full budget if nothing stopped it.
+        if "parent_2" in Path(path).read_text():
+            return R(True, 0.1)
+        for _ in range(600):
+            if cancel is not None and cancel.is_set():
+                r = R(False, 0.5)
+                r.status = "Cancelled"
+                return r
+            _time.sleep(0.01)
+        return R(False, float(budget))
+
+    monkeypatch.setattr(runner, "run", fake)
+    cands = [(f"c{i}", ["a"], [("multiply(X,X)", "add(X,X)")]) for i in range(6)]
+    cands.append(("winner", ["a", "b"], [("multiply(X,X)", "add(X,X)"),
+                                         ("add(X,Y)", "add(Y,X)")]))
+
+    started = _time.monotonic()
+    won, rows = dag.race_support(
+        "RNG029-5", "commutator(X,Y)", "commutator(Y,X)", cands,
+        outdir=tmp_path, budget=300, workers=16, binary="/bin/true",
+        ledger=tmp_path / "l.jsonl", directions=["--flatten-goal"])
+    elapsed = _time.monotonic() - started
+
+    assert won == "winner", (won, [(r["label"], r["result"]) for r in rows])
+    assert elapsed < 6.0, f"the field was not stopped ({elapsed:.1f}s)"
+    assert not any(r.get("result") == "Cancelled" for r in rows), \
+        "a cancelled arm answered nothing and is not a result"
+
+
+def test_a_race_that_nobody_wins_still_reports_every_arm(tmp_path, monkeypatch):
+    """The negative is the common case and the one that has to be trustworthy:
+    45 assumption sets for the derived bridge and not one proved. A sweep that
+    quietly lost arms would have made that unreadable."""
+    from overtone import runner
+    from overtone.agent import dag
+
+    class Fail:
+        status, proved, cpu, wall, output = "Timeout", False, 1.0, 1.0, "x"
+
+    monkeypatch.setattr(runner, "run", lambda *a, **k: Fail())
+    cands = [(f"c{i}", ["a"], [("multiply(X,X)", "add(X,X)")]) for i in range(5)]
+    won, rows = dag.race_support(
+        "RNG029-5", "commutator(X,Y)", "commutator(Y,X)", cands,
+        outdir=tmp_path, budget=1, workers=2, binary="/bin/true",
+        ledger=tmp_path / "l.jsonl", directions=["--flatten-goal"])
+    assert won is None
+    assert {r["label"] for r in rows} == {f"c{i}" for i in range(5)}, \
+        "every arm must report when none wins"
+
+
+def test_a_queued_arm_never_starts_once_the_race_is_won(tmp_path, monkeypatch):
+    """Cancellation has to reach arms that have not begun, not just the ones in
+    flight -- otherwise a wide sweep pays for every wave after the winner."""
+    import time as _time
+    from overtone import runner
+    from overtone.agent import dag
+
+    seen = tmp_path / "started"
+    seen.write_text("")
+
+    class R:
+        def __init__(s, ok):
+            s.proved = ok
+            s.status = "Unsatisfiable" if ok else "Timeout"
+            s.cpu = s.wall = 0.1 if ok else 5.0
+            s.output = "x"
+
+    def fake(path, flags, budget, cancel=None, **kw):
+        with open(seen, "a") as f:
+            f.write("x\n")
+        if "parent_2" in Path(path).read_text():
+            return R(True)
+        for _ in range(400):
+            if cancel is not None and cancel.is_set():
+                r = R(False)
+                r.status = "Cancelled"
+                return r
+            _time.sleep(0.01)
+        return R(False)
+
+    monkeypatch.setattr(runner, "run", fake)
+    # One winner in the first wave; twelve more queued behind a 2-wide pool.
+    cands = [("winner", ["a", "b"], [("multiply(X,X)", "add(X,X)"),
+                                     ("add(X,Y)", "add(Y,X)")])]
+    cands += [(f"c{i}", ["a"], [("multiply(X,X)", "add(X,X)")]) for i in range(12)]
+    won, _ = dag.race_support(
+        "RNG029-5", "commutator(X,Y)", "commutator(Y,X)", cands,
+        outdir=tmp_path, budget=60, workers=2, binary="/bin/true",
+        ledger=tmp_path / "l.jsonl", directions=["--flatten-goal"])
+    assert won == "winner"
+    assert len(seen.read_text().split()) < 13, \
+        "arms queued behind the winner must never start"
