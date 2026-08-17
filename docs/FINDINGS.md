@@ -1750,10 +1750,11 @@ associator terms gives two.
 #### The scaffold below the waypoint is generated too
 
 The bridge is a restatement, so on its own it moves the difficulty rather than
-reducing it. That sentence carried the whole result; see "A
-restatement is not a decomposition" below for what it cost across eleven runs. What makes it a *route* is that everything beneath it is derivable
-by the same machinery, and cheap. Verified against RNG029-5's own axioms, 60s a
-node, deterministic build:
+reducing it. What makes it a *route* is that everything beneath it is derivable
+by the same machinery, and cheap. (That first sentence carried the whole result:
+see "A restatement is not a decomposition" below for what it cost an iterating
+loop across eleven runs.) Verified against RNG029-5's own axioms, 60s a node,
+deterministic build:
 
 | node | how it is derived | cpu |
 |---|---|---|
