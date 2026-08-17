@@ -356,14 +356,21 @@ class Bank:
             items.sort(key=_order(name))
         return out
 
-    def summary(self, sketch=None, per_family=3):
-        """What the planner is shown each turn: counts and a few representatives.
+    def summary(self, sketch=None, per_family=10):
+        """What the planner is shown each turn: counts and some representatives.
 
-        Counts, because "202 definition bridges" is itself the finding -- it says
-        the search produced a whole seam the sketch does not name, which no
+        Counts, because "1,431 definition bridges" is itself the finding -- it
+        says the search produced a whole seam the sketch does not name, which no
         truncated list of eight could ever convey. Representatives, because a
-        listing of 202 is not readable either. `inspect_evidence` is how the
+        listing of 1,431 is not readable either. `inspect_evidence` is how the
         planner sees the rest, and it costs no prover time and no iteration.
+
+        Ten and not three. Three was measured: two runs were shown 3 of 1,431
+        bridges and 3 of 5,238 theory-content equations, promoted fewer gold
+        identities than the runs with no bank at all, and never once paged for
+        more. The whole state payload was 17 KB, so the truncation was buying
+        nothing -- it was the same reflex that showed the old listing eight
+        equations out of two thousand.
         """
         fams = self.families(sketch)
         out = {}

@@ -106,9 +106,21 @@ Everything below was measured on this project. Follow it over your own priors.
    this run, grouped, deduplicated, and kept across redrafts. The single most
    valuable node in this project was read off exactly such a listing by hand.
 
-   READ THE COUNTS, not just the examples. A family with 459 members is a seam
-   the search opened that your sketch does not name; three examples cannot show
-   you that, and the count can.
+   READ THE COUNTS, then GO AND LOOK. A family with 1,431 members is a seam the
+   search opened that your sketch does not name, and the handful of examples
+   beside the count is not the family -- it is a sample of it.
+
+   `inspect_evidence(facet=..., contains=..., page=...)` pages the rest. It is
+   FREE: it reads a file the run already wrote, starts no prover, and DOES NOT
+   USE UP YOUR TURN -- you may call it several times and still make your edits
+   in the same turn. `contains` is the one to reach for when you know the shape
+   you want, e.g. contains="associator(X, multiply" for the rules that push a
+   product inside an associator.
+
+   Two runs here had 1,431 and 5,238 equations available, called this tool ZERO
+   times, and spent their ten iterations re-parenting nodes they already had.
+   Both ended with the obligation untouched. If you are about to propose another
+   `set_parents`, look first.
 
    * `definition_bridge` -- a defined operator tied to real product structure.
      This is the family that matters and the one a score-ordered listing buries:
@@ -479,8 +491,15 @@ def tool_schemas(provider, *, inspect=False):
     return out
 
 
-def render_state(state: State, *, max_candidates=8):
-    """The state as compact JSON. Structured, because prose invites invention."""
+def render_state(state: State, *, max_candidates=12):
+    """The state as compact JSON. Structured, because prose invites invention.
+
+    `max_candidates` matches `loop._candidates`' own limit. It was 8 against a
+    list of 12, so a third of an already-truncated listing was computed and then
+    dropped on the way out -- for no saving, the whole payload being 17 KB. One
+    deliberate knob per experiment: this only stops discarding what is already
+    in hand, and `inspect_evidence` is what actually opens the listing up.
+    """
     nodes = []
     for n in state.nodes:
         row = {"name": n.name, "eq": f"{n.lhs} = {n.rhs}", "status": n.status,
