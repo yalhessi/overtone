@@ -239,13 +239,15 @@ def claims_evidence_it_does_not_have(action, ctx):
     key = _eq(action)
     if key is None or key in ctx.evidence_keys:
         return []
-    return [Finding("provenance", action.get("name", "?"), REJECT,
+    return [Finding("provenance", action.get("name", "?"), WARN,
                     "this is offered as an equation the prover derived, but no "
                     "run in this loop produced it -- the evidence bank holds "
                     f"{len(ctx.evidence_keys)} equations and this is not one. "
-                    "Promote a real one with `promote_evidence(id=...)`, or "
-                    "propose this as your own conjecture without claiming it "
-                    "was mined.")]
+                    "The node stands as YOUR CONJECTURE and the claim was "
+                    "stripped. If you meant a real derived rule, find it with "
+                    "`inspect_evidence` and take it with "
+                    "`promote_evidence(id=...)`, which copies the statement so "
+                    "it cannot drift.")]
 
 
 REVIEWERS = [well_formed, restates_an_axiom, duplicates_a_node,
@@ -282,6 +284,31 @@ _load_theory_reviewers()
 
 # ---------------------------------------------------------------------- entry
 
+def _strip_false_provenance(action, ctx):
+    """Correct a "the prover derived this" claim the bank does not support.
+
+    The claim lives in `hypothesis`, which the trajectory keeps as the reason
+    the edit was made -- so leaving it would record a falsehood as the run's own
+    account of itself, and a later reader (or the next turn's model) would trust
+    it precisely because it cites the prover.
+
+    Corrected rather than deleted. The node may be a perfectly good conjecture;
+    only its pedigree is wrong, and the agent's actual reasoning is worth
+    keeping beside the correction.
+    """
+    if action.get("op") != "add_node" or not ctx.evidence_keys:
+        return action
+    why = str(action.get("hypothesis") or "")
+    if not any(w in why.lower() for w in _PROVENANCE):
+        return action
+    key = _eq(action)
+    if key is None or key in ctx.evidence_keys:
+        return action
+    return {**action,
+            "hypothesis": f"{why} [CORRECTED: no run in this loop derived this; "
+                          f"it stands as the agent's own conjecture]"}
+
+
 def repair(action, ctx, known=None, alias=None):
     """(repaired action, findings). Fix what is fixable rather than refusing.
 
@@ -301,6 +328,7 @@ def repair(action, ctx, known=None, alias=None):
     entries earlier is correct and must not have that parent stripped.
     """
     action, findings = _split_equation(action)
+    action = _strip_false_provenance(action, ctx)
     names = ctx.node_names if known is None else known
     parents = action.get("parents")
     if not parents or not names:

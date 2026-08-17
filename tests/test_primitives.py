@@ -3985,7 +3985,15 @@ def test_a_node_claimed_as_mined_must_actually_have_been_mined(tmp_path):
                 "lhs": "multiply(X,X)", "rhs": "add(X,X)",
                 "hypothesis": "mined from the bridge's own run"}
     kept, found = review.review([invented], ctx)
-    assert kept == [] and any(f.reviewer == "provenance" for f in found)
+    # The NODE stands -- it may be a fine conjecture -- but the false pedigree
+    # is corrected in the record and the agent is told. Rejecting outright cost
+    # RNG029-5-told-01 its entire first turn, because it was the only edit.
+    assert len(kept) == 1
+    assert any(f.reviewer == "provenance" and f.verdict == review.WARN
+               for f in found)
+    assert "CORRECTED" in kept[0]["hypothesis"], kept[0]["hypothesis"]
+    assert "mined from the bridge" in kept[0]["hypothesis"], \
+        "the agent's own reasoning is kept beside the correction"
 
     # The same statement offered as a guess is untouched -- refutation only.
     guess = {**invented, "hypothesis": "worth testing: it would close the gap"}
