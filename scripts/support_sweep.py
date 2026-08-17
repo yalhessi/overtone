@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from overtone import config                                       # noqa: E402
-from overtone.agent.dag import (Sketch, grounding, race_support,   # noqa: E402
+from overtone.agent.dag import (grounding, race_support,          # noqa: E402
                                 unproved_ancestors, verify)
 
 
