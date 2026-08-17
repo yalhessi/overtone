@@ -4148,3 +4148,54 @@ def test_the_lookup_tool_is_absent_when_there_is_no_bank():
     # And it is not an EDIT: `loop.apply` must never be handed one.
     from overtone.agent.loop import ACTIONS
     assert "inspect_evidence" not in ACTIONS
+
+
+def test_the_recall_audit_separates_never_found_from_never_shown(tmp_path):
+    """Three numbers, strictly nested, never summed -- the GAPS are the reading.
+
+    Run over the two archived derive runs this reported 21 and 20 of the 29
+    manual identities surfaced by the search but only 11 promoted to nodes,
+    while 8 and 9 were never produced by any search at all. Those are two
+    completely different failures wearing the same "we did not get there": one
+    is an attention problem the evidence bank addresses, the other is a search
+    problem it cannot.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "recall_audit", Path("scripts/recall_audit.py"))
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    # Gold: three identities. One is promoted and grounded, one is derived by a
+    # run but never made a node, one never appears anywhere.
+    gold = tmp_path / "gold.py"
+    gold.write_text(
+        "from overtone.agent.dag import Sketch\n"
+        "SKETCH = Sketch({\n"
+        "  'got':    ('multiply(X,Y)', 'multiply(Y,X)', []),\n"
+        "  'unseen': ('commutator(X,add(Y,multiply(X,X)))', 'commutator(X,Y)', []),\n"
+        "  'absent': ('associator(X,X,X)', 'additive_identity', []),\n"
+        "})\n")
+
+    run = tmp_path / "run"
+    (run / "iter00").mkdir(parents=True)
+    art = _artifact(run / "iter00", "n.out", [
+        "multiply(X,Y) -> multiply(Y,X)",
+        "commutator(X,add(Y,multiply(X,X))) -> commutator(X,Y)",
+    ])
+    rows = [{**_row_for(art, "got"), "proved": True, "result": "Unsatisfiable",
+             "cpu": 1.0}]
+    (run / "iter00/dag.json").write_text(json.dumps({"results": rows}))
+    (run / "loop.json").write_text(json.dumps({
+        "proved": False, "iterations": 1,
+        "final_sketch": {"got": {"lhs": "multiply(X,Y)",
+                                 "rhs": "multiply(Y,X)", "parents": []}}}))
+
+    r = audit.audit(run, gold)
+    assert (r["n_surfaced"], r["n_promoted"], r["n_grounded"]) == (2, 1, 1)
+    by = {x["gold"]: x for x in r["rows"]}
+    assert by["unseen"]["surfaced"] and not by["unseen"]["promoted"], \
+        "the search found it and the planner never saw it"
+    assert not by["absent"]["surfaced"], "no search ever produced it"
+    assert by["got"]["grounded"]

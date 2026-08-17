@@ -80,6 +80,8 @@ scripts/              thin CLIs over the package
   make_ueq_list.py    enumerate TPTP UEQ problems from the local distribution
   fetch_external.py   ETP, Robbins/Otter, Veroff, TSTP corpora
   replicate_twitch.py re-run a recorded Twitch success and compare times
+  recall_audit.py     score a finished run against the manual sketch:
+                      surfaced / promoted / grounded, never summed
   screen.py           high-budget baseline screen, both goal directions
   start_screen.sh     launch the screen in a detached tmux session
   variance.py         run-to-run reproducibility of twee timings
