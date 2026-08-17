@@ -43,7 +43,7 @@ def gold(path=None):
     spec = importlib.util.spec_from_file_location("_gold", src)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return {eq_key(l, r): n for n, (l, r, _) in mod.SKETCH.nodes.items()}
+    return {eq_key(a, b): n for n, (a, b, _) in mod.SKETCH.nodes.items()}
 
 
 def _final(run: Path):
@@ -69,7 +69,7 @@ def audit(run: Path, gold_path=None):
             bank.update(json.loads(it.read_text())["results"])
 
     seen = {eq_key(e.lhs, e.rhs) for e in bank.all()}
-    nodes = {eq_key(l, r): n for n, (l, r, _) in sketch.nodes.items()}
+    nodes = {eq_key(a, b): n for n, (a, b, _) in sketch.nodes.items()}
     ground, _ = grounding(sketch, rows)
 
     out = []
