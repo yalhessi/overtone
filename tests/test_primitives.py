@@ -4487,3 +4487,46 @@ def test_a_restatement_that_proves_is_not_progress():
                             no_decomposition={"alt"})
     assert flagged["outcome"] == "inconclusive"
     assert "no decomposition" in flagged["why"]
+
+
+def test_the_candidate_pool_contains_right_moufang_without_naming_it():
+    """The pilot's generator test. The pool comes from the conjecture's own
+    degree and variable-multiplicity partition -- word-preserving rebracketings,
+    59 of them for RNG029-5 -- and must contain the identity the manual route
+    turns on, under alpha and orientation normalisation, with no equation or
+    name hard-coded anywhere.
+
+    Enumeration is not what makes waypoint synthesis hard: the pool is small,
+    costs 0.07s, and holds the answer. Finding the three-lemma support set that
+    proves it is the open part.
+    """
+    from overtone import freering as F
+    from overtone.terms import eq_key
+
+    conj = problems.conjecture(problems.problem_path("RNG029-5"))
+    pool = F.balanced_candidates(*conj)
+    assert 40 < len(pool) < 80, len(pool)
+
+    want = eq_key("multiply(multiply(multiply(X,Y),Z),Y)",
+                  "multiply(X,multiply(Y,multiply(Z,Y)))")
+    assert any(eq_key(a, b) == want for a, b in pool), \
+        "right-Moufang must be reachable by enumeration alone"
+
+    # and the pool never contains the thing it is meant to decompose
+    for a, b in pool:
+        assert F.classify(a, b, *conj)["relation"] == F.DISTINCT
+
+
+def test_evidence_can_be_filtered_by_where_it_was_mined():
+    """One bank held 15 of its 51 artifacts from a `/tmp` scratchpad smoke test
+    -- a scripted agent at a 120s budget, run while wiring a flag -- mixed with
+    the run's own searches. Nothing unsound follows, since the equations are
+    theorems either way, but a bank that cannot tell a deliberate corpus from a
+    temp directory cannot be the input to a reproducible experiment."""
+    from overtone.agent.evidence import provenance
+
+    assert provenance("/tmp/x/scratchpad/derive-smoke/iter00/a.out") == "scratch"
+    assert provenance("/tmp/anything.out") == "scratch"
+    assert provenance("logs/loop/RNG029-5-derive-03/iter00/a.out") == "run"
+    assert provenance("/abs/path/logs/loop/r/iter00/a.out") == "run"
+    assert provenance(None) == "unknown"

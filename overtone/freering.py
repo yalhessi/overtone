@@ -138,6 +138,102 @@ def to_twee(p, var=str.upper):
     return e
 
 
+# --------------------------------------------------------- candidate synthesis
+# A bounded space of statements to *look* for a waypoint in. FINDINGS is explicit
+# that generating one is the open problem -- the goal is not a linear consequence
+# of the scaffold, so `certificate` cannot reach it, and a waypoint cannot be
+# mined out of the searches that failed to derive it either (`right_moufang`
+# appears in 0 of 20 evidence banks). Enumeration plus the prover is what is left.
+#
+# The class is *word-preserving rebracketings*: both sides carry the identical
+# left-to-right sequence of variables and differ only in how it is bracketed.
+# That is not a guess about this problem -- the conjecture is `x,y,z,x` on both
+# sides and right-Moufang is `x,y,z,y` on both -- but it IS a hypothesis class
+# chosen knowing where Moufang lives, so a result inside it says little until it
+# is tested on a held-out problem.
+
+
+def _shapes(n):
+    """Every binary bracketing of `n` leaves; `None` is a leaf."""
+    if n == 1:
+        return [None]
+    out = []
+    for k in range(1, n):
+        for a in _shapes(k):
+            for b in _shapes(n - k):
+                out.append((a, b))
+    return out
+
+
+def _fill(shape, word, i=0):
+    if shape is None:
+        return word[i], i + 1
+    a, i = _fill(shape[0], word, i)
+    b, i = _fill(shape[1], word, i)
+    return (a, b), i
+
+
+def _as_term(t):
+    return t if isinstance(t, str) else \
+        f"multiply({_as_term(t[0])},{_as_term(t[1])})"
+
+
+def _leaf_word(mono):
+    if isinstance(mono, str):
+        return [mono]
+    return _leaf_word(mono[0]) + _leaf_word(mono[1])
+
+
+def balanced_candidates(goal_lhs, goal_rhs, cap=128):
+    """`[(lhs, rhs)]` -- rebracketings of each word with the goal's shape.
+
+    The goal's own degree and variable-multiplicity partition set the space: for
+    RNG029-5 that is degree 4 over the partition (2,1,1), giving 12 distinct
+    words and 10 shape pairs each. Tautologies, and anything `classify` calls a
+    restatement or an instance of the conjecture, are dropped -- a candidate
+    pool must not contain the thing it is meant to decompose.
+
+    Ordered with the goal's own word first, since a rebracketing of the
+    conjecture's word is the most directly relevant thing in the space, then
+    deterministically. `cap` is a guard for higher degrees; at degree 4 the whole
+    space is 120 and fits.
+    """
+    from collections import Counter as C
+
+    goal = expand(parse(goal_lhs), parse(goal_rhs))
+    if not goal:
+        return []
+    d = degree(goal)
+    mono = next(iter(goal))
+    counts = sorted(C(_leaf_word(mono)).values(), reverse=True)
+    names = sorted(variables(goal))
+    if len(counts) > len(names) or d > 6:
+        return []
+    word0 = [w for w, n in zip(names, counts) for _ in range(n)]
+
+    import itertools
+    shapes = _shapes(d)
+    goal_word = _leaf_word(mono)
+    out, seen = [], set()
+    for word in sorted(set(itertools.permutations(word0))):
+        terms = [_as_term(_fill(s, list(word))[0]) for s in shapes]
+        for a, b in itertools.combinations(terms, 2):
+            res = expand(parse(a), parse(b))
+            if not res:
+                continue                     # a tautology of the free ring
+            rel = classify(a, b, goal_lhs, goal_rhs)["relation"]
+            if rel in (EQUIVALENT, INSTANCE):
+                continue                     # the goal itself, in disguise
+            from overtone.terms import eq_key
+            k = eq_key(a, b)
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append((list(word) == list(goal_word), a, b))
+    out.sort(key=lambda r: (not r[0], r[1], r[2]))
+    return [(a, b) for _, a, b in out[:cap]]
+
+
 # ------------------------------------------------------------- classification
 # Where a proposal sits relative to the conjecture. FINDINGS: "Residual
 # comparison decides which of the three a proposal is, before any prover time,

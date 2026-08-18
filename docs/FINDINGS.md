@@ -2211,6 +2211,65 @@ What remains untouched is generation, exactly as the previous entry said: the
 machinery can now say what a proposal is NOT, and still cannot produce one that
 is strictly between the axioms and the goal.
 
+### The waypoint pilot: the candidate is findable, the support set is not
+
+`scripts/waypoint_pilot.py` enumerates a bounded space of statements and
+measures them, since FINDINGS already settles that the mechanical route cannot
+derive one. Built, run, and negative -- informatively so.
+
+**Enumeration is not the hard part.** `freering.balanced_candidates` takes the
+conjecture's own degree and variable-multiplicity partition and emits the
+word-preserving rebracketings: 59 statements for RNG029-5, in 0.07s, containing
+the right-Moufang identity under alpha and orientation normalisation and never
+naming it. The candidate space is small and it holds the answer.
+
+**Nine of the 59 are consequences of the scaffold**, found by giving each one
+second with the scaffold supplied. That is a practical redundancy test where the
+linear-algebra form of the same question did not finish in 600s -- and it is a
+correction to the pilot's first design, which raced the scaffold *alongside* the
+evidence sets, so the scaffold won twelve times and every one of six "hits" was
+scaffold-trivial. The two questions have to be asked separately.
+
+**Evidence ranked by source count is the problem's own axioms.** The top four on
+RNG029-5 are `(XX)Y = X(XY)`, `(XY)Y = X(YY)` and both again in associator form.
+twee already has them from the problem file, so assuming them changes nothing,
+and the screen returned 0 hits in 59 candidates. It is the bank's structural bias
+appearing at selection: what every search re-derives is what every search already
+had. Dropping axioms and scaffold and ordering by `evidence.relevance` gives real
+material instead -- `multiply(X, commutator(X,Y)) = commutator(X, multiply(X,Y))`
+and its siblings -- and the screen still returns 0 hits over six of them, which
+says only that six is a token sample of 6,888.
+
+**The decisive measurement.** Run the witness stage directly on the candidate we
+know is a waypoint:
+
+| arm | support | result |
+|---|---|---|
+| upstream, scaffold -> right-Moufang | 11-lemma core, and bare | **no proof at 300s** (1,201.2s spent) |
+| downstream, right-Moufang -> conjecture | core + W, and bare | **no proof at 300s** (1,201.2s spent) |
+
+Both fail, and the ledger says both succeed: `right_moufang` proves in 197.8s
+from **three** lemmas, and the conjecture proves from it in 124.2s. The 11-lemma
+core is not too small, it is too big -- exactly what `race_support` already
+records, that the winning set loses the proof if a fourth true, universal, 0.0s
+lemma is added.
+
+So the pilot's support variants -- full, bare, leave-one-out -- explore sets of
+size 11, 0 and 10, and the winning set is a 3-subset. There are 165 of those and
+no variant tried reaches one.
+
+**The bottleneck is support search, not candidate generation.** That is the
+reverse of the assumption this line was built on. Generating the statement is
+cheap and already solved; deciding which handful of proved lemmas to supply is
+the open problem, it is combinatorial, and this project has measured that nothing
+about a lemma predicts whether it belongs -- the parent worth dropping is one the
+certificate CITES, so `unused_support` cannot see it either.
+
+A pilot that could settle RNG029-5 therefore needs a support search, and at
+300s an arm even 165 subsets is ~99,000 prover-seconds. Neither the 4,000s
+planned nor the 3,000s spent is the right order of magnitude, and more budget on
+the current variant set buys nothing at all.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.

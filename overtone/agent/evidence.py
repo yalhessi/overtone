@@ -246,6 +246,25 @@ def _order(facet):
     return lambda e: (len(e.text()), e.text())
 
 
+def provenance(artifact):
+    """Which corpus an evidence source came from: `run`, `scratch` or `unknown`.
+
+    Every source already records the artifact it was mined from; nothing could
+    filter on it. One bank held 15 of its 51 artifacts from a `/tmp` scratchpad
+    smoke test -- a scripted agent at a 120s budget, run while wiring a flag --
+    mixed indiscriminately with the run's own searches. Nothing unsound follows,
+    since the equations are theorems either way, but a bank that cannot tell a
+    deliberate corpus from a temp directory cannot be an input to a reproducible
+    experiment.
+    """
+    a = str(artifact or "")
+    if "/scratchpad/" in a or a.startswith("/tmp/"):
+        return "scratch"
+    if "/logs/" in a or a.startswith("logs/"):
+        return "run"
+    return "unknown"
+
+
 class Bank:
     """The evidence for one run, persisted as `evidence.jsonl`.
 
@@ -294,8 +313,29 @@ class Bank:
     def __len__(self):
         return len(self.items)
 
-    def all(self):
-        return list(self.items.values())
+    def all(self, corpus=None):
+        """Every item, or only those with a source from `corpus`.
+
+        `corpus="run"` is what a reproducible experiment wants: evidence mined
+        from recorded runs under `logs/`, never from a scratchpad smoke test.
+        """
+        items = list(self.items.values())
+        if corpus is None:
+            return items
+        want = {corpus} if isinstance(corpus, str) else set(corpus)
+        return [e for e in items
+                if any(provenance(s.get("artifact")) in want
+                       for s in e.sources)]
+
+    def by_provenance(self):
+        """`{corpus: count}` over sources -- what this bank was actually built
+        from, so a run can say so rather than being asked to be trusted."""
+        from collections import Counter
+        out = Counter()
+        for e in self.items.values():
+            for s in e.sources:
+                out[provenance(s.get("artifact"))] += 1
+        return dict(out)
 
     def get(self, eid):
         return self.items.get(eid)
