@@ -19,6 +19,7 @@ requires every binding to be variable-headed, so both are reported.
 
     python scripts/hint_multiplicity.py
 """
+import argparse
 import statistics
 import sys
 from pathlib import Path
@@ -59,6 +60,9 @@ def resonant(sub):
 
 
 def main():
+    argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     from scripts.hint_dose import pool
     eqs, goal = pool()
     hints = []
@@ -110,8 +114,16 @@ def main():
         print(f"  {multi/total:.0%} of subterms match several hints, so selection")
         print("  is not vacuous -- but see the docstring: selection still cannot")
         print(f"  reduce the {covered/total:.0%} coverage, which is the dilution.")
-    print(f"  --resonance cuts coverage {covered/total:.0%} -> "
-          f"{res_covered/total:.0%}, and THAT is the lever with the right shape.")
+    # MEASURED, and it retired the guess this script was written on:
+    # --resonance barely moves coverage on this pool (87% -> 85%), because ring
+    # identities mostly DO bind variables to variables. It is a selection knob
+    # here, not a dilution one. And the dose curve says dilution is not the
+    # problem at this scale anyway -- coverage rises monotonically 0 -> 84%
+    # while CPU goes 102.9 -> 81.3 -> 211.5 -> 33.4s. Content decides.
+    print(f"  --resonance moves coverage {covered/total:.0%} -> "
+          f"{res_covered/total:.0%} and multiplicity "
+          f"{statistics.mean(counts):.2f} -> {statistics.mean(res_counts):.2f}: "
+          f"a selection knob, not a dilution one.")
 
 
 if __name__ == "__main__":
