@@ -540,7 +540,8 @@ def frontier_retreat(target, prev):
 
 
 def score_outcome(probe, *, target, nodes, prev_nodes, slow=30,
-                  applied=0, rejected=0, support_lost=False, retreat=None):
+                  applied=0, rejected=0, support_lost=False, retreat=None,
+                  no_decomposition=()):
     """Classify the last turn's edits against the probe that turn declared.
 
     The loop had exactly one notion of progress -- a node newly proved -- and it
@@ -596,6 +597,15 @@ def score_outcome(probe, *, target, nodes, prev_nodes, slow=30,
     if expect == "prove" and n is not None:
         if n.status.startswith("proved") and not (
                 before is not None and before.status.startswith("proved")):
+            # A node review classified as the conjecture in other words, or as
+            # the conjecture with variables identified, is not a decomposition
+            # however cheaply it proves. Twelve runs edited such a node without
+            # moving, and a `productive` verdict here would clear the stall
+            # counter and buy four more iterations of the same.
+            if node in no_decomposition:
+                return done(f"{node} proved, but review classified it as no "
+                            f"decomposition -- an alternative statement of the "
+                            f"conjecture, not a step toward it", "inconclusive")
             return done(f"{node} proved, as the probe predicted", "productive")
         return done(f"{node} is {n.status}; the probe predicted it would prove",
                     "inconclusive")
@@ -1079,6 +1089,9 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
     prev_target, prev_nodes, probe, outcome = {}, (), {}, {}
     prev_support, prev_attempts, inconclusive_run = None, [], 0
     last_applied, last_rejected, prev_sketch = 0, 0, None
+    # Nodes review classified as no decomposition, carried to the turn that
+    # scores them -- the same way `probe` is.
+    no_decomp = set()
     # Detects a loop spinning with no prover work at all -- see below.
     last_new, idle = -1.0, 0
     # The verify results and attempt rows belonging to `prev_sketch`, so a
@@ -1299,7 +1312,8 @@ def run_loop(problem, sketch: Sketch, agent: Agent, *, outdir: Path,
                     prev_nodes=prev_nodes, slow=budget.slow,
                     applied=last_applied, rejected=last_rejected,
                     support_lost=lost_support,
-                    retreat=frontier_retreat(state.target, prev_target))
+                    retreat=frontier_retreat(state.target, prev_target),
+                    no_decomposition=no_decomp)
                 print(f"  outcome: {outcome['outcome']} -- {outcome['why']}",
                       flush=True)
                 if outcome["outcome"] in ("solved", "productive"):

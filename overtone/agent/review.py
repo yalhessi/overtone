@@ -30,6 +30,7 @@ own without this module knowing anything about that theory.
 """
 from dataclasses import dataclass, field
 
+from overtone import freering
 from overtone.terms import eq_key, parse_error, symbols, symbols_in
 
 # Verdicts, in descending severity. Only `reject` withholds an edit.
@@ -63,6 +64,10 @@ class Context:
     node_names_by_key: dict = field(default_factory=dict)  # eq_key -> node name
     parents_of: dict = field(default_factory=dict)    # node name -> its parents
     evidence_keys: frozenset = frozenset()   # eq_key of every mined equation
+    # The goal's (lhs, rhs), for `freering.classify`. The NAME and the eq_key
+    # are not enough: a proposal can be the conjecture with a different eq_key
+    # and the same residual, which is exactly what the derived bridge is.
+    goal_statement: tuple = ()
 
 
 def _eq(action):
@@ -154,18 +159,41 @@ def duplicates_a_node(action, ctx):
 
 
 def restates_the_goal(action, ctx):
-    """A node equal to the conjecture decomposes nothing.
+    """Where a proposal sits relative to the conjecture.
 
-    Variable identifications of the goal are the same failure one step removed:
-    an instance of an open conjecture is still open. This catches only the exact
-    case, which is the one that is decidable.
+    `eq_key` alone is syntactic, and that is not enough. The derived bridge has
+    a DIFFERENT eq_key from RNG029-5's conjecture and the SAME residual, so this
+    admitted it -- and twelve loop runs on that seed spent themselves editing a
+    node that was the goal in the theory's own language, without ever being told
+    so. `freering.classify` compares residuals and costs microseconds.
+
+    Only an exact syntactic duplicate is rejected. An `equivalent` formulation is
+    not a decomposition, but it is not worthless either -- supplying the bridge
+    took RNG029-5 from a 4000s timeout in both directions to 6.7s -- so it is
+    reported and must simply never count as structural progress. An `instance` is
+    an accelerant, measured with zero transfer on one problem, which is not
+    grounds for a global rejection rule.
     """
     k = _eq(action)
     if k and ctx.goal and k == ctx.sketch_goal_key:
         return [Finding("restates_the_goal", action.get("name", "?"), REJECT,
                         "this restates the conjecture; a sketch cannot "
-                        "decompose a goal into itself")]
-    return []
+                        "decompose a goal into itself",
+                        {"relation": freering.EXACT})]
+    if not (ctx.goal_statement and action.get("lhs") and action.get("rhs")):
+        return []
+    verdict = freering.classify(action["lhs"], action["rhs"],
+                                *ctx.goal_statement)
+    rel = verdict["relation"]
+    if rel not in (freering.EQUIVALENT, freering.INSTANCE):
+        return []
+    what = ("the conjecture in other words" if rel == freering.EQUIVALENT
+            else "the conjecture with variables identified")
+    return [Finding("restates_the_goal", action.get("name", "?"), WARN,
+                    f"NO DECOMPOSITION: {what} ({verdict['why']}). It may still "
+                    f"be worth proving as an alternative representation, but it "
+                    f"cannot decompose the goal and will not count as progress.",
+                    {"relation": rel, "no_decomposition": True})]
 
 
 def size(action, ctx):
@@ -660,6 +688,9 @@ def context_for(problem, sketch, goal=None, bank=None):
                            if len(a) == 1})
     # `restates_the_goal` needs the goal's own key; carried as an attribute so
     # Context stays a plain record of what reviewers may read.
+    object.__setattr__(ctx, "goal_statement",
+                       tuple(sketch.nodes[goal][:2]) if goal in sketch.nodes
+                       else ())
     object.__setattr__(ctx, "sketch_goal_key",
                        eq_key(*sketch.nodes[goal][:2]) if goal in sketch.nodes
                        else None)

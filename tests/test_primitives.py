@@ -3205,40 +3205,54 @@ def test_the_derived_sketch_names_the_parents_each_derivation_uses():
     assert notes, "provenance must travel with the sketch"
 
 
-def test_the_derived_sketch_reduces_the_goal_to_one_obligation():
-    """The goal's only parent is the bridge, and the bridge is the goal's own
-    residual over universal associator terms. Supplying it takes RNG029-5 from a
-    4000s timeout in both directions to 6.7s."""
+def test_the_derived_sketch_does_not_plant_a_restatement():
+    """The seed used to make the goal's decomposition its only parent.
+
+    That decomposition is the conjecture's own residual, so `freering.expand`
+    returns the identical value for both -- on RNG029-5, RNG033-8, RNG028-7,
+    RNG027-5 and RNG025-4 -- and `derive_sketch` cannot do otherwise, since both
+    its branches restate the residual. Planted as a node it gave twelve loop
+    runs a sketch with no interior: one open node that WAS the conjecture,
+    frontier depth pinned at 1, every iteration inconclusive.
+
+    Supplying it as an axiom really does take the goal from a 4000s timeout to
+    6.7s, which is why it is still reported. It is just not a decomposition.
+    """
     from overtone import freering as F
     from overtone.agent.derive import derive_sketch
 
-    s, _ = derive_sketch("RNG029-5")
-    goal = "rng029-5_goal"
-    assert s.nodes[goal][2] == ["bridge"]
+    s, notes = derive_sketch("RNG029-5")
+    assert "bridge" not in s.nodes, "a restatement must not be a node"
+    assert s.nodes["rng029-5_goal"][2] == [], \
+        "and nothing fabricated to stand in for it"
+    diag = [n for n in notes if n.startswith("DIAGNOSTIC")]
+    assert len(diag) == 1 and "not a decomposition" in diag[0]
 
-    # the bridge is exactly equivalent to the conjecture, checked by expansion
-    bl, br, _ = s.nodes["bridge"]
-    gl, gr, _ = s.nodes[goal]
-    assert F.expand(F.parse(bl), F.parse(br)) == \
-        F.expand(F.parse(gl), F.parse(gr))
+    # the property that makes it a diagnostic rather than a node
+    gl, gr, _ = s.nodes["rng029-5_goal"]
+    goal = F.expand(F.parse(gl), F.parse(gr))
+    bridge = F.expand(F.parse("associator(VCX,VCY,multiply(VCZ,VCX))"),
+                      F.parse("multiply(VCX,associator(VCY,VCZ,VCX))"))
+    assert bridge == goal
 
 
-def test_the_bridge_is_not_given_every_derived_lemma():
-    """Handing it all eleven claims is the loose-bag-as-axioms configuration
-    measured here as ruinous. Two mechanical filters: the `lin_*` instances are
-    scaffolding for the polarizations, and a lemma about an operator the bridge
-    never mentions cannot be on its derivation."""
-    from overtone.agent.dag import channel_for
+def test_no_node_of_the_derived_scaffold_restates_the_goal():
+    """The scaffold survives the change: it is genuinely useful (11 nodes in
+    ~150s, and the polarizations name the parents that take `alt12` from
+    unproven at 60s to 0.02s) and none of it is a restatement."""
+    from overtone import freering as F
     from overtone.agent.derive import derive_sketch
 
-    s, _ = derive_sketch("RNG029-5")
-    parents = s.nodes["bridge"][2]
-    assert not any(p.startswith("lin_") for p in parents), parents
-    assert not any("commutator" in p for p in parents), \
-        "the bridge has no commutator in it"
-    assert len(parents) < len(s.claims()) - 1
-    assert channel_for(parents, s, "bridge") == "axioms", \
-        "a small exact parent set goes through the axiom channel"
+    for prob in ("RNG029-5", "RNG033-8"):
+        s, _ = derive_sketch(prob)
+        goal = next(n for n in s.nodes if n.endswith("goal"))
+        gl, gr, _ = s.nodes[goal]
+        for n in s.claims():
+            if n == goal:
+                continue
+            lhs, rhs, _ = s.nodes[n]
+            rel = F.classify(lhs, rhs, gl, gr)["relation"]
+            assert rel == F.DISTINCT, f"{prob}/{n} classified {rel}"
 
 
 def test_derivation_reads_only_the_problem_file():
@@ -4368,3 +4382,108 @@ def test_a_queued_arm_never_starts_once_the_race_is_won(tmp_path, monkeypatch):
     assert won == "winner"
     assert len(seen.read_text().split()) < 13, \
         "arms queued behind the winner must never start"
+
+
+# ------------------------------------------------- classifying against the goal
+
+def test_the_classifier_catches_what_eq_key_cannot():
+    """FINDINGS: "Residual comparison decides which of the three a proposal is,
+    before any prover time, and nothing currently does it."
+
+    `restates_the_goal` compared `terms.eq_key`, which is syntactic. The derived
+    bridge has a DIFFERENT eq_key from RNG029-5's conjecture and the SAME
+    residual, so twelve loop runs spent themselves editing a node that was the
+    goal in the theory's own language, without ever being told so.
+    """
+    from overtone import freering as F
+    from overtone.terms import eq_key
+
+    conj = problems.conjecture(problems.problem_path("RNG029-5"))
+    bridge = ("associator(VCX,VCY,multiply(VCZ,VCX))",
+              "multiply(VCX,associator(VCY,VCZ,VCX))")
+    assert eq_key(*bridge) != eq_key(*conj), "syntactically different"
+    assert F.classify(*bridge, *conj)["relation"] == F.EQUIVALENT
+
+    # the goal with two variables identified is an instance, not the goal
+    inst = (conj[0].replace("VCY", "VCX"), conj[1].replace("VCY", "VCX"))
+    assert F.classify(*inst, *conj)["relation"] == F.INSTANCE
+
+    # and a statement outside the free-ring signature gets no opinion at all
+    assert F.classify("meet(A,B)", "join(A,B)", *conj)["relation"] == \
+        F.UNSUPPORTED
+
+
+def test_the_classifier_clears_the_whole_manual_route():
+    """The regression that matters. A check condemning any node of the one
+    decomposition known to work would forbid the only route this project has.
+
+    `middle_moufang` is the exception and is correct: it IS RNG029-5's
+    conjecture, under another name.
+    """
+    import sys
+    from overtone import freering as F
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from prove import load_sketch
+
+    s = load_sketch(Path(__file__).resolve().parents[1] / "scripts" / "rng_dag.py")
+    conj = problems.conjecture(problems.problem_path("RNG029-5"))
+    flagged = {}
+    for n in s.claims():
+        lhs, rhs, _ = s.nodes[n]
+        rel = F.classify(lhs, rhs, *conj)["relation"]
+        if rel != F.DISTINCT:
+            flagged[n] = rel
+    assert flagged == {"middle_moufang": F.EQUIVALENT}, flagged
+
+
+def test_a_restatement_is_reported_not_withheld():
+    """Codex's correction, and it is right: an equivalent formulation is not a
+    decomposition but is not worthless either -- supplying the bridge took
+    RNG029-5 from a 4000s timeout in both directions to 6.7s. Rejecting it would
+    also contradict the repair-not-discard rule the rest of review follows.
+
+    Only an exact syntactic duplicate is withheld.
+    """
+    from overtone import freering as F
+    from overtone.agent import review
+
+    seed = Sketch.from_problem("RNG029-5", goal="rng029-5_goal")
+    ctx = review.context_for("RNG029-5", seed, "rng029-5_goal")
+    conj = problems.conjecture(problems.problem_path("RNG029-5"))
+
+    def one(lhs, rhs):
+        kept, findings = review.review(
+            [{"op": "add_node", "name": "n", "lhs": lhs, "rhs": rhs}], ctx)
+        f = next((x for x in findings if x.reviewer == "restates_the_goal"), None)
+        return len(kept), (f.verdict, f.data.get("relation")) if f else None
+
+    assert one("associator(VCX,VCY,multiply(VCZ,VCX))",
+               "multiply(VCX,associator(VCY,VCZ,VCX))") == \
+        (1, (review.WARN, F.EQUIVALENT))
+    assert one(conj[0].replace("VCY", "VCX"), conj[1].replace("VCY", "VCX")) == \
+        (1, (review.WARN, F.INSTANCE))
+    assert one(*conj)[0] == 0, "an exact duplicate is still withheld"
+    # a real waypoint draws no finding at all
+    assert one("multiply(multiply(multiply(X,Y),Z),Y)",
+               "multiply(X,multiply(Y,multiply(Z,Y)))") == (1, None)
+
+
+def test_a_restatement_that_proves_is_not_progress():
+    """It must never clear the stall counter. A `productive` verdict there would
+    buy four more iterations of exactly what twelve runs already did."""
+    from overtone.agent.loop import NodeState, score_outcome
+
+    def nodes(status):
+        return (NodeState("alt", "l", "r", (), status, 0.1, None),)
+
+    probe = {"node": "alt", "expect": "prove"}
+    ok = score_outcome(probe, target={}, nodes=nodes("proved"),
+                       prev_nodes=nodes("pending"), applied=1)
+    assert ok["outcome"] == "productive"
+
+    flagged = score_outcome(probe, target={}, nodes=nodes("proved"),
+                            prev_nodes=nodes("pending"), applied=1,
+                            no_decomposition={"alt"})
+    assert flagged["outcome"] == "inconclusive"
+    assert "no decomposition" in flagged["why"]

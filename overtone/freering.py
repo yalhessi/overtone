@@ -27,7 +27,8 @@ from collections import Counter
 from fractions import Fraction
 
 __all__ = ["V", "mul", "add", "neg", "assoc", "comm", "expand", "same",
-           "express", "to_twee"]
+           "express", "to_twee", "classify", "EXACT", "EQUIVALENT", "INSTANCE",
+           "DISTINCT", "UNSUPPORTED"]
 
 
 def _norm(c):
@@ -135,6 +136,85 @@ def to_twee(p, var=str.upper):
     for t in pieces[1:]:
         e = f"add({e},{t})"
     return e
+
+
+# ------------------------------------------------------------- classification
+# Where a proposal sits relative to the conjecture. FINDINGS: "Residual
+# comparison decides which of the three a proposal is, before any prover time,
+# and nothing currently does it." Twelve loop runs never told a model that a node
+# it proposed was the goal restated, because `review.restates_the_goal` compares
+# `terms.eq_key`, which is syntactic -- the derived bridge has a DIFFERENT
+# eq_key from the conjecture and the SAME residual.
+
+EXACT, EQUIVALENT, INSTANCE, DISTINCT, UNSUPPORTED = (
+    "exact", "equivalent", "instance", "distinct", "unsupported")
+
+
+def _injective_maps(src, dst):
+    import itertools
+    if len(src) > len(dst):
+        return
+    for combo in itertools.permutations(dst, len(src)):
+        yield dict(zip(src, combo))
+
+
+def classify(lhs, rhs, goal_lhs, goal_rhs):
+    """Where `lhs = rhs` sits relative to the conjecture: a `GoalRelation`.
+
+    * `equivalent` -- a renaming of its variables makes the residuals equal, up
+      to sign. The derived bridge is this, on every problem tested, which is why
+      twelve runs on that seed had nothing to refine.
+    * `instance` -- it is the goal with variables identified, i.e. the goal's own
+      residual under a NON-injective substitution. Measured as an accelerant
+      with zero transfer, so worth naming; not worth rejecting on one experiment.
+    * `distinct` -- neither. Every node of the manual route lands here, which is
+      the property that makes this safe to act on: a check that condemned
+      `right_moufang` would forbid the one decomposition known to work.
+    * `unsupported` -- outside the free-ring signature, so no opinion at all.
+      LAT, GRP and COL conjectures get this rather than a wrong answer.
+
+    Reported, not enforced, for everything but an exact duplicate. An equivalent
+    formulation is not a decomposition, but it is not worthless either: supplying
+    the bridge took RNG029-5 from a 4000s timeout in both directions to 6.7s. It
+    must simply never count as structural progress.
+    """
+    P = safe_parse(lhs) if lhs else None
+    Q = safe_parse(rhs) if rhs else None
+    G1 = safe_parse(goal_lhs) if goal_lhs else None
+    G2 = safe_parse(goal_rhs) if goal_rhs else None
+    if P is None or Q is None or G1 is None or G2 is None:
+        return {"relation": UNSUPPORTED,
+                "why": "not a term of the free-ring signature"}
+
+    prop, goal = expand(P, Q), expand(G1, G2)
+    if not goal:
+        return {"relation": UNSUPPORTED, "why": "the goal expands to zero"}
+    if prop == goal or prop == neg(goal):
+        return {"relation": EQUIVALENT, "why": "identical residual",
+                "renaming": {}}
+
+    pv, gv = sorted(variables(prop)), sorted(variables(goal))
+    for m in _injective_maps(pv, gv):
+        sub = substitute(prop, {k: V(w) for k, w in m.items()})
+        if sub == goal or sub == neg(goal):
+            return {"relation": EQUIVALENT,
+                    "why": "the same residual after renaming its variables",
+                    "renaming": dict(m)}
+
+    # An instance is the GOAL specialised, so substitute into the goal and
+    # compare -- the other direction answers a different question.
+    for m in _renamings(gv, gv):
+        if len(set(m.values())) == len(gv):
+            continue                      # injective: that is the case above
+        sub = substitute(goal, {k: V(w) for k, w in m.items()})
+        if not sub:
+            continue                      # the specialisation is trivially true
+        if sub == prop or sub == neg(prop):
+            return {"relation": INSTANCE,
+                    "why": "the conjecture with variables identified",
+                    "renaming": dict(m)}
+    return {"relation": DISTINCT, "why": "neither the conjecture nor an "
+                                         "instance of it"}
 
 
 # ------------------------------------------------------------------- reviewer

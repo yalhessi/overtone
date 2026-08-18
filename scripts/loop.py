@@ -310,6 +310,20 @@ def main():
               f"{len(sketch.claims())} claim(s)", flush=True)
         for n in notes:
             print(f"   {n}", flush=True)
+        # A goal nothing supports is the configuration this project has measured
+        # as blind: the target is never attempted, no contact is measured, and
+        # so no regression can be detected or reverted. Twelve runs on the old
+        # seed spent themselves editing a node that was the conjecture restated.
+        # Refusing to start is the correct outcome, not a fallback -- and it
+        # stays the outcome until waypoint synthesis can witness a real one.
+        goal_name = next((n for n in sketch.nodes if n.endswith("goal")), None)
+        if goal_name and not sketch.nodes[goal_name][2]:
+            print(f"\nno_waypoint_found: `{goal_name}` has no supporting node, "
+                  f"so an iterative run would be blind. The decomposition above "
+                  f"is the conjecture in the theory's own language, not a step "
+                  f"toward it; see docs/FINDINGS.md, 'A restatement is not a "
+                  f"decomposition'.", flush=True)
+            return 3
     elif a.seed:
         sketch = Sketch.from_problem(a.problem, goal=f"{a.problem.lower()}_goal")
         print(f"seed: {len(sketch.given)} axiom node(s) + 1 goal", flush=True)

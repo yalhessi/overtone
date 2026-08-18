@@ -12,13 +12,14 @@ What this produces on RNG029-5, all verified against the problem's own axioms:
     associator(X+Y,X+Y,Z) = 0             instance of an axiom         0.01s
     alt12 / alt23                         polarization of the axioms   0.02s
     associator cyclic                     certificate over alt12/23    0.01s
-    the bridge                            decomposition of the goal    unproven
-    the conjecture                        given the bridge              6.7s
 
-so the model opens on a sketch where the scaffold is proved and exactly one
-obligation is named, instead of on a bare goal it has repeatedly failed to
-decompose. The bridge is where the mathematics actually is: the alternating laws
-span *twice* the Moufang residual over the integers and not the residual itself.
+**It does NOT emit the goal's decomposition as a node.** That was tried: the
+decomposition is the conjecture's own residual, so `freering.expand` returns the
+identical value for it and for the goal, on every problem tested. Planted as the
+goal's only parent it gave twelve loop runs a sketch with no interior -- one open
+node that WAS the conjecture -- and they produced no proof and no meaningful
+refinement. It is reported as a diagnostic instead, and `scripts/loop.py` refuses
+to launch a run whose goal nothing supports.
 
 **Scope, stated plainly.** The normal form is the free non-associative ring, so
 this covers ring-signature problems and nothing else. The *shape* -- polarize the
@@ -230,23 +231,19 @@ def derive_sketch(problem, goal=None):
         else:
             lhs = F.render_compact(d["target"], names)
             rhs = "additive_identity"
-        # Not every derived lemma: handing the bridge all eleven claims is the
-        # loose-bag-as-axioms configuration measured here as ruinous, and rule 3
-        # asks for few and exact. Two mechanical filters, both defensible
-        # without knowing the proof: drop the `lin_*` instances, which are
-        # scaffolding for the polarizations rather than content, and drop any
-        # lemma about a defined operator the bridge does not mention -- RNG029-5
-        # loses both commutator lemmas that way. The model prunes further with
-        # `set_parents`, and `unused_support` will name the dead ones the moment
-        # the bridge proves.
-        speaks = {op for op in DEFINED if op in lhs or op in rhs}
-        support = sorted(
-            n for n in nodes
-            if n not in sketch.given and n != goal and not n.startswith("lin_")
-            and any(op in nodes[n][0] or op in nodes[n][1] for op in speaks))
-        nodes["bridge"] = (lhs, rhs, support)
-        l, r, _ = nodes[goal]
-        nodes[goal] = (l, r, ["bridge"])
-        notes.append(f"bridge: the goal over {len(d['terms'])} universal "
-                     f"associator term(s); the conjecture follows from it")
+        # The decomposition is a DIAGNOSTIC, not a node. `freering.expand`
+        # returns the identical residual for it and for the conjecture -- on
+        # RNG029-5, RNG033-8, RNG028-7, RNG027-5 and RNG025-4 -- and it cannot
+        # be otherwise, since both branches above restate the residual. Planted
+        # as the goal's only parent it gave twelve loop runs a sketch with no
+        # interior: one open node that WAS the conjecture, frontier depth pinned
+        # at 1, `goal_contact both` pinned at 0, every iteration inconclusive.
+        #
+        # So it is reported and not emitted. The goal keeps the parents it
+        # already has, and `scripts/loop.py` refuses to launch a run whose goal
+        # nothing supports rather than starting one that cannot see.
+        notes.append(f"DIAGNOSTIC (not a node): the goal is {len(d['terms'])} "
+                     f"universal associator term(s), {lhs} = {rhs}. That is the "
+                     f"conjecture in the theory's own language, not a "
+                     f"decomposition of it.")
     return Sketch(nodes, given=sketch.given), notes

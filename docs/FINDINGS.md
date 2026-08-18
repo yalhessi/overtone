@@ -2170,6 +2170,47 @@ proposal is mechanical while GENERATING one is not. That is the open problem,
 not a missing function.
 
 
+### The classifier is built, and the seed repair is where it pays
+
+Residual comparison now decides where a proposal sits relative to the
+conjecture, before any prover time: `freering.classify` returns `exact`,
+`equivalent`, `instance`, `distinct` or `unsupported` in microseconds -- 29 nodes
+in 0.015s.
+
+**It is safe to act on, which had to be checked before it was wired.** A check
+that condemned any node of the one decomposition known to work would forbid the
+only route this project has. Over the 29-node manual sketch exactly one node is
+not `distinct`: `middle_moufang`, which *is* RNG029-5's conjecture under another
+name. The derived bridge classifies `equivalent`, as it must.
+
+**Only an exact syntactic duplicate is rejected.** `equivalent` and `instance`
+are reported as `no_decomposition` and never counted as structural progress --
+a node so classified that proves scores `inconclusive`, so it cannot clear the
+stall counter and buy four more iterations. Rejecting them outright was the first
+design and is wrong: supplying the bridge really does take RNG029-5 from a 4000s
+timeout in both directions to 6.7s, so an alternative representation has measured
+value; it simply is not a step. (Credit to Codex's review for both corrections,
+and for catching that dropping the bridge would leave the goal parentless.)
+
+**Where the value actually is, measured.** Across **193 proposals from every
+recorded run, one** was a restatement -- `goal_difference_zero`, aug-13-03
+iteration 6. The reviewer half is cheap and correct and will rarely fire. What
+dominated twelve runs was the *seed*: `derive_sketch` planted the decomposition
+as the goal's only parent, and that node was the conjecture. It is now reported
+as a diagnostic and not emitted, and `--derive` exits `no_waypoint_found` rather
+than launching a run whose goal nothing supports -- because a run with a
+parentless goal is the configuration already measured as blind, and refusing to
+start is the correct outcome rather than a fallback.
+
+**A general linear-redundancy check is not affordable.** Asking whether a node
+lies in the linear span of the proved scaffold -- the natural way to separate
+bookkeeping from real content -- did not finish in **600s** on RNG029-5. It
+belongs offline under a budget, never in a reviewer that must cost microseconds.
+
+What remains untouched is generation, exactly as the previous entry said: the
+machinery can now say what a proposal is NOT, and still cannot produce one that
+is strictly between the axioms and the goal.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.
