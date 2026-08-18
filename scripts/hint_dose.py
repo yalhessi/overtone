@@ -28,6 +28,7 @@ single runs under contention.
     python scripts/hint_dose.py --repeats 3 --budget 300
 """
 import argparse
+import hashlib
 import json
 import random
 import statistics
@@ -63,8 +64,18 @@ def pool():
     return eqs, sk.nodes[goal][:2]
 
 
-def run(label, axioms, hints, goal, outdir, budget, direction, extra=()):
-    """One twee, alone on the machine. `reuse=False` -- old rows were contended."""
+def run(label, axioms, hints, goal, outdir, budget, direction, extra=(),
+        binary=None):
+    """One twee, alone on the machine. `reuse=False` -- old rows were contended.
+
+    `binary` must be the DETERMINISTIC build. Stock twee schedules interreduce
+    off `getCPUTime` (`Twee/Task.hs`, upstream), so it fires at a different
+    derivation step on every run, rewrites the rule set at a different moment,
+    and the search forks from there. Measured on this experiment's own output:
+    two runs of byte-identical input agreed through rule 1855, then one
+    interreduced and the other took three more rules first, and every later
+    interreduce point drifted. A dose curve measured that way is a lottery.
+    """
     t0 = time.monotonic()
     row = dag._job({"problem": PROBLEM, "node": f"dose.{label}",
                     "lhs": goal[0], "rhs": goal[1],
@@ -72,7 +83,11 @@ def run(label, axioms, hints, goal, outdir, budget, direction, extra=()):
                     "channel": "axioms", "direction": direction,
                     "extra_flags": tuple(extra),
                     "budget": budget, "outdir": str(outdir),
+                    "binary": binary,
                     "reuse": False, "ledger": None})
+    out = Path(row["output"]) if row.get("output") else None
+    row["digest"] = (hashlib.sha256(out.read_bytes()).hexdigest()[:12]
+                     if out and out.exists() else None)
     row["wall_measured"] = round(time.monotonic() - t0, 1)
     return row
 
@@ -100,6 +115,10 @@ def main():
                          "(Twee.hs:618), so choosing among matches changes "
                          "which number is charged, never how many subterms get "
                          "flattened. Off by default in twee; never tried here.")
+    ap.add_argument("--binary", default=None,
+                    help="default is the DETERMINISTIC build; stock twee "
+                         "schedules interreduce by CPU time and forks the "
+                         "search on every run")
     ap.add_argument("--out", default="logs/hint_dose")
     a = ap.parse_args()
 
@@ -135,6 +154,7 @@ def main():
         if k <= len(rest):
             arms.append((f"N_noaxioms_{k}_hints", [], rest[:k]))
 
+    binary = a.binary or config.twee_path(deterministic=True)
     extra = ("--resonance",) if a.resonance else ()
     outdir = Path(a.out + ("-resonance" if a.resonance else ""))
     outdir.mkdir(parents=True, exist_ok=True)
@@ -148,7 +168,8 @@ def main():
     # is the failure mode FINDINGS calls the worst this harness can have. A
     # measurement whose control did not reproduce is not a measurement.
     if not a.no_calibrate:
-        ref = run("calibrate", win, [], goal, outdir, a.budget, a.direction, extra)
+        ref = run("calibrate", win, [], goal, outdir, a.budget, a.direction,
+                  extra, binary)
         print(f"  calibrate: win4 axioms alone -> {ref.get('result')} "
               f"{ref['cpu']:.1f}s (reference {REFERENCE_CPU}s)")
         if not ref["proved"]:
@@ -164,14 +185,15 @@ def main():
 
     results = []
     for label, ax, hi in arms:
-        cpus, proved = [], 0
+        cpus, digests, proved = [], [], 0
         # A timeout costs the full budget every repeat and says the same thing
         # each time; only repeat what actually returns a number to compare.
         reps = a.repeats
         for i in range(reps):
             r = run(f"{label}.{i}", ax, hi, goal, outdir, a.budget,
-                    a.direction, extra)
+                    a.direction, extra, binary)
             cpus.append(r["cpu"])
+            digests.append(r.get("digest"))
             proved += bool(r["proved"])
             if not r["proved"]:
                 print(f"  {label:<28} {r.get('result','?'):<12} "
@@ -180,10 +202,18 @@ def main():
         else:
             mean = statistics.mean(cpus)
             cv = (statistics.stdev(cpus) / mean * 100) if len(cpus) > 1 else 0.0
+            # On the deterministic build, identical input must give identical
+            # OUTPUT; only CPU jitters. A differing digest means the binary is
+            # not deterministic after all, and no number in this table can be
+            # attributed to the hint set rather than to the interreduce lottery.
+            same = len(set(d for d in digests if d)) <= 1
             print(f"  {label:<28} {'proved':<12} {mean:7.1f}s  "
-                  f"cv {cv:4.1f}%  n={len(cpus)}")
+                  f"cv {cv:4.1f}%  n={len(cpus)}"
+                  f"{'' if same else '   ** DERIVATION DIVERGED **'}")
         results.append({"arm": label, "n_axioms": len(ax), "n_hints": len(hi),
                         "proved": proved, "runs": len(cpus), "cpus": cpus,
+                        "digests": digests,
+                        "deterministic": len(set(d for d in digests if d)) <= 1,
                         "mean_cpu": statistics.mean(cpus) if cpus else None})
         (outdir / "results.json").write_text(json.dumps(results, indent=2))
 

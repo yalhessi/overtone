@@ -4781,3 +4781,51 @@ def test_steering_never_repeats_an_arms_own_axiom():
     assert dag.steer_split([comm, cyc, jac], [comm, cyc, jac]) == []
     # and no steering pool means no hints, not an empty-hint invocation
     assert dag.steer_split([comm], []) == []
+
+
+def test_dag_defaults_to_the_deterministic_build():
+    """Stock twee forks the search on every run, so it cannot be the default.
+
+    `interreduce` is registered as `newTask 1 0.05` in `complete` (Twee.hs), and
+    upstream `Twee/Task.hs` schedules tasks off `getCPUTime`. So the step at
+    which the rule set gets rewritten depends on machine timing, not on the
+    derivation. Measured on this repo's own output: two runs of byte-identical
+    input agreed through rule 1855, then one interreduced while the other
+    derived three more rules first, and all six later interreduce points
+    drifted (4365/4314, 6927/6532, 10298/10033).
+
+    Every pipeline script passed `deterministic=True` by hand while the default
+    stayed stock, so `_job` handed the nondeterministic binary to anyone who
+    reached it directly -- and a dose curve came back with a 2.1x "slowdown"
+    that was the interreduce lottery.
+    """
+    import tempfile
+
+    from overtone import config, runner
+    from overtone.agent import dag
+
+    seen = {}
+
+    class R:
+        cpu, wall, output = 0.1, 0.1, ""
+        proved, status = False, "Timeout"
+
+    def fake_run(path, flags, budget, **k):
+        seen["binary"] = k.get("binary")
+        return R()
+
+    with tempfile.TemporaryDirectory() as d:
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(runner, "run", fake_run)
+            m.setattr(runner, "write_problem",
+                      lambda problem, dest, **kw: (Path(dest).write_text("x"), dest)[1])
+            job = {"problem": "RNG029-5", "node": "n", "lhs": "a", "rhs": "b",
+                   "eqs": [], "channel": "axioms", "direction": "--flatten-goal",
+                   "budget": 1, "outdir": d, "reuse": False}
+            dag._job(dict(job))
+            assert seen["binary"] == config.twee_path(deterministic=True)
+
+            # ...and an explicit binary still wins, since the timing benchmarks
+            # deliberately want stock twee.
+            dag._job({**job, "binary": "/usr/bin/twee-stock"})
+            assert seen["binary"] == "/usr/bin/twee-stock"

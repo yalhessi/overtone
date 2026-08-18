@@ -45,6 +45,7 @@ import multiprocessing as mp
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from pathlib import Path
 
+from overtone import config
 from overtone import proofs
 from overtone import runner
 from overtone.agent import hints as hintlib
@@ -512,7 +513,21 @@ def _job(j):
     problem, node = j["problem"], j["node"]
     lhs, rhs, eqs = j["lhs"], j["rhs"], j["eqs"]
     channel, direction, budget = j["channel"], j["direction"], j["budget"]
-    outdir, binary = j["outdir"], j.get("binary")
+    outdir = j["outdir"]
+    # Default to the DETERMINISTIC build, not stock twee. Upstream schedules
+    # `interreduce` off `getCPUTime` (`Twee/Task.hs`), so it fires at a
+    # different derivation step on every run, rewrites the rule set at a
+    # different moment, and the search forks there -- two runs of byte-identical
+    # input agreed through rule 1855 and then diverged at exactly the earlier
+    # run's interreduce point, with every later one drifting further. That makes
+    # repeated timings a lottery and any A/B between two supports unreadable.
+    #
+    # Every pipeline script already passed `deterministic=True` by hand; the
+    # default here was stock, so a new caller reaching `_job` directly got the
+    # nondeterministic binary silently. One did, and produced a dose curve whose
+    # headline anomaly was the interreduce schedule. Stock stays available by
+    # passing `binary` explicitly, which is what the timing benchmarks want.
+    binary = j.get("binary") or config.twee_path(deterministic=True)
     reuse, ledger = j.get("reuse", True), j.get("ledger")
     cancel = j.get("cancel")
     # Names for `eqs`, positionally aligned with it. See `_support_usage`: this
