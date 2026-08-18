@@ -48,6 +48,9 @@ RIGHT_MOUFANG = ("multiply(multiply(multiply(X,Y),Z),Y)",
 # "the exact four: cyclic, both def variants, right-Moufang" (FINDINGS).
 WINNERS = ["associator_perm_120", "associator_def_yzx",
            "associator_def_yxz_neg", "right_moufang"]
+# What WINNERS proves in, under --flatten-goal, from the ledger (probe.exact4).
+# The calibration arm must reproduce this or the run is void.
+REFERENCE_CPU = 67.9
 
 
 def pool():
@@ -80,7 +83,14 @@ def main():
     ap.add_argument("--budget", type=int, default=300)
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--direction", default="--no-flatten-goal")
+    # MEASURED: the 67.9s reference proof is `--flatten-goal` (ledger,
+    # probe.exact4). A first version of this script defaulted to the other
+    # direction, and all eight arms timed out -- a clean, plausible-looking
+    # dose curve of pure harness fault. Hence `--calibrate` below.
+    ap.add_argument("--direction", default="--flatten-goal")
+    ap.add_argument("--no-calibrate", action="store_true",
+                    help="skip the reference check. Only for a deliberate "
+                         "experiment where the reference is expected to fail.")
     ap.add_argument("--resonance", action="store_true",
                     help="add --resonance, which makes a hint count only when "
                          "its substitution maps variables to variables. It is "
@@ -130,6 +140,27 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     print(f"pool {len(eqs)} lemmas | winners {len(win)} | rest {len(rest)}")
     print(f"{len(arms)} arms, {a.repeats} repeats, serial, budget {a.budget}s\n")
+
+    # CALIBRATE FIRST. The reference arm has a known answer, so run it before
+    # anything else and stop if it does not come back. Every arm here shares a
+    # direction, a goal statement and a pool; if any of those is wrong, every
+    # arm times out and the output looks exactly like a real negative -- which
+    # is the failure mode FINDINGS calls the worst this harness can have. A
+    # measurement whose control did not reproduce is not a measurement.
+    if not a.no_calibrate:
+        ref = run("calibrate", win, [], goal, outdir, a.budget, a.direction, extra)
+        print(f"  calibrate: win4 axioms alone -> {ref.get('result')} "
+              f"{ref['cpu']:.1f}s (reference {REFERENCE_CPU}s)")
+        if not ref["proved"]:
+            sys.exit(
+                f"\nABORT: the reference set did not prove in {a.budget}s.\n"
+                f"  Expected {REFERENCE_CPU}s under {a.direction}.\n"
+                f"  Something shared by every arm is wrong -- direction, goal\n"
+                f"  statement, or pool -- so no arm below would mean anything.")
+        if ref["cpu"] > REFERENCE_CPU * 3:
+            print(f"  WARNING: {ref['cpu']:.1f}s is far above the reference; "
+                  f"the machine is loaded or the build changed.")
+    print()
 
     results = []
     for label, ax, hi in arms:
