@@ -2411,6 +2411,70 @@ Validation before any pipeline change: a serial no-hint baseline against all-19
 4-axiom+15-hint, and a dose-response over hint count to locate this family's turn
 point. `scripts/hint_dose.py`.
 
+## The hint channel has its own selection problem, and it is not about count
+
+`scripts/hint_dose.py`, RNG029-5's conjecture, `--flatten-goal`, one twee at a
+time on an idle machine, three repeats per arm. Axioms fixed at the sufficient
+four; hint sets **nested by construction** (`rest[:k]` off one seeded shuffle),
+so each row is the row above plus more.
+
+| hints | coverage | CPU | cv | vs no hints |
+|---|---|---|---|---|
+| 0 | 0% | 102.9s | 0.8% | -- |
+| 2 | 22% | 81.3s | 5.1% | 1.27x faster |
+| **4** | **37%** | **211.5s** | **42.8%** | **2.1x SLOWER** |
+| 8 | 57% | **33.4s** | 2.3% | **3.1x faster** |
+| 12 | 79% | 40.8s | 12.8% | 2.5x faster |
+| 15 | 84% | 37.8s | 15.6% | 2.7x faster |
+
+**The curve is not monotone, and the harmful set is a strict SUBSET of the best
+one.** Adding `associator_perm_201` and `lin_right_alternative` to the 2-hint set
+costs 2.6x; adding four more lemmas on top rescues it 6.3x. Hint *count* does not
+predict the effect at this scale -- the harm sits at 4, between benefit at 2 and
+the best result at 8.
+
+**Coverage does not explain it either.** Coverage -- the fraction of scorable
+subterms some hint flattens, which is the dilution mechanism -- rises
+monotonically 0 -> 84% while CPU does not. The 4-hint arm flattens *less* (37%)
+than the 8-hint arm (57%) and runs 6.3x slower. So the "score function loses
+resolution as hints accumulate" story is real as mechanism but is **not** what is
+happening here.
+
+What is left is content: specific hints misdirect this specific search. The
+harmful arm is also **bimodal** -- 262.7s, 107.1s, 264.8s, hence cv 42.8% -- which
+is the signature of a search pushed onto a bad path that sometimes escapes, not
+of measurement noise.
+
+**So over-inclusion in the hint channel is NOT free.** The hint channel
+reproduces the axiom channel's selection problem: content decides, count does
+not, nothing about a lemma says which way it will cut, and a superset of a
+harmful set can be excellent. The penalty is milder on average -- most doses here
+beat the baseline, where most axiom supersets time out -- but "supply what the
+proof needs as axioms and dump the rest in as hints" is not a safe default and
+must not be built as one.
+
+**"Stay in 9-33 hints" is not a safety rule.** That band came from 43-neutral /
+227-slow at donor scale. Harm here happens at **four**.
+
+**Match multiplicity, for the twee-patch question** (`scripts/hint_multiplicity.py`):
+over 91 scorable subterms of the goal and pool, 86.8% are covered by some hint,
+mean 2.47 hints match each, max 7, and **48.4% match more than one**. So making
+`Index.matches` return a best match rather than the first is not vacuous -- it
+would change which cost is charged on nearly half the scored subterms. But
+`hint_cost` still depends only on the hint (Twee.hs:618), so selection cannot
+move coverage, and coverage is not the problem anyway. **`--resonance` is also
+not the lever it looked like**: it cuts coverage only 87% -> 85% on this pool,
+because ring identities mostly do bind variables to variables. It cuts
+multiplicity 2.47 -> 1.84, so it is a *selection* knob here, not a dilution one.
+
+**A ledger correction.** The reference proof is recorded at 67.9s; measured alone
+and repeated it is **102.9s at cv 0.8%**, with an independent calibration run
+agreeing at 100.8s. The recorded number was taken under parallel load. Every
+comparison drawn against 67.9s -- including the 56.3s that first suggested the
+combined channel -- compared two contended single runs, and was worth 1.21x where
+the effect repeated on a quiet machine is 2.7x. **Both numbers were wrong; the
+conclusion was accidentally right and for the wrong reason.**
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.
