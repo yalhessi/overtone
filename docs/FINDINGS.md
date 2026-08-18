@@ -2331,6 +2331,57 @@ known winning set before it is trusted, exactly as the goal classifier was.
 Operator relevance alone (a lemma about an operator the target never mentions
 cannot be on its derivation) takes 18 to 15, which is not nearly enough.
 
+## Axioms and hints are not alternatives, and an arm should use both
+
+The pool problem above has an escape the plan did not anticipate: **over-inclusion
+can be made free.** Fifteen extra true lemmas turn a 67.9s proof into a timeout
+when supplied as axioms. Supplied as hints alongside the same four axioms, they
+make it *faster*.
+
+**Why, from the reference implementation.** `build/twee-deterministic/twee-lib-2.6.1`:
+`addHint` inserts into `st_hints :: !(Index f (Hint f))` (Twee.hs:89), an index
+separate from the rule set, and the only thing that ever reads it is `CP.score`
+(CP.hs:258), which charges `hint_cost` for a matching subterm instead of that
+subterm's structure. Cost is `(len - nvars)*factor + skel_cost + dup_penalty`
+(Twee.hs:618), so at factor 0.5 against `cfg_funweight = 1` a matching subterm
+looks roughly half its size and its critical pair is picked sooner.
+
+Two consequences, both structural rather than empirical:
+
+* a hint has **no deductive power** -- it never becomes a rule, so it cannot
+  rewrite anything, and a lemma the proof NEEDS cannot be supplied as one;
+* a hint **cannot enlarge the search** -- it forms no critical pairs, so it
+  cannot poison. Its whole cost is misdirected priority.
+
+That is exactly the asymmetry the poisoning results describe from the other side.
+
+**Measured on RNG029-5's conjecture**, over the 19-lemma derived pool that
+contains a sufficient four:
+
+| supply | result |
+|---|---|
+| all 19 as axioms | Timeout at 300s |
+| all 19 as hints | Timeout at 300s |
+| the exact four as axioms | 67.9s |
+| **the four as axioms + the other 15 as hints** | **56.3s, 1.21x** |
+
+All-as-hints times out for the reason above: hints alone prove nothing, so that
+arm is the standalone attempt wearing a costume.
+
+**But hints cannot substitute for a necessary axiom.** With all 19 steering,
+`W` alone and each `W + one` pair (perm, def_yzx, def_yxz_neg) timed out at 300s
+in both directions -- four arms, no winner. Priority cannot supply an inference
+the rule set does not contain. So the necessary set is genuinely larger than two
+and the selection problem survives; what changes is its shape.
+
+**What this buys.** The search no longer has to find a *minimal* set, only a
+*sufficient* one, because the remainder can always be dumped into the hint
+channel at no cost and some benefit. `race_support(..., steer=pool)` implements
+this: each arm supplies its own candidates as axioms and everything else in the
+pool as hints (`dag.steer_split`). Over-inclusion is now cheap in one direction
+only -- under-inclusion is still fatal -- which is why pool reduction remains the
+prerequisite and why growing a set beats sampling one.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.

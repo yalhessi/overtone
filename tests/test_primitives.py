@@ -477,6 +477,8 @@ def test_verify_runs_a_node_end_to_end_with_a_stubbed_prover(tmp_path, monkeypat
     """A stale job tuple reached a live run because every job went through a
     process pool, where no stub can follow it. At workers=1 the work is inline,
     so this exercises the real _job signature."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -504,6 +506,8 @@ def test_verify_runs_a_node_end_to_end_with_a_stubbed_prover(tmp_path, monkeypat
 def test_verify_reuses_a_recorded_run_instead_of_repeating_it(tmp_path, monkeypatch):
     """rng033_goal was verified standalone at 300s, failed, and the next
     iteration re-ran the identical configuration at 900s."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -535,6 +539,8 @@ def test_a_failed_node_is_not_re_attempted_without_its_parents(tmp_path, monkeyp
     was 81 fresh searches for 8620.8s, of which 8532.8s (99.0%) proved nothing
     -- and dropping every parent cannot say WHICH edge is wrong. Both directions
     of the parented run, once each, and nothing else."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -569,6 +575,8 @@ def test_artifacts_of_differently_supported_runs_do_not_collide(tmp_path, monkey
     copies of one. The retry that first exposed this is gone; the property it
     guarded is not, because the same node is verified across iterations as its
     parents change."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -615,6 +623,8 @@ def test_support_attribution_indexes_the_supplied_list_not_the_parents(tmp_path,
     ordinary parents. Resolving it against a node's declared parents credits the
     wrong lemma the moment an axiom is cited as a parent -- silently, since both
     are names and neither read raises."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -650,6 +660,8 @@ def test_support_attribution_is_absent_where_it_would_be_a_guess(tmp_path,
     """None means "not attributed" and must never read as "used nothing". A
     hint-channel run names no parents in its proof at all, and a reused row can
     point at an artifact that is gone."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -676,6 +688,8 @@ def test_reused_rows_keep_their_support_attribution(tmp_path, monkeypatch):
     """The ledger answers every repeat after the first, so attribution computed
     only on a fresh run would vanish from iteration two onward -- exactly when
     the agent has enough history to act on it."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -715,6 +729,8 @@ def test_loop_stops_when_an_agent_goes_in_a_circle(tmp_path, monkeypatch):
     """An agent that adds a node one iteration and removes it the next makes two
     states alternate forever. Each is 'new' to the node ledger, which remembers
     invocations rather than sketches, so the loop needs its own memory."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent.loop import ScriptedAgent, run_loop
     from overtone.agent.pipeline import Budget
@@ -735,6 +751,8 @@ def test_loop_stops_when_an_agent_goes_in_a_circle(tmp_path, monkeypatch):
 
 
 def test_loop_stops_when_edits_change_nothing(tmp_path, monkeypatch):
+    import tempfile
+
     from overtone import runner
     from overtone.agent.loop import ScriptedAgent, run_loop
     from overtone.agent.pipeline import Budget
@@ -752,6 +770,8 @@ def test_loop_stops_when_edits_change_nothing(tmp_path, monkeypatch):
 
 def test_state_carries_prior_iterations(tmp_path, monkeypatch):
     """An agent cannot avoid repeating an edit it cannot see."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent.loop import State, run_loop
     from overtone.agent.pipeline import Budget
@@ -786,6 +806,8 @@ def test_state_carries_prior_iterations(tmp_path, monkeypatch):
 def test_a_proved_node_does_not_pay_for_the_other_direction(tmp_path, monkeypatch):
     """The losing arm sets the node's wall time. right_moufang_a reported 0.5s
     while the run waited 300.3s on the direction that could not prove it."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -814,6 +836,8 @@ def test_a_proved_node_does_not_pay_for_the_other_direction(tmp_path, monkeypatc
 
 def test_a_failing_node_still_tries_both_directions(tmp_path, monkeypatch):
     """Short-circuiting must not hide a direction that would have worked."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -838,6 +862,8 @@ def test_racing_directions_cancels_the_loser(tmp_path, monkeypatch):
     could never succeed. Asserted on returned rows, which survive the fork that
     a shared counter would not."""
     import time as _time
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -875,6 +901,8 @@ def test_racing_directions_cancels_the_loser(tmp_path, monkeypatch):
 
 def test_a_cancelled_run_is_never_recorded(tmp_path, monkeypatch):
     """Recording one would let reuse skip a question that was never resolved."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag, ledger
 
@@ -894,6 +922,8 @@ def test_reuse_never_hands_on_a_stale_artifact_path(tmp_path, monkeypatch):
     """A reused verdict is sound -- the key is over input bytes -- but a path
     recorded before artifacts were identity-addressed can name a file a later
     run overwrote. 6 of 42 rows in the real ledger point at files that are gone."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag, ledger
 
@@ -923,6 +953,8 @@ def test_node_flags_rerun_only_their_own_node(tmp_path, monkeypatch):
     library that costs ~1100s -- for no reason, since a lemma proved under one
     ordering is still a theorem and reaches a downstream run as axiom text.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -1054,6 +1086,8 @@ def test_loop_drafts_a_sketch_before_verifying_a_bare_goal(tmp_path, monkeypatch
     verified the seed (one guaranteed-failing run) and only then consulted the
     agent. Drafting is the first half of draft -> verify -> diagnose -> revise.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag, loop as looplib
 
@@ -1176,6 +1210,8 @@ def test_axiom_nodes_are_assumed_never_proved(tmp_path, monkeypatch):
     so proving them is a tautology at 60s a go. Ratios count claims only -- an
     axiom is not an achievement.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -1311,6 +1347,8 @@ def test_one_bad_edit_does_not_end_the_run(tmp_path, monkeypatch):
     Two independent guards: review drops the bad reference and keeps the node,
     and the loop skips any edit that still fails to apply rather than crashing.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1346,6 +1384,8 @@ def test_the_loop_drops_uncited_parents_and_tells_the_agent(tmp_path, monkeypatc
     edit has to reach `final_sketch` as a real `set_parents` and reach the agent
     as a finding -- an unexplained reparenting is how a model comes to re-add
     what the loop just removed."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1427,6 +1467,8 @@ def test_stalling_counts_proofs_not_nodes(tmp_path, monkeypatch):
     Nothing noticed, so it kept making local edits. Progress is a node newly
     PROVED; a sketch that only grows has not moved.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1514,6 +1556,8 @@ def test_approach_bookkeeping_survives_drafting_and_failed_redrafts(tmp_path,
     approach; a redraft that reproduced the same sketch counted as a new route;
     and the approach still running at the end never reached the record.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1620,6 +1664,8 @@ def test_an_approach_is_budgeted_against_the_goal_not_node_count(tmp_path,
     suggestion. This test used to assert `stalled == 0` throughout -- the very
     blind spot its own docstring describes.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1850,6 +1896,8 @@ def test_the_target_gets_the_goals_declared_parents_not_everything_proved(
     worse-than-nothing on `teichmuller`, and it consumed 6,003.7s of one agent
     run's 10,423.9s and 1,201.4s of another's 1,441.9s.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -1901,6 +1949,8 @@ def test_an_unchanged_support_set_does_not_re_attempt_the_target(
     recorded answer and `cost` charges the full budget for it again. Two agent
     runs spent 58% and 83% of their prover time on attempts, many of them exact
     repeats of one another."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2248,6 +2298,8 @@ def test_a_regression_reverts_the_sketch_and_the_run_continues(
     bad edit by hand, which reproduced an earlier sketch, and the CYCLE DETECTOR
     ended the run -- 1,441.9s spent, no mathematics done. A regression must
     close the branch, not the run."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2497,6 +2549,8 @@ def test_the_target_is_not_attempted_with_no_support(tmp_path, monkeypatch):
     rested on `shuffle_inner`, which states full associativity and is false in
     an alternative ring.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2569,6 +2623,8 @@ def test_a_wholly_withheld_batch_is_not_the_agent_giving_up(tmp_path,
     on the batch AFTER review, so one withheld proposal ended the run with a
     reason that was simply untrue -- the same class of false ending as the cycle
     detector firing on a revert. The agent must get its findings and a turn."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2651,6 +2707,8 @@ def test_one_rejected_node_does_not_destroy_the_whole_draft():
 def test_a_draft_that_cannot_apply_tells_the_model_so(tmp_path, monkeypatch):
     """`_draft` caught the exception and only printed it, so the model's first
     turn began with a one-node sketch and no idea why."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2691,6 +2749,8 @@ def test_a_rollback_hands_the_agent_the_sketch_that_now_exists(tmp_path,
     against the restored one. A model proposed a node because its state said it
     was absent, and review rejected it as a duplicate because it had in fact
     just been restored."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2843,6 +2903,8 @@ def test_a_disconnected_goal_is_reported_every_turn(tmp_path, monkeypatch):
     run sat that way for four iterations with 24 lemmas proved and never
     supplied to anything. The complaint now repeats every turn and names the
     proved nodes available to fix it."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -2990,6 +3052,8 @@ def test_a_loop_spinning_without_prover_work_stops_and_says_so(tmp_path,
     no new CPU across three consecutive turns means the loop is broken, not that
     the problem is hard.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
 
@@ -3529,6 +3593,8 @@ def test_a_node_whose_parent_failed_is_still_attempted(tmp_path, monkeypatch):
     parents whether or not they proved, so the input bytes and the verdict are
     identical either way. All it decided was WHEN the question got asked.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -3562,6 +3628,8 @@ def test_a_proof_resting_on_an_unproved_lemma_is_conditional_not_proved(
     this problem until what it assumes is proved. Counting it would flatter a
     run whose assumptions never discharge, and supplying it to the target would
     prove the conjecture from an assumption."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -3684,6 +3752,8 @@ def test_the_pool_is_refilled_rather_than_drained_at_a_layer_boundary(tmp_path,
     if it is not.
     """
     import time
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -3753,6 +3823,8 @@ def test_a_conditional_proof_is_not_progress_and_is_not_supplied(tmp_path,
     predicted it, must not be handed to the run against the real conjecture, and
     must say so where the agent can read it.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import loop as looplib
     from overtone.agent.dag import Sketch
@@ -4280,6 +4352,8 @@ def test_racing_assumption_sets_stops_the_field_at_the_first_proof(tmp_path,
     direction that once burned 300.3s while its winner took 0.5s.
     """
     import time as _time
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -4323,6 +4397,8 @@ def test_a_race_that_nobody_wins_still_reports_every_arm(tmp_path, monkeypatch):
     """The negative is the common case and the one that has to be trustworthy:
     45 assumption sets for the derived bridge and not one proved. A sweep that
     quietly lost arms would have made that unreadable."""
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -4344,6 +4420,8 @@ def test_a_queued_arm_never_starts_once_the_race_is_won(tmp_path, monkeypatch):
     """Cancellation has to reach arms that have not begun, not just the ones in
     flight -- otherwise a wide sweep pays for every wave after the winner."""
     import time as _time
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -4587,6 +4665,8 @@ def test_a_long_assumption_set_does_not_crash_into_a_false_negative():
     cpu 0.0, and the sweep printed "none proved" -- a clean mathematical
     conclusion from a run that never reached the prover.
     """
+    import tempfile
+
     from overtone import runner
     from overtone.agent import dag
 
@@ -4622,3 +4702,81 @@ def test_a_long_assumption_set_does_not_crash_into_a_false_negative():
     # the full label survives for the report even though the file name is short
     assert rows[0]["label"] == label
     assert all(len(n) < 255 for n in seen), sorted(seen)[:1]
+
+
+def test_a_lemma_can_be_an_axiom_here_and_a_hint_there():
+    """The channels are not alternatives, so an arm may use both at once.
+
+    `Twee.addHint` puts a hint into `st_hints`, a separate index reached only by
+    `CP.score`; a hint never becomes a rule. So it carries no deductive power --
+    it cannot rewrite -- and it cannot enlarge the search either, because it
+    forms no critical pairs. What it does is make a matching subterm look
+    smaller, charging `hint_cost` instead of the term's structure, roughly half
+    at factor 0.5 against `cfg_funweight = 1`.
+
+    That asymmetry is measured on RNG029-5 over a 19-lemma pool containing a
+    sufficient four:
+
+        all 19 as axioms                            Timeout at 300s
+        all 19 as hints                             Timeout at 300s
+        the exact four as axioms                              67.9s
+        the four as axioms + the other 15 as hints            56.3s
+
+    The fifteen that destroy the proof as axioms speed it up as hints. So an arm
+    supplies what the proof needs as axioms and lets the rest steer.
+    """
+    import tempfile
+
+    from overtone import runner
+    from overtone.agent import dag, hints as hintlib
+
+    seen = {}
+
+    class R:
+        cpu, wall, output = 0.1, 0.1, ""
+        proved, status = False, "Timeout"
+
+    def fake_write(problem, dest, **kw):
+        seen.update(kw)
+        Path(dest).write_text("x")
+        return dest
+
+    def fake_run(path, flags, budget, **k):
+        seen["flags"] = list(flags)
+        return R()
+
+    axiom = ("multiply(X,Y)", "multiply(Y,X)")
+    hinted = ("associator(X,Y,Z)", "associator(Y,Z,X)")
+    with tempfile.TemporaryDirectory() as d:
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(runner, "write_problem", fake_write)
+            m.setattr(runner, "run", fake_run)
+            dag._job({"problem": "RNG029-5", "node": "probe", "lhs": "a",
+                      "rhs": "b", "eqs": [axiom], "hint_eqs": [hinted],
+                      "channel": "axioms", "direction": "--flatten-goal",
+                      "budget": 1, "outdir": d, "reuse": False})
+
+    assert seen.get("extra_axioms") == [axiom], "the chosen set keeps deductive power"
+    # ...and the rest reaches the same invocation through the other channel
+    assert "associator(Y,Z,X)" in (seen.get("hints") or [])
+    assert set(hintlib.HINT_FLAGS) <= set(seen.get("flags") or []), \
+        "supplying hints must switch on the hint flags"
+
+
+def test_steering_never_repeats_an_arms_own_axiom():
+    """A lemma promoted to axiom is not also hinted -- see `steer_split`.
+
+    Compared as equations, not by identity: the same lemma reaches an arm from
+    its own set and from the shared pool as two distinct tuples.
+    """
+    from overtone.agent import dag
+
+    comm = ("multiply(X,Y)", "multiply(Y,X)")
+    cyc = ("associator(X,Y,Z)", "associator(Y,Z,X)")
+    jac = ("commutator(X,X)", "additive_identity")
+    rest = dag.steer_split([comm], [list(comm), cyc, jac])
+    assert rest == [cyc, jac]
+    # an arm that promotes everything steers with nothing
+    assert dag.steer_split([comm, cyc, jac], [comm, cyc, jac]) == []
+    # and no steering pool means no hints, not an empty-hint invocation
+    assert dag.steer_split([comm], []) == []

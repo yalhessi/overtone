@@ -527,14 +527,32 @@ def _job(j):
     # the same one.
     stem = f"{node}.{direction[2:]}"
     kw, flags = {}, [*BASE_FLAGS, direction]
+    # The two channels are not alternatives, and the reference implementation
+    # says why. `Twee.addHint` puts a hint into `st_hints`, a separate index
+    # that only ever reaches `CP.score`; hints never become rules. So a hint
+    # carries NO deductive power -- it cannot rewrite anything -- and it cannot
+    # enlarge the search either, because it forms no critical pairs. What it
+    # does is make a matching subterm look smaller: `score` charges `hint_cost`
+    # instead of the term's structure, which at factor 0.5 against
+    # `cfg_funweight = 1` is roughly half, so the critical pair is picked
+    # sooner.
+    #
+    # That is the whole asymmetry. A lemma the proof NEEDS has to be an axiom.
+    # A lemma that merely might help costs critical pairs against every rule as
+    # an axiom, and only misdirected priority as a hint. So an arm can supply a
+    # small set as axioms and keep the rest steering, which is what `hint_eqs`
+    # is for.
+    hint_eqs = list(j.get("hint_eqs") or ())
     if channel == "axioms":
         kw["extra_axioms"] = eqs
     else:
+        hint_eqs = list(eqs) + hint_eqs
+    if hint_eqs:
         terms = []
-        for l, r in eqs:
-            terms += [t for t in (l, r) if "(" in t and t not in terms]
-        kw["hints"] = terms
+        for l, r in hint_eqs:
+            terms += [x for x in (l, r) if "(" in x and x not in terms]
         if terms:
+            kw["hints"] = terms
             flags = [*BASE_FLAGS, *hintlib.HINT_FLAGS, direction]
     # Per-node search options -- a term ordering, say. They go last so a node can
     # override a BASE_FLAGS default, and they are part of the ledger key below,
@@ -736,9 +754,23 @@ def _support_worker(j, cancel, q):
     q.put({**row, "label": j["label"]})
 
 
+def steer_split(eqs, steer):
+    """What an arm supplying `eqs` as axioms should also carry as hints.
+
+    Everything in `steer` the arm did NOT promote, compared as equations rather
+    than by identity so the same lemma reached from the pool and from the arm's
+    own set is recognised as one. A lemma must not appear in both channels: as an
+    axiom it already rewrites, and hinting it again only re-scores a subterm the
+    rule has usually consumed by then.
+    """
+    picked = {(l, r) for l, r in eqs}
+    return [e for e in steer if tuple(e) not in picked]
+
+
 def race_support(problem, lhs, rhs, candidates, *, outdir: Path, budget=300,
                  directions=DIRECTIONS, workers=8, binary=None, ledger=None,
-                 reuse=True, channel="axioms", node="probe"):
+                 reuse=True, channel="axioms", node="probe",
+                 steer=()):
     """Attempt one statement under many assumption sets, stopping at the first proof.
 
     Which lemmas a node is given decides whether it proves at all, the space is
@@ -781,9 +813,15 @@ def race_support(problem, lhs, rhs, candidates, *, outdir: Path, budget=300,
             # kept whole for the report.
             tag = label if len(label) <= 80 else \
                 f"{label[:40]}~{hashlib.sha256(label.encode()).hexdigest()[:10]}"
+            # Everything in `steer` that this arm did NOT promote to axioms
+            # still goes in as a hint. The arm then chooses which lemmas get
+            # deductive power, and the rest keeps steering for free -- no
+            # critical pairs, only priority. That makes over-inclusion cheap in
+            # one direction and lets an arm be wrong without being ruinous.
+            rest = steer_split(eqs, steer)
             jobs.append({
                 "problem": problem, "node": f"{node}.{tag}", "label": label,
-                "lhs": lhs, "rhs": rhs, "eqs": list(eqs),
+                "lhs": lhs, "rhs": rhs, "eqs": list(eqs), "hint_eqs": rest,
                 "support": list(names), "channel": channel,
                 "direction": direction, "budget": budget,
                 "outdir": str(outdir), "binary": binary,
