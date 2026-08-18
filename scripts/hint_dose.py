@@ -60,13 +60,14 @@ def pool():
     return eqs, sk.nodes[goal][:2]
 
 
-def run(label, axioms, hints, goal, outdir, budget, direction):
+def run(label, axioms, hints, goal, outdir, budget, direction, extra=()):
     """One twee, alone on the machine. `reuse=False` -- old rows were contended."""
     t0 = time.monotonic()
     row = dag._job({"problem": PROBLEM, "node": f"dose.{label}",
                     "lhs": goal[0], "rhs": goal[1],
                     "eqs": list(axioms), "hint_eqs": list(hints),
                     "channel": "axioms", "direction": direction,
+                    "extra_flags": tuple(extra),
                     "budget": budget, "outdir": str(outdir),
                     "reuse": False, "ledger": None})
     row["wall_measured"] = round(time.monotonic() - t0, 1)
@@ -80,6 +81,15 @@ def main():
     ap.add_argument("--repeats", type=int, default=3)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--direction", default="--no-flatten-goal")
+    ap.add_argument("--resonance", action="store_true",
+                    help="add --resonance, which makes a hint count only when "
+                         "its substitution maps variables to variables. It is "
+                         "the gate aimed at over-general hints -- unlike "
+                         "picking a 'better' matching hint, which cannot help: "
+                         "`hint_cost` is a function of the HINT alone "
+                         "(Twee.hs:618), so choosing among matches changes "
+                         "which number is charged, never how many subterms get "
+                         "flattened. Off by default in twee; never tried here.")
     ap.add_argument("--out", default="logs/hint_dose")
     a = ap.parse_args()
 
@@ -94,6 +104,12 @@ def main():
 
     # Two controls, a replication, and a dose curve over the SAME shuffled rest,
     # so k and k+1 differ by exactly one hint rather than by a different set.
+    # MEASURED: C0 times out at 300s, so every no-axiom arm below is a timeout
+    # and the C0/C1 pair cannot decide the harm question -- two timeouts are not
+    # a comparison. The arms that CAN decide it are the D curve, which varies
+    # hint count on top of an axiom set that does prove. Kept anyway because
+    # "standalone does not prove at this budget" is itself the fact that
+    # retired the "hints alone are just standalone" story.
     arms = [
         ("C0_standalone_no_hints", [], []),
         ("C1_pool_as_hints_only", [], list(eqs.values())),
@@ -109,7 +125,8 @@ def main():
         if k <= len(rest):
             arms.append((f"N_noaxioms_{k}_hints", [], rest[:k]))
 
-    outdir = Path(a.out)
+    extra = ("--resonance",) if a.resonance else ()
+    outdir = Path(a.out + ("-resonance" if a.resonance else ""))
     outdir.mkdir(parents=True, exist_ok=True)
     print(f"pool {len(eqs)} lemmas | winners {len(win)} | rest {len(rest)}")
     print(f"{len(arms)} arms, {a.repeats} repeats, serial, budget {a.budget}s\n")
@@ -121,7 +138,8 @@ def main():
         # each time; only repeat what actually returns a number to compare.
         reps = a.repeats
         for i in range(reps):
-            r = run(f"{label}.{i}", ax, hi, goal, outdir, a.budget, a.direction)
+            r = run(f"{label}.{i}", ax, hi, goal, outdir, a.budget,
+                    a.direction, extra)
             cpus.append(r["cpu"])
             proved += bool(r["proved"])
             if not r["proved"]:
