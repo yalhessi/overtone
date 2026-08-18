@@ -1,0 +1,158 @@
+"""Does the hint channel help, and past what dose does it hurt?
+
+FINDINGS once said hints "cannot poison" because they form no critical pairs.
+That does not follow, and the archive contradicts it: 43 hints neutral but 227
+**2.1x slower than no hints**, a flat hint set 1.29x slower at cv <= 0.2%, and
+all 234 mined lemmas as hints proving none of four targets that eight axioms
+proved three of. The mechanism is `size'` (CP.hs:258): a hint match takes the
+FIRST entry `Index.matches` returns, not the best, and short-circuits the
+structural walk -- the subterm's own size is never computed, only `hint_cost`.
+Each added hint converts more subterms from "measured" to "flat", so the score
+function loses resolution and the queue orders on noise. Harm is monotone in
+dose.
+
+The 56.3s combined-channel figure that prompted a pipeline change is a SINGLE
+run, made under parallel core load, at 15 hints -- inside the 9-33 band the
+archive already calls safe. It is not evidence about large pools, and it was
+never checked against the two controls that decide the question:
+
+    standalone, no hints at all      <- never run; the baseline everything needs
+    the pool as hints, no axioms     <- reported as timeout and explained away
+                                        as "standalone wearing a costume",
+                                        which is exactly what this compares
+
+Everything here runs ONE twee at a time and repeats, because the numbers in
+FINDINGS that held up were repeated to cv <= 0.2% and the ones that did not were
+single runs under contention.
+
+    python scripts/hint_dose.py --repeats 3 --budget 300
+"""
+import argparse
+import json
+import random
+import statistics
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from overtone import config                                       # noqa: E402
+from overtone.agent import dag                                    # noqa: E402
+from overtone.agent.derive import derive_sketch                   # noqa: E402
+
+PROBLEM = "RNG029-5"
+# ((XY)Z)Y = X(Y(ZY)), the waypoint the manual route proves in 197.8s.
+RIGHT_MOUFANG = ("multiply(multiply(multiply(X,Y),Z),Y)",
+                 "multiply(X,multiply(Y,multiply(Z,Y)))")
+# "the exact four: cyclic, both def variants, right-Moufang" (FINDINGS).
+WINNERS = ["associator_perm_120", "associator_def_yzx",
+           "associator_def_yxz_neg", "right_moufang"]
+
+
+def pool():
+    """The 19 derived lemmas, plus the waypoint. Given axioms are not lemmas."""
+    sk = derive_sketch(PROBLEM)[0]
+    goal = next((n for n in sk.nodes if n.endswith("_goal")), None)
+    eqs = {n: (l, r) for n, (l, r, _) in sk.nodes.items()
+           if n not in sk.given and n != goal}
+    eqs["right_moufang"] = RIGHT_MOUFANG
+    return eqs, sk.nodes[goal][:2]
+
+
+def run(label, axioms, hints, goal, outdir, budget, direction):
+    """One twee, alone on the machine. `reuse=False` -- old rows were contended."""
+    t0 = time.monotonic()
+    row = dag._job({"problem": PROBLEM, "node": f"dose.{label}",
+                    "lhs": goal[0], "rhs": goal[1],
+                    "eqs": list(axioms), "hint_eqs": list(hints),
+                    "channel": "axioms", "direction": direction,
+                    "budget": budget, "outdir": str(outdir),
+                    "reuse": False, "ledger": None})
+    row["wall_measured"] = round(time.monotonic() - t0, 1)
+    return row
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--budget", type=int, default=300)
+    ap.add_argument("--repeats", type=int, default=3)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--direction", default="--no-flatten-goal")
+    ap.add_argument("--out", default="logs/hint_dose")
+    a = ap.parse_args()
+
+    eqs, goal = pool()
+    missing = [n for n in WINNERS if n not in eqs]
+    if missing:
+        sys.exit(f"the recorded winning set is not in the pool: {missing}")
+    win = [eqs[n] for n in WINNERS]
+    rest_names = [n for n in eqs if n not in WINNERS]
+    random.Random(a.seed).shuffle(rest_names)
+    rest = [eqs[n] for n in rest_names]
+
+    # Two controls, a replication, and a dose curve over the SAME shuffled rest,
+    # so k and k+1 differ by exactly one hint rather than by a different set.
+    arms = [
+        ("C0_standalone_no_hints", [], []),
+        ("C1_pool_as_hints_only", [], list(eqs.values())),
+        ("R_win4_axioms_only", win, []),
+        ("R_win4_plus_all_hints", win, rest),
+    ]
+    for k in (2, 4, 8, 12):
+        if k <= len(rest):
+            arms.append((f"D_win4_plus_{k}_hints", win, rest[:k]))
+    # ...and the same doses without the axioms, to separate "hints help" from
+    # "hints help *because* the axioms are already sufficient".
+    for k in (4, 12):
+        if k <= len(rest):
+            arms.append((f"N_noaxioms_{k}_hints", [], rest[:k]))
+
+    outdir = Path(a.out)
+    outdir.mkdir(parents=True, exist_ok=True)
+    print(f"pool {len(eqs)} lemmas | winners {len(win)} | rest {len(rest)}")
+    print(f"{len(arms)} arms, {a.repeats} repeats, serial, budget {a.budget}s\n")
+
+    results = []
+    for label, ax, hi in arms:
+        cpus, proved = [], 0
+        # A timeout costs the full budget every repeat and says the same thing
+        # each time; only repeat what actually returns a number to compare.
+        reps = a.repeats
+        for i in range(reps):
+            r = run(f"{label}.{i}", ax, hi, goal, outdir, a.budget, a.direction)
+            cpus.append(r["cpu"])
+            proved += bool(r["proved"])
+            if not r["proved"]:
+                print(f"  {label:<28} {r.get('result','?'):<12} "
+                      f"{r['cpu']:7.1f}s  (not repeated)")
+                break
+        else:
+            mean = statistics.mean(cpus)
+            cv = (statistics.stdev(cpus) / mean * 100) if len(cpus) > 1 else 0.0
+            print(f"  {label:<28} {'proved':<12} {mean:7.1f}s  "
+                  f"cv {cv:4.1f}%  n={len(cpus)}")
+        results.append({"arm": label, "n_axioms": len(ax), "n_hints": len(hi),
+                        "proved": proved, "runs": len(cpus), "cpus": cpus,
+                        "mean_cpu": statistics.mean(cpus) if cpus else None})
+        (outdir / "results.json").write_text(json.dumps(results, indent=2))
+
+    by = {r["arm"]: r for r in results}
+    base, only = by.get("C0_standalone_no_hints"), by.get("C1_pool_as_hints_only")
+    print("\n--- the control that decides it ---")
+    if base and only:
+        if not base["proved"] and not only["proved"]:
+            print("  both timed out: this budget cannot separate them. Raise it.")
+        else:
+            verdict = ("HINTS HURT" if (base["proved"] and not only["proved"])
+                       or (base["proved"] and only["proved"]
+                           and only["mean_cpu"] > base["mean_cpu"] * 1.1)
+                       else "hints do not hurt at this dose")
+            print(f"  standalone {base['mean_cpu']:.1f}s vs pool-as-hints "
+                  f"{only['mean_cpu']:.1f}s -> {verdict}")
+    print(f"\nwrote {outdir / 'results.json'}")
+
+
+if __name__ == "__main__":
+    main()

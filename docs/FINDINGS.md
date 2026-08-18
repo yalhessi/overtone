@@ -2333,10 +2333,11 @@ cannot be on its derivation) takes 18 to 15, which is not nearly enough.
 
 ## Axioms and hints are not alternatives, and an arm should use both
 
-The pool problem above has an escape the plan did not anticipate: **over-inclusion
-can be made free.** Fifteen extra true lemmas turn a 67.9s proof into a timeout
-when supplied as axioms. Supplied as hints alongside the same four axioms, they
-make it *faster*.
+The pool problem above may have an escape: over-inclusion is *cheaper* in the
+hint channel than the axiom channel. Fifteen extra true lemmas turn a 67.9s proof
+into a timeout as axioms; as hints alongside the same four axioms they measured
+faster. **Cheaper is not free -- see the correction at the end of this entry,
+which bounds the claim this paragraph originally made.**
 
 **Why, from the reference implementation.** `build/twee-deterministic/twee-lib-2.6.1`:
 `addHint` inserts into `st_hints :: !(Index f (Hint f))` (Twee.hs:89), an index
@@ -2374,13 +2375,41 @@ in both directions -- four arms, no winner. Priority cannot supply an inference
 the rule set does not contain. So the necessary set is genuinely larger than two
 and the selection problem survives; what changes is its shape.
 
-**What this buys.** The search no longer has to find a *minimal* set, only a
-*sufficient* one, because the remainder can always be dumped into the hint
-channel at no cost and some benefit. `race_support(..., steer=pool)` implements
-this: each arm supplies its own candidates as axioms and everything else in the
-pool as hints (`dag.steer_split`). Over-inclusion is now cheap in one direction
-only -- under-inclusion is still fatal -- which is why pool reduction remains the
-prerequisite and why growing a set beats sampling one.
+**CORRECTION -- hints CAN prevent a proof, and this entry first said otherwise.**
+"Forms no critical pairs" was read as "cannot hurt". It does not follow, and the
+archive already contradicted it:
+
+| recorded | effect |
+|---|---|
+| 43 hints vs 227 hints | neutral vs **2.1x slower** than no hints |
+| flat hint set, cv <= 0.2% | **1.29x SLOWER than no hints** (408.3s vs 317.2s) |
+| all 234 mined lemmas as hints | proved **none** of 4 targets; 8 as axioms proved 3 |
+| Twitch's own wins | 9-33 hints |
+
+The mechanism is in `size'` (CP.hs:258): a hint match takes the **first** entry
+`Index.matches` returns, not the best, and it **short-circuits the structural
+walk** -- the subterm's own size is never computed, only `hint_cost`, and
+recursion continues into the substitution. So every added hint converts more
+subterms from "measured by structure" to "flat `hint_cost`". Hints do not
+enlarge the search, they **overwrite the score function's resolution**, and past
+some density the queue orders on noise. Bad ordering under a finite budget is
+indistinguishable from no proof. Harm is monotone in hint count -- which is the
+43/227 curve.
+
+This family should turn EARLIER than a diverse hint set, not later: 19 identities
+over the same two operators as the goal means near-total match density.
+
+**So the 56.3s figure is one point inside the known-good 9-33 band, not a licence
+for large pools.** It is also a single run under parallel core load, where the
+trustworthy numbers above were repeated to cv <= 0.2%. Treat it as unreplicated.
+What survives unconditionally is only the negative half -- a lemma the proof
+needs must be an axiom, since `W` alone and each `W + one` timed out at 300s with
+the whole pool steering.
+
+Validation before any pipeline change: a serial no-hint baseline against all-19
+-as-hints (the control never run), a repeated replication of 4-axiom vs
+4-axiom+15-hint, and a dose-response over hint count to locate this family's turn
+point. `scripts/hint_dose.py`.
 
 ## Open
 
