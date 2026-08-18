@@ -2279,6 +2279,58 @@ assuming them changes nothing and the screen returned 0 hits in 59 candidates.
 What every search re-derives is what every search already had. Ordering by
 `evidence.relevance` after dropping axioms and scaffold yields real material.
 
+### Support selection: the channel does not save it, and sampling cannot reach it
+
+Two results, and a harness fault found on the way that matters more than either.
+
+**A crash was being reported as a mathematical negative.** `race_support` named
+each artifact after its assumption set's label, and an eighteen-lemma set joins
+into 359 characters. The filename went past NAME_MAX at 255, `_job` raised,
+`_support_worker` turned it into an Error row with `cpu 0.0`, and the sweep
+printed **"none proved ... resists every set tried, standalone included"** -- a
+clean negative from a run that never reached the prover, in 0.0s, with no
+artifact on disk. Long labels are now hashed for the filename and kept whole for
+the report, and `support_sweep.py` counts Error rows and says outright that a run
+carrying any is not a measurement. The sweeps already in this file are unaffected:
+they ran at sizes 0-2, whose labels are short.
+
+**The channel does not dissolve the problem.** Supplying the whole pool as hints
+rather than axioms is the one cheap move that could have, since a hint adds no
+critical pairs -- and FINDINGS records the inversion on MVA005-1, 20 lemmas as
+axioms timing out where the same set as hints proved in 173.6s. Measured here on
+a 19-lemma pool that CONTAINS a sufficient four:
+
+| channel | result |
+|---|---|
+| the exact four, as axioms | **67.9s** |
+| all 19, as axioms | Timeout at 300s, both directions |
+| all 19, as hints | Timeout at 300s, both directions |
+
+So the RNG counter-evidence generalises: 234 mined lemmas in the hint channel
+flipped nothing here either, and `alt12` never proved from any hint
+configuration. Selection cannot be avoided by changing how the set is delivered.
+
+**And uniform sampling cannot find the set.** A losing arm costs 90s x 2
+directions; the winner proves in 67.9s. If winning sets are roughly unique:
+
+| space | sets | expected sampling cost |
+|---|---|---|
+| C(18,3) | 816 | ~73,000s |
+| C(18,4) | 3,060 | ~275,000s |
+| C(14,3) after dropping the 3 commutator lemmas the goal never mentions | 364 | ~33,000s |
+| C(8,3) | 56 | ~5,000s |
+
+Nothing above a pool of about eight is affordable, and the planned randomised
+sweep was not run because the arithmetic answers it: at one winner in 816, 24
+samples buy a bound of "density < 1/24" that the prior already implies.
+
+**So pool reduction is the prerequisite, not an optional refinement.** The
+question is not how to search 3,060 sets but how to get the pool to eight
+without losing the answer -- and any reduction has to be checked against the
+known winning set before it is trusted, exactly as the goal classifier was.
+Operator relevance alone (a lemma about an operator the target never mentions
+cannot be on its derivation) takes 18 to 15, which is not nearly enough.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.

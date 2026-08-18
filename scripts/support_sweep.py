@@ -40,6 +40,11 @@ from overtone import config                                       # noqa: E402
 from overtone.agent.dag import (grounding, race_support,          # noqa: E402
                                 unproved_ancestors, verify)
 
+# How many combinations to materialise before sampling. A pool of 19 at sizes
+# 3 and 4 is 4,845; the ceiling only matters for a pool large enough that even
+# listing the space is the wrong move.
+_CEILING = 200_000
+
 
 def _seed(problem):
     from overtone.agent.derive import derive_sketch
@@ -62,6 +67,19 @@ def main():
                          "singletons and pairs")
     ap.add_argument("--max-sets", type=int, default=60,
                     help="cap, so a careless --sizes cannot queue thousands")
+    ap.add_argument("--channel", choices=("axioms", "hints"), default="axioms",
+                    help="how the set is supplied. An axiom joins the rewrite "
+                         "system and forms critical pairs with every rule, "
+                         "which is what poisons a large set; a hint only "
+                         "reweights scoring. Measured to invert on MVA005-1: "
+                         "20 lemmas as axioms timed out, the same set as hints "
+                         "proved in 173.6s.")
+    ap.add_argument("--order", choices=("lex", "random"), default="lex",
+                    help="`lex` takes the alphabetically first sets, which at "
+                         "sizes 3,4 over 19 lemmas searches one corner of 4,845; "
+                         "`random` samples the space instead.")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="for --order random, so a sweep is repeatable")
     ap.add_argument("--budget", type=int, default=300)
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--binary")
@@ -98,23 +116,35 @@ def main():
         pool = [p for p in pool if p in ground]
 
     sizes = sorted({int(x) for x in a.sizes.split(",") if x.strip()})
-    cands = []
+    combos = []
     for k in sizes:
         for combo in itertools.combinations(pool, k):
-            cands.append(("+".join(combo) or "none", list(combo),
-                          sketch.equations(list(combo))))
-            if len(cands) >= a.max_sets:
+            combos.append(combo)
+            if len(combos) >= _CEILING:
                 break
-        if len(cands) >= a.max_sets:
-            print(f"  capped at --max-sets {a.max_sets}", flush=True)
+        if len(combos) >= _CEILING:
             break
+    total = len(combos)
+    if a.order == "random":
+        # Taking the first `max_sets` in lexicographic order is not a sample of
+        # the space, it is one corner of it: at sizes 3,4 over 19 lemmas that is
+        # 60 of 4,845, all beginning with the alphabetically earliest lemma.
+        # Seeded, so a sweep can be repeated exactly.
+        import random
+        random.Random(a.seed).shuffle(combos)
+    combos = combos[:a.max_sets]
+    if total > len(combos):
+        print(f"  {len(combos)} of {total} set(s), {a.order} order"
+              + (f" (seed {a.seed})" if a.order == "random" else ""), flush=True)
+    cands = [("+".join(c) or "none", list(c), sketch.equations(list(c)))
+             for c in combos]
 
     print(f"\n{a.problem}: racing `{node}` over {len(cands)} assumption set(s) "
-          f"from a pool of {len(pool)}, {a.budget}s each")
+          f"from a pool of {len(pool)} as {a.channel}, {a.budget}s each")
     print(f"  {lhs} = {rhs}\n", flush=True)
     won, rows = race_support(a.problem, lhs, rhs, cands, outdir=outdir / node,
                              budget=a.budget, workers=a.workers, binary=binary,
-                             node=node)
+                             node=node, channel=a.channel)
 
     best = {}
     for r in rows:
@@ -122,7 +152,27 @@ def main():
             lab = r["label"]
             if lab not in best or r["cpu"] < best[lab]:
                 best[lab] = r["cpu"]
+    # What the sweep COST is the result, not just which set won. Arms run in
+    # parallel and every one is cancelled the moment another proves, so
+    # "attempts before the winner" is not well defined -- the honest numbers are
+    # how many sets reached a verdict at all and what that took. Together they
+    # turn "the space is 4,845 sets" into a measured density.
+    verdicts = {r["label"] for r in rows}
+    cpu = sum(r.get("cpu") or 0.0 for r in rows)
+    # An arm that CRASHED is not an arm that failed to prove, and reporting the
+    # two the same way is how a harness fault becomes a mathematical
+    # conclusion. An eighteen-lemma set joins into a 359-character label, the
+    # artifact name went past NAME_MAX, `_job` raised, and this printed "none
+    # proved" -- a clean negative from a run that never reached the prover.
+    errors = [r for r in rows if str(r.get("result", "")).startswith("Error")]
     print(f"\n=== {len(best)} of {len(cands)} set(s) proved `{node}`")
+    print(f"    {len(verdicts)} set(s) reached a verdict, {cpu:.1f}s CPU "
+          f"({a.channel})")
+    if errors:
+        print(f"    !! {len(errors)} arm(s) ERRORED and proved nothing about "
+              f"anything -- this run is not a measurement:")
+        for r in errors[:3]:
+            print(f"       {r['result'][:110]}")
     for lab, cpu in sorted(best.items(), key=lambda x: x[1]):
         print(f"   {cpu:>8.1f}s  {lab}")
     if not best:
@@ -133,8 +183,12 @@ def main():
               f"\n   That does not make it unprovable -- it makes it a bad "
               f"target, if something reachable sits nearby.")
     if a.json:
-        print(json.dumps({"node": node, "winner": won,
-                          "proved": best, "n_sets": len(cands)}, indent=2))
+        print(json.dumps({"node": node, "winner": won, "proved": best,
+                          "n_sets": len(cands), "n_space": total,
+                          "n_verdicts": len(verdicts), "cpu": round(cpu, 1),
+                          "errors": len(errors),
+                          "channel": a.channel, "order": a.order,
+                          "seed": a.seed, "pool": pool}, indent=2))
 
 
 if __name__ == "__main__":

@@ -4576,3 +4576,49 @@ def test_the_definition_rearrangement_is_read_off_the_normal_form():
     assert (lhs, rhs) == ("add(commutator(X,Y),multiply(X,Y))",
                           "multiply(Y,X)")
     assert not F.expand(F.parse(lhs), F.parse(rhs))
+
+
+def test_a_long_assumption_set_does_not_crash_into_a_false_negative():
+    """The worst failure this harness can have: a crash reported as a negative.
+
+    `race_support` named each artifact after the set's label, and an eighteen-
+    lemma set joins into 359 characters. The filename went past NAME_MAX at 255,
+    `_job` raised OSError, `_support_worker` turned it into an Error row with
+    cpu 0.0, and the sweep printed "none proved" -- a clean mathematical
+    conclusion from a run that never reached the prover.
+    """
+    from overtone import runner
+    from overtone.agent import dag
+
+    seen = {}
+
+    class R:
+        cpu, wall, output = 0.1, 0.1, ""
+        proved, status = False, "Timeout"
+
+        def __init__(self, path):
+            seen[Path(str(path)).name] = True
+
+    import pytest as _p
+    monkey = _p.MonkeyPatch()
+    monkey.setattr(runner, "run", lambda path, *a, **k: R(path))
+    try:
+        names = [f"a_very_long_lemma_name_number_{i:02d}" for i in range(18)]
+        eqs = [("multiply(X,Y)", "multiply(Y,X)")] * len(names)
+        label = "+".join(names)
+        assert len(label) > 255, "the fixture must reproduce the length"
+        with _p.MonkeyPatch.context() as m:
+            m.setattr(runner, "run", lambda path, *a, **k: R(path))
+            _, rows = dag.race_support(
+                "RNG029-5", "associator(X,Y,Z)", "additive_identity",
+                [(label, names, eqs)], outdir=Path("/tmp/rs_len_test"),
+                budget=1, workers=2, directions=("--flatten-goal",))
+    finally:
+        monkey.undo()
+
+    assert rows, "the arm must report"
+    assert not any(str(r.get("result", "")).startswith("Error") for r in rows), \
+        [r.get("result") for r in rows]
+    # the full label survives for the report even though the file name is short
+    assert rows[0]["label"] == label
+    assert all(len(n) < 255 for n in seen), sorted(seen)[:1]

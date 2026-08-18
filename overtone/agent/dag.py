@@ -37,6 +37,7 @@ have the same conjecture and the same axiom include; RNG025-5 adds seven true,
 relevant sign lemmas as axioms. Same screen, build, budget and direction:
 RNG025-4 proves in 371.9s, RNG025-5 times out, and still times out at 4000s.
 """
+import hashlib
 import json
 import re
 import time
@@ -771,8 +772,17 @@ def race_support(problem, lhs, rhs, candidates, *, outdir: Path, budget=300,
     jobs = []
     for label, names, eqs in candidates:
         for direction in directions:
+            # The label names the ARTIFACT, and an assumption set of eighteen
+            # lemmas joins into 359 characters -- past NAME_MAX at 255, so
+            # `_job` raised OSError, `_support_worker` turned it into an Error
+            # row with cpu 0.0, and the caller reported "did not prove". A crash
+            # indistinguishable from a negative is the worst failure this
+            # harness can have, so long labels are hashed for the filename and
+            # kept whole for the report.
+            tag = label if len(label) <= 80 else \
+                f"{label[:40]}~{hashlib.sha256(label.encode()).hexdigest()[:10]}"
             jobs.append({
-                "problem": problem, "node": f"{node}.{label}", "label": label,
+                "problem": problem, "node": f"{node}.{tag}", "label": label,
                 "lhs": lhs, "rhs": rhs, "eqs": list(eqs),
                 "support": list(names), "channel": channel,
                 "direction": direction, "budget": budget,
