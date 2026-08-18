@@ -2503,6 +2503,92 @@ deterministic build. An earlier entry here "corrected" it to 102.9s and accused
 it of contention; that 102.9s was stock twee taking a different interreduce path,
 and the correction is withdrawn.
 
+## A hint's effect is a property of the SET, not of the hint. Nothing per-hint predicts it
+
+The question was how to tell a useful hint from a destructive one before running.
+The answer is that the quantity does not exist: measured alone and measured in
+context, the same hint reverses sign.
+
+**Every single hint is neutral or harmful.** RNG029-5's conjecture, deterministic
+build, the sufficient four as axioms, exactly one hint per arm, against a 69.4s
+no-hint baseline (`scripts/hint_effect.py`):
+
+| effect | hints |
+|---|---|
+| **loses the proof** at 300s | `associator_add_1`, `commutator_add_1`, `associator_def_xzy_neg`, `associator_def_zyx_neg`, `commutator_def_add` |
+| 3.4-3.5x slower | `associator_add_2`, `associator_add_3` |
+| 1.8x slower | `associator_def_add`, `associator_def_zxy` |
+| 1.1-1.2x slower | `associator_perm_201`, `commutator_add_2` |
+| inert, 1.00-1.01x | the four linearised/polarised alternative laws |
+
+**0 of 15 helped. 5 destroyed a proof that takes 69.4s without them.** Yet the
+8-hint set from the dose curve runs **40.4s, 1.71x faster than no hints** -- and
+every one of its eight members is in the table above.
+
+**Leave-one-out from that 8-set** (`--loo 8`; baseline reproduced at 40.4s):
+
+| member | alone | dropped from the 8 | contribution |
+|---|---|---|---|
+| `associator_def_add` | 1.84x slower | **PROOF LOST** | **essential** |
+| `associator_perm_201` | 1.20x slower | **PROOF LOST** | **essential** |
+| `associator_def_xzy_neg` | **loses the proof** | 177.6s (4.40x worse) | **essential** |
+| `lin_right_alternative` | inert | 40.6s (1.01x) | irrelevant |
+| `lin_left_alternative` | inert | 40.5s (1.00x) | irrelevant |
+| `associator_add_2` | 3.40x slower | 32.7s (0.81x) | harmful |
+| `associator_add_3` | 3.49x slower | **32.0s (0.79x)** | harmful |
+| `commutator_add_1` | **loses the proof** | 33.8s (0.84x) | harmful |
+
+**Three of eight reverse sign.** `associator_def_xzy_neg` destroys the proof on
+its own and the set cannot afford to lose it. `associator_def_add` and
+`associator_perm_201` each slow the bare axioms and the proof is *lost* without
+them. And "bad alone" does not imply "good in context" either --
+`commutator_add_1` destroys the proof alone and is still harmful in the set. There
+is no rule.
+
+    Spearman(effect alone, contribution in the set) = -0.33
+
+A per-hint score would need that near +1. It is negative, so scoring hints
+individually is worse than useless here.
+
+**Mechanism, and it is exact.** `size'` matches with
+`(sub, Hint{..}):_ <- Index.matches t hints` -- **first match wins**, and
+`Index.matches` order follows the trie, hence insertion. With one hint every
+matching subterm takes its discount; with eight, a subterm the destructive hint
+would have captured may be captured by another first. **Hints mask each other**,
+which is what the 48.4% multiplicity measures. So a hint's effect depends on
+which other hints are in the index and in what order they come back -- an
+implementation artifact carrying no mathematical content. Non-additivity is not
+mysterious; it is first-match-wins.
+
+**What DOES predict, and it is only magnitude.** Firing rate against the
+baseline's derived terms gives Spearman +0.73 with cost, and
+`pressure = discount x firing rate` +0.74, where the discount alone gives +0.17.
+The discount itself is exactly `0.5 x (function symbols in the hint)`
+(Twee.hs:618) -- fixed by the hint, independent of the matched subterm's size, so
+`associator_perm_*` can never move a score by more than 0.5 while any
+`associator_def_*` moves it 2.0 per firing. But firing rate predicts *how much a
+hint perturbs*, never *which way*.
+
+**The one free reduction.** A hint that never matches is inert, and that IS
+predictable offline: the four linearised/polarised laws have firing rate ~0 and
+measure 1.00-1.01x both alone and dropped. They are specific patterns
+(`associator(X,add(Y,Z),add(Y,Z))`) that essentially never fire. Dropping
+never-firing hints from a pool is free.
+
+**So the usable procedure is measured pruning, not scoring** -- the same
+conclusion the axiom channel reached, now measured on both. Leave-one-out costs
+|S| runs and works: it found two necessary members, one strong contributor, two
+irrelevant and three harmful, and its best arm at **32.0s beats the 8-set's
+40.4s**, so a 7-subset is better and greedy pruning has not converged. Per-hint
+prediction is closed; iterated LOO is open and cheap.
+
+**And this finally gives the twee patch a defensible definition.** "Best match"
+need not be optimal -- it needs the discount a subterm receives to be a function
+of the hint SET alone rather than of index insertion order (say, the matching
+hint with the greatest discount, or the most specific match). That would not make
+effects additive, but it removes an arbitrariness sitting directly under the
+unpredictability, and it is testable against the curve above.
+
 ## Open
 
 Whether McCune's Lemma 2 hints can drive twee through Lemma 2 is **unresolved**.
