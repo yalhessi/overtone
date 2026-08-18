@@ -136,6 +136,96 @@ def polarizations(problem, add_names):
     return out
 
 
+def definition_rearrangement(op, arity):
+    """`(name, lhs, rhs)` -- the operator's own definition with no minus sign.
+
+    `associator(X,Y,Z) + X(YZ) = (XY)Z`, read straight off the normal form by
+    moving the negative monomials to the other side. Universal by construction,
+    and mechanical for any defined operator: the commutator gives
+    `commutator(X,Y) + XY = YX` by the same rule.
+
+    The seed did not emit this, and that single omission is what made the
+    waypoint pilot's upstream arm unwinnable. `right_moufang` needs
+    `assoc_cyclic`, `assoc_def_246` and `assoc_def_247`; the scaffold had the
+    first and could not reach the other two, because both are theory-specific
+    (residue 4) and nothing in the universal-or-certificate machinery emits
+    them. With this rearrangement present they are both certified from what is
+    already derived -- so the winning support went from outside the search space
+    to inside it on the strength of one universal identity.
+    """
+    fn = {"associator": F.assoc, "commutator": F.comm}.get(op)
+    if fn is None:
+        return None
+    names = list(VARS[:arity])
+    p = fn(*[F.V(v) for v in names])
+    pos = {k: v for k, v in p.items() if v > 0}
+    neg = {k: -v for k, v in p.items() if v < 0}
+    if not pos or not neg:
+        return None
+    lhs = f"add({_apply(op, names)},{F.to_twee(neg)})"
+    rhs = F.to_twee(pos)
+    if F.expand(F.parse(lhs), F.parse(rhs)):
+        return None                       # not an identity; emit nothing
+    return (f"{op}_def_add", lhs, rhs)
+
+
+def definition_variants(op, arity, proved, var_names=("X", "Y", "Z")):
+    """Rearrangements that hold the operator's arguments fixed and permute the
+    products, when what is already proved certifies them.
+
+    `associator(X,Y,Z) + Y(ZX) = (YZ)X` is the shape: the associator keeps its
+    argument order while the products move, which is the form a rewriting prover
+    needs and the one the manual route calls `assoc_def_246`. Derived here, not
+    recalled -- each is emitted only with an exact integer certificate over the
+    definition rearrangement and the symmetries, and carries the lemmas that
+    certificate cites as its parents.
+    """
+    import itertools
+
+    base = definition_rearrangement(op, arity)
+    if base is None or not proved:
+        return []
+    fn = {"associator": F.assoc, "commutator": F.comm}[op]
+    basis = []
+    for label, elem in proved:
+        for m in F._renamings(F.variables(elem), var_names):
+            basis.append((f"{label}[{','.join(m[k] for k in sorted(m))}]",
+                          F.substitute(elem, {k: F.V(w) for k, w in m.items()})))
+    seen, uniq = set(), []
+    for label, e in basis:
+        k = tuple(sorted((str(a), b) for a, b in e.items()))
+        if e and k not in seen:
+            seen.add(k)
+            uniq.append((label, e))
+
+    fixed = list(var_names[:arity])
+    out = []
+    for perm in itertools.permutations(fixed):
+        if list(perm) == fixed:
+            continue
+        p = fn(*[F.V(v) for v in perm])
+        pos = {k: v for k, v in p.items() if v > 0}
+        neg = {k: -v for k, v in p.items() if v < 0}
+        # Both orientations. `op(fixed) + neg = pos` and `op(fixed) + pos = neg`
+        # are different statements -- the second says the operator ANTI-commutes
+        # with that permutation -- and the manual route needs one of each:
+        # `assoc_def_246` is the first, `assoc_def_247` the second, which reads
+        # `associator(X,Y,Z) = -associator(Y,X,Z)`.
+        for tag, a, b in (("", neg, pos), ("_neg", pos, neg)):
+            lhs = f"add({_apply(op, fixed)},{F.to_twee(a)})"
+            rhs = F.to_twee(b)
+            target = F.expand(F.parse(lhs), F.parse(rhs))
+            if not target:
+                continue
+            cert = F.certificate(target, uniq)
+            if not cert.get("coefficients"):
+                continue
+            cites = sorted({c.split("[")[0] for c in cert["coefficients"]})
+            out.append((f"{op}_def_{''.join(perm).lower()}{tag}", lhs, rhs,
+                        cites))
+    return out
+
+
 def symmetries(op, arity, proved, var_names=("X", "Y", "Z")):
     """Argument permutations of `op` that follow from what is already proved.
 
@@ -210,8 +300,33 @@ def derive_sketch(problem, goal=None):
         if not name.startswith("lin_"):
             polar.append((name, F.expand(F.parse(lhs), F.parse(rhs))))
 
+    present = {n for n, _ in problems.problem_symbols(
+        problems.problem_path(problem))}
+    derived = list(polar)
     for op, arity in DEFINED.items():
+        if op not in present:
+            continue
         for name, lhs, rhs, cites in symmetries(op, arity, polar):
+            if name in nodes:
+                continue
+            nodes[name] = (lhs, rhs, cites)
+            derived.append((name, F.expand(F.parse(lhs), F.parse(rhs))))
+            notes.append(f"{name}: certificate over {cites}")
+
+    # The operator's own definition, rearranged, and the variants that
+    # rearrangement certifies. Emitted last because the variants are certified
+    # over everything above them -- and omitted entirely, this is what put the
+    # winning support for a waypoint outside the search space.
+    for op, arity in DEFINED.items():
+        if op not in present:
+            continue
+        base = definition_rearrangement(op, arity)
+        if base and base[0] not in nodes:
+            name, lhs, rhs = base
+            nodes[name] = (lhs, rhs, [])
+            derived.append((name, F.expand(F.parse(lhs), F.parse(rhs))))
+            notes.append(f"{name}: the {op} definition rearranged (universal)")
+        for name, lhs, rhs, cites in definition_variants(op, arity, derived):
             if name in nodes:
                 continue
             nodes[name] = (lhs, rhs, cites)

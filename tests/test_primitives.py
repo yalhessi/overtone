@@ -4530,3 +4530,49 @@ def test_evidence_can_be_filtered_by_where_it_was_mined():
     assert provenance("logs/loop/RNG029-5-derive-03/iter00/a.out") == "run"
     assert provenance("/abs/path/logs/loop/r/iter00/a.out") == "run"
     assert provenance(None) == "unknown"
+
+
+def test_the_seed_derives_every_lemma_the_waypoint_needs():
+    """The gap that made the pilot's upstream arm unwinnable.
+
+    `right_moufang` needs `assoc_cyclic`, `assoc_def_246` and `assoc_def_247`.
+    The seed had the first and could not reach the other two -- both are
+    theory-specific, so no universal check emits them, and no certificate over
+    the scaffold certified them. The missing ingredient was one UNIVERSAL
+    identity the seed never generated: the operator's own definition rearranged.
+
+    With it, both variants are certified from what is already derived, and the
+    scaffold proves right-Moufang in 179.2s against the manual route's 197.8s.
+    """
+    from overtone.agent.derive import derive_sketch
+    from overtone.terms import eq_key
+
+    s, _ = derive_sketch("RNG029-5")
+    have = {eq_key(*s.nodes[n][:2]): n for n in s.claims()}
+    A, M = "associator", "multiply"
+    need = {
+        "assoc_cyclic": eq_key(f"{A}(X,Y,Z)", f"{A}(Y,Z,X)"),
+        "assoc_def_246": eq_key(f"add({A}(X,Y,Z),{M}(Y,{M}(Z,X)))",
+                                f"{M}({M}(Y,Z),X)"),
+        # the anti-symmetric orientation: associator(X,Y,Z) = -associator(Y,X,Z)
+        "assoc_def_247": eq_key(f"add({A}(X,Y,Z),{M}({M}(Y,X),Z))",
+                                f"{M}(Y,{M}(X,Z))"),
+    }
+    missing = [k for k, v in need.items() if v not in have]
+    assert not missing, f"the seed no longer derives {missing}"
+
+
+def test_the_definition_rearrangement_is_read_off_the_normal_form():
+    """Universal by construction and mechanical for any defined operator: move
+    the negative monomials of the operator's own expansion to the other side."""
+    from overtone import freering as F
+    from overtone.agent.derive import definition_rearrangement
+
+    name, lhs, rhs = definition_rearrangement("associator", 3)
+    assert name == "associator_def_add"
+    assert not F.expand(F.parse(lhs), F.parse(rhs)), "must be universal"
+
+    name, lhs, rhs = definition_rearrangement("commutator", 2)
+    assert (lhs, rhs) == ("add(commutator(X,Y),multiply(X,Y))",
+                          "multiply(Y,X)")
+    assert not F.expand(F.parse(lhs), F.parse(rhs))
