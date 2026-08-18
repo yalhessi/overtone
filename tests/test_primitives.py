@@ -4714,17 +4714,16 @@ def test_a_lemma_can_be_an_axiom_here_and_a_hint_there():
     smaller, charging `hint_cost` instead of the term's structure, roughly half
     at factor 0.5 against `cfg_funweight = 1`.
 
-    Measured on RNG029-5, axioms fixed at a sufficient four, hint sets nested,
-    serial and repeated three times (`scripts/hint_dose.py`):
+    Measured on RNG029-5 on the DETERMINISTIC build, axioms fixed at a
+    sufficient four, hint sets nested, two repeats, byte-identical output
+    (`scripts/hint_dose.py`):
 
-        0 hints  102.9s      4 hints  211.5s      12 hints  40.8s
-        2 hints   81.3s      8 hints   33.4s      15 hints  37.8s
+        0 hints   69.2s      4 hints  162.1s      12 hints  TIMEOUT
+        2 hints  134.8s      8 hints   40.4s      15 hints  TIMEOUT
 
-    Supplying both channels at once is worth up to 3.1x -- and the 4-hint arm,
-    a strict SUBSET of the 8-hint one, is 2.1x SLOWER than no hints at all. So
-    this path must exist, but nothing here licenses filling it automatically:
-    the hint channel has the axiom channel's selection problem, and count does
-    not predict which way a set cuts.
+    So this path must exist -- 8 hints beat the bare axioms 1.71x -- but nothing
+    licenses filling it automatically: 12 hints, a superset of those 8, lose a
+    69.2s proof entirely. Count predicts nothing in either direction.
     """
     import tempfile
 

@@ -2393,87 +2393,115 @@ recursion continues into the substitution. So every added hint converts more
 subterms from "measured by structure" to "flat `hint_cost`". Hints do not
 enlarge the search, they **overwrite the score function's resolution**, and past
 some density the queue orders on noise. Bad ordering under a finite budget is
-indistinguishable from no proof. Harm is monotone in hint count -- which is the
-43/227 curve.
+indistinguishable from no proof.
 
-This family should turn EARLIER than a diverse hint set, not later: 19 identities
-over the same two operators as the goal means near-total match density.
+*Two inferences drawn from that here were then measured and are FALSE. Harm is
+NOT monotone in hint count -- 8 hints beat the bare axioms 1.71x while 2, 4 and
+12 all lose -- and coverage, the density this paragraph reasons about, rises
+monotonically while runtime does not. Dilution is a real mechanism that does not
+decide outcomes at this scale. See the dose curve below.*
 
-**So the 56.3s figure is one point inside the known-good 9-33 band, not a licence
-for large pools.** It is also a single run under parallel core load, where the
-trustworthy numbers above were repeated to cv <= 0.2%. Treat it as unreplicated.
-What survives unconditionally is only the negative half -- a lemma the proof
-needs must be an axiom, since `W` alone and each `W + one` timed out at 300s with
-the whole pool steering.
-
-Validation before any pipeline change: a serial no-hint baseline against all-19
--as-hints (the control never run), a repeated replication of 4-axiom vs
-4-axiom+15-hint, and a dose-response over hint count to locate this family's turn
-point. `scripts/hint_dose.py`.
+**The 56.3s figure is withdrawn entirely: it was measured on stock twee and is
+an interreduce artifact**, as is the 2.7x that later appeared to confirm it. See
+the interreduce section below. What survives is the negative half -- a lemma the
+proof needs must be an axiom, since `W` alone and each `W + one` timed out at
+300s with the whole pool steering.
 
 ## The hint channel has its own selection problem, and it is not about count
 
-`scripts/hint_dose.py`, RNG029-5's conjecture, `--flatten-goal`, one twee at a
-time on an idle machine, three repeats per arm. Axioms fixed at the sufficient
-four; hint sets **nested by construction** (`rest[:k]` off one seeded shuffle),
-so each row is the row above plus more.
+**Read the interreduce warning below first: an earlier version of this entry was
+measured on stock twee and every number in it was a timing artifact.**
+
+`scripts/hint_dose.py`, RNG029-5's conjecture, `--flatten-goal`, the
+DETERMINISTIC build, one twee at a time, two repeats per arm. Axioms fixed at the
+sufficient four; hint sets **nested by construction** (`rest[:k]` off one seeded
+shuffle), so each row is the row above plus more.
 
 | hints | coverage | CPU | cv | vs no hints |
 |---|---|---|---|---|
-| 0 | 0% | 102.9s | 0.8% | -- |
-| 2 | 22% | 81.3s | 5.1% | 1.27x faster |
-| **4** | **37%** | **211.5s** | **42.8%** | **2.1x SLOWER** |
-| 8 | 57% | **33.4s** | 2.3% | **3.1x faster** |
-| 12 | 79% | 40.8s | 12.8% | 2.5x faster |
-| 15 | 84% | 37.8s | 15.6% | 2.7x faster |
+| 0 | 0% | 69.2s | 0.0% | -- |
+| 2 | 22% | 134.8s | 0.1% | 1.95x slower |
+| 4 | 37% | 162.1s | 0.0% | 2.34x slower |
+| **8** | 57% | **40.4s** | 0.1% | **1.71x FASTER** |
+| 12 | 79% | **Timeout 300s** | -- | **proof lost** |
+| 15 | 84% | **Timeout 300s** | -- | **proof lost** |
 
-**The curve is not monotone, and the harmful set is a strict SUBSET of the best
-one.** Adding `associator_perm_201` and `lin_right_alternative` to the 2-hint set
-costs 2.6x; adding four more lemmas on top rescues it 6.3x. Hint *count* does not
-predict the effect at this scale -- the harm sits at 4, between benefit at 2 and
-the best result at 8.
+Every arm's output is byte-identical across repeats (digests recorded in
+`results.json`), so each number is a property of the hint set and not of the
+schedule.
 
-**Coverage does not explain it either.** Coverage -- the fraction of scorable
-subterms some hint flattens, which is the dilution mechanism -- rises
-monotonically 0 -> 84% while CPU does not. The 4-hint arm flattens *less* (37%)
-than the 8-hint arm (57%) and runs 6.3x slower. So the "score function loses
-resolution as hints accumulate" story is real as mechanism but is **not** what is
-happening here.
+**The curve is not monotone and the sets are nested.** Two hints cost 1.95x, four
+cost 2.34x, eight -- a strict superset of the four -- are 1.71x *faster* than
+supplying no hints at all, and twelve lose the proof entirely from a 69.2s
+baseline. Count does not predict the effect in either direction.
 
-What is left is content: specific hints misdirect this specific search. The
-harmful arm is also **bimodal** -- 262.7s, 107.1s, 264.8s, hence cv 42.8% -- which
-is the signature of a search pushed onto a bad path that sometimes escapes, not
-of measurement noise.
+**Coverage does not explain it.** Coverage -- the fraction of scorable subterms
+some hint flattens, which is the dilution mechanism from `CP.hs` -- rises
+monotonically 0 -> 84% while CPU does not. The 8-hint arm flattens *more* (57%)
+than the 4-hint arm (37%) and runs 4x faster. So dilution is real as a mechanism
+and is **not** what decides outcomes at this scale. Content is.
 
-**So over-inclusion in the hint channel is NOT free.** The hint channel
-reproduces the axiom channel's selection problem: content decides, count does
-not, nothing about a lemma says which way it will cut, and a superset of a
-harmful set can be excellent. The penalty is milder on average -- most doses here
-beat the baseline, where most axiom supersets time out -- but "supply what the
-proof needs as axioms and dump the rest in as hints" is not a safe default and
-must not be built as one.
+**So over-inclusion in the hint channel is NOT free**, and the earlier claim that
+it was is withdrawn. The hint channel reproduces the axiom channel's selection
+problem: content decides, count does not, a superset of a harmful set can be
+excellent, and a superset of an excellent set can lose the proof. **Do not build
+"dump the rest in as hints" as a pipeline default.** `race_support(steer=)` stays
+an opt-in experimental knob.
 
-**"Stay in 9-33 hints" is not a safety rule.** That band came from 43-neutral /
-227-slow at donor scale. Harm here happens at **four**.
+**"Stay in 9-33 hints" is not a safety rule.** That band came from
+43-neutral/227-slow at donor scale; harm here starts at **two** and the proof is
+lost at **twelve**.
 
 **Match multiplicity, for the twee-patch question** (`scripts/hint_multiplicity.py`):
-over 91 scorable subterms of the goal and pool, 86.8% are covered by some hint,
-mean 2.47 hints match each, max 7, and **48.4% match more than one**. So making
-`Index.matches` return a best match rather than the first is not vacuous -- it
-would change which cost is charged on nearly half the scored subterms. But
-`hint_cost` still depends only on the hint (Twee.hs:618), so selection cannot
-move coverage, and coverage is not the problem anyway. **`--resonance` is also
-not the lever it looked like**: it cuts coverage only 87% -> 85% on this pool,
-because ring identities mostly do bind variables to variables. It cuts
-multiplicity 2.47 -> 1.84, so it is a *selection* knob here, not a dilution one.
+over 91 scorable subterms, 86.8% are covered by some hint, mean 2.47 match each,
+max 7, and **48.4% match more than one** -- resolved today by index order, since
+`Index.matches` returns the first. So a best-match patch is not vacuous. But
+`hint_cost` depends only on the hint (Twee.hs:618), so selection cannot move
+coverage, and coverage is not what decides. **`--resonance` is also not the lever
+it looked like**: 87% -> 85% coverage on this pool, because ring identities
+mostly do bind variables to variables. It moves multiplicity 2.47 -> 1.84, making
+it a selection knob rather than a dilution one. Untested against the curve above.
 
-**A ledger correction.** The reference proof is recorded at 67.9s; measured alone
-and repeated it is **102.9s at cv 0.8%**, with an independent calibration run
-agreeing at 100.8s. The recorded number was taken under parallel load. Every
-comparison drawn against 67.9s -- including the 56.3s that first suggested the
-combined channel -- compared two contended single runs, and was worth 1.21x where
-the effect repeated on a quiet machine is 2.7x. **Both numbers were wrong; the
-conclusion was accidentally right and for the wrong reason.**
+### Stock twee reschedules interreduce by wall time, and it forks the search
+
+**This invalidated a whole day of measurement and nearly reached a pipeline
+change.** `complete` registers interreduction as `newTask 1 0.05` (Twee.hs:836),
+and upstream `Twee/Task.hs` schedules tasks off `getCPUTime`. So the step at
+which the rule set is rewritten depends on machine timing rather than on the
+derivation, and the search forks from that point.
+
+Demonstrated on this experiment's own artifacts. Two repeats of byte-identical
+input agreed line for line through rule 1855; then one interreduced while the
+other derived rules 1856-1858 first, and every later interreduce point drifted --
+4365/4314, 6927/6532, 10298/10033, 17079/17509, 21712/22360. One 4-hint input
+produced outputs of 31358, 19892 and 31332 lines, timing 262.7s, 107.1s, 264.8s.
+
+The same six arms, stock against deterministic:
+
+| hints | stock twee | deterministic |
+|---|---|---|
+| 0 | 102.9s | 69.2s |
+| 2 | 81.3s | 134.8s |
+| 4 | 211.5s | 162.1s |
+| 8 | 33.4s | 40.4s |
+| 12 | 40.8s | Timeout |
+| 15 | 37.8s | Timeout |
+
+Not a smaller effect -- a different sign. Stock twee said the combined channel
+was worth 2.7x; the deterministic build says 15 hints lose the proof. **The
+56.3s figure that began this investigation, and the 2.7x that appeared to
+vindicate it, were both the interreduce lottery.**
+
+`build/twee-deterministic` schedules on a step counter and fixes this. Every
+pipeline script already passed `deterministic=True` by hand, but `dag._job`'s
+default was stock, so a caller reaching it directly got the nondeterministic
+binary in silence -- which is what happened. The default is now deterministic;
+pass `binary` explicitly for stock, which is what the timing benchmarks want.
+
+**And the ledger was right.** Its 67.9s reproduces at 69.4s and 69.2s on the
+deterministic build. An earlier entry here "corrected" it to 102.9s and accused
+it of contention; that 102.9s was stock twee taking a different interreduce path,
+and the correction is withdrawn.
 
 ## Open
 
